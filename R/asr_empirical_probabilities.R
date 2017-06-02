@@ -9,7 +9,7 @@ asr_empirical_probabilities = function(tree, tip_states, Nstates=NULL, probabili
 
 	# basic error checking
 	if(length(tip_states)!=Ntips) stop(sprintf("ERROR: Length of tip_states (%d) is not the same as the number of tips in the tree (%d)",length(tip_states),Ntips));
-	if(!is.integer(tip_states)) stop(sprintf("ERROR: tip_states must be integers"))	
+	if(!is.numeric(tip_states)) stop(sprintf("ERROR: tip_states must be integers"))	
 	if(is.null(Nstates)) Nstates = max(tip_states);
 	if(check_input){
 		min_tip_state = min(tip_states)

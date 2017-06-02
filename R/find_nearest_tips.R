@@ -19,7 +19,7 @@ find_nearest_tips = function(tree, only_descending_tips=FALSE, target_tips=NULL,
 											verbose_prefix			= "");
 	results$nearest_tips[results$nearest_tips<0] = NA;
 	return(list(nearest_tip_per_tip=(results$nearest_tips[1:Ntips] + 1), 
-				nearest_tip_per_node=(results$nearest_tips[(Ntips+1):(Ntips+Nnodes)] + 1-Ntips), 
+				nearest_tip_per_node=(results$nearest_tips[(Ntips+1):(Ntips+Nnodes)] + 1), 
 				nearest_distance_per_tip=results$nearest_distances[1:Ntips],
 				nearest_distance_per_node=results$nearest_distances[(Ntips+1):(Ntips+Nnodes)]));
 }

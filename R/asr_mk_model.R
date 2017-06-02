@@ -28,7 +28,7 @@ asr_mk_model = function(tree,
 	else if(is.null(tip_states) && is.null(tip_priors))  stop("ERROR: tip_states and tip_priors are both NULL, but exactly one of them should be non-NULL")
 	state_names = NULL
 	if(!is.null(tip_states)){
-		if(!is.integer(tip_states)) stop(sprintf("ERROR: tip_states must be integers"))
+		if(!is.numeric(tip_states)) stop(sprintf("ERROR: tip_states must be integers"))
 		if(length(tip_states)==0) stop("ERROR: tip_states is non-NULL but empty")
 		if(length(tip_states)!=Ntips) stop(sprintf("ERROR: Length of tip_states (%d) is not the same as the number of tips in the tree (%d)",length(tip_states),Ntips));
 		if(is.null(Nstates)) Nstates = max(tip_states);

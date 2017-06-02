@@ -16,7 +16,8 @@ generate_random_tree(max_tips, max_time=NULL,
                      birth_rate_factor=0, birth_rate_exponent=1,
                      death_rate_intercept=0, 
                      death_rate_factor=0, death_rate_exponent=1,
-                     coalescent=TRUE)
+                     coalescent=TRUE, Nsplits=2, 
+                     tip_basename="", node_basename=NULL)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -47,16 +48,25 @@ Numeric. The power-law exponent of the Poissonian rate at which extant species (
 \item{coalescent}{
 Logical, specifying whether only the coalescent tree (i.e. the tree spanning the extant tips) should be returned. If \code{coalescent==FALSE} and the death rate is non-zero, then the tree may include non-extant tips (i.e. tips whose distance from the root is less than the total time of evolution). In that case, the tree will not be ultrametric.
 }
+\item{Nsplits}{
+Integer greater than 1. Number of child-tips to generate at each diversification event. If set to 2, the generated tree will be bifurcating. If >2, the tree will be multifurcating.
+}
+\item{tip_basename}{
+Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then tip labels will be integers "1", "2" and so on.
+}
+\item{node_basename}{
+Character. Prefix to be used for node labels (e.g. "node."). If \code{NULL}, no node labels will be included in the tree.
+}
 }
 
 
 \details{
-If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}.
+If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
 }
 
 
 \value{
-A rooted bifurcating tree of class "phylo", generated according to the specified birth/death model. If \code{coalescent==TRUE} or if all death rates are zero, then the tree will be ultrametric.
+A rooted bifurcating (if \code{Nsplits==2}) or multifurcating (if \code{Nsplits>2}) tree of class "phylo", generated according to the specified birth/death model. If \code{coalescent==TRUE} or if all death rates are zero, then the tree will be ultrametric.
 }
 
 \author{Stilianos Louca}

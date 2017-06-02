@@ -8,8 +8,8 @@ get_pairwise_distances = function(	tree,
 	Nnodes = tree$Nnode;
 	
 	# check and reformat input
-	if((!is.character(A)) && (!is.integer(A))) stop("ERROR: List of tips/nodes A must be a character or integer vector")
-	if((!is.character(B)) && (!is.integer(B))) stop("ERROR: List of tips/nodes B must be a character or integer vector")
+	if((!is.character(A)) && (!is.numeric(A))) stop("ERROR: List of tips/nodes A must be a character or integer vector")
+	if((!is.character(B)) && (!is.numeric(B))) stop("ERROR: List of tips/nodes B must be a character or integer vector")
 	if(length(A)!=length(B)) stop(sprintf("ERROR: Lists A & B must have equal lengths; instead, A has length %d and B has length %d",length(A),length(B)))
 	if(is.character(A) || is.character(B)){
 		name2clade = 1:(Ntips+Nnodes); 

@@ -23,7 +23,7 @@ hsp_mk_model = function(tree,
 	# basic error checking
 	if((!is.null(tip_states)) && (!is.null(tip_priors))) stop("ERROR: tip_states and tip_priors are both non-NULL, but exactly one of them should be NULL")
 	else if(is.null(tip_states) && is.null(tip_priors))  stop("ERROR: tip_states and tip_priors are both NULL, but exactly one of them should be non-NULL")
-	if((!is.null(tip_states)) && (!is.integer(tip_states))) stop(sprintf("ERROR: tip_states must be integers"))
+	if((!is.null(tip_states)) && (!is.numeric(tip_states))) stop(sprintf("ERROR: tip_states must be integers"))
 	if(check_input){
 		if((!is.null(names(tip_states))) && any(names(tip_states)!=tree$tip.label)) stop("ERROR: Names in tip_states and tip labels in tree don't match (must be in the same order).")
 	}
@@ -48,6 +48,7 @@ hsp_mk_model = function(tree,
 		known_tip_priors	= tip_priors[known2all_tips,,drop=FALSE]
 	}
 	
+	
 	# perform ancestral state reconstruction on known_subtree
 	asr_results = asr_mk_model(	tree					= known_subtree, 
 								tip_states		 		= known_tip_states,
@@ -66,16 +67,18 @@ hsp_mk_model = function(tree,
 	loglikelihood 		= asr_results$loglikelihood
 	transition_matrix 	= asr_results$transition_matrix
 	if(is.null(loglikelihood) || is.nan(loglikelihood) || is.null(asr_results$ancestral_likelihoods)) return(list(loglikelihood=NULL, transition_matrix=NULL, likelihoods=NULL)); # ASR failed
-
+	
 	# forward-project posteriors to tips with hidden state
 	likelihoods = matrix(0, nrow=(Ntips+Nnodes), ncol=Nstates);
 	if(!is.null(tip_states)){
 		likelihoods[known2all_tips, ] = 0.0;
-		likelihoods[rbind(known2all_tips, known_tip_states)] = 1.0;
+		likelihoods[cbind(known2all_tips, known_tip_states)] = 1.0;
 	}else{
 		likelihoods[known2all_tips, ] = known_tip_priors;
 	}
 	likelihoods[known2all_nodes+Ntips, ] 		= asr_results$ancestral_likelihoods;
+
+
 	likelihoods_known							= rep(FALSE, times=(Ntips+Nnodes))
 	likelihoods_known[known2all_tips]			= TRUE;
 	likelihoods_known[known2all_nodes+Ntips]  	= TRUE;
@@ -93,5 +96,7 @@ hsp_mk_model = function(tree,
 	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
 		
-	return(list(transition_matrix=transition_matrix, loglikelihood=loglikelihood, likelihoods=likelihoods));
+	return(list(transition_matrix=transition_matrix, 
+				loglikelihood=loglikelihood, 
+				likelihoods=likelihoods));
 }

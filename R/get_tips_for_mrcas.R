@@ -10,7 +10,7 @@ get_tips_for_mrcas = function(tree, mrca_nodes, check_input=TRUE){
 		mrca_nodes = name2node[mrca_nodes]; 
 		if(check_input && any(is.na(mrca_nodes))) stop(sprintf("ERROR: Unknown node name '%s'",tree$node.label[which(is.na(mrca_nodes))[1]]))
 	}else{
-		if(!is.integer(mrca_nodes)) stop("ERROR: mrca_nodes must be a character or integer vector");
+		if(!is.numeric(mrca_nodes)) stop("ERROR: mrca_nodes must be a character or integer vector");
 		if(check_input){
 			min_mrca_node = min(mrca_nodes);
 			max_mrca_node = max(mrca_nodes);

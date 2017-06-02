@@ -5,6 +5,20 @@
 
 using namespace Rcpp;
 
+// dense_binary_matrix_row2column_major_CPP
+Rcpp::List dense_binary_matrix_row2column_major_CPP(const long NR, const long NC, const Rcpp::List& dense_rows, const bool Rindexing);
+RcppExport SEXP castor_dense_binary_matrix_row2column_major_CPP(SEXP NRSEXP, SEXP NCSEXP, SEXP dense_rowsSEXP, SEXP RindexingSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type NR(NRSEXP);
+    Rcpp::traits::input_parameter< const long >::type NC(NCSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type dense_rows(dense_rowsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type Rindexing(RindexingSEXP);
+    rcpp_result_gen = Rcpp::wrap(dense_binary_matrix_row2column_major_CPP(NR, NC, dense_rows, Rindexing));
+    return rcpp_result_gen;
+END_RCPP
+}
 // exponentiate_matrix_for_multiple_scalings_CPP
 NumericVector exponentiate_matrix_for_multiple_scalings_CPP(const long NR, const NumericVector& A, const NumericVector& scalings, const double epsilon, const long NPmin, const long NPmax, const bool enforce_probability_matrix);
 RcppExport SEXP castor_exponentiate_matrix_for_multiple_scalings_CPP(SEXP NRSEXP, SEXP ASEXP, SEXP scalingsSEXP, SEXP epsilonSEXP, SEXP NPminSEXP, SEXP NPmaxSEXP, SEXP enforce_probability_matrixSEXP) {
@@ -151,9 +165,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// multifurcations_to_bifurcations_CPP
+Rcpp::List multifurcations_to_bifurcations_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const NumericVector& edge_length, const double dummy_edge_length);
+RcppExport SEXP castor_multifurcations_to_bifurcations_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP dummy_edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const double >::type dummy_edge_length(dummy_edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(multifurcations_to_bifurcations_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, dummy_edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
 // generate_random_tree_CPP
-Rcpp::List generate_random_tree_CPP(const long max_tips, const double max_time, const double birth_rate_intercept, const double birth_rate_factor, const double birth_rate_exponent, const double death_rate_intercept, const double death_rate_factor, const double death_rate_exponent, const bool coalescent);
-RcppExport SEXP castor_generate_random_tree_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP birth_rate_interceptSEXP, SEXP birth_rate_factorSEXP, SEXP birth_rate_exponentSEXP, SEXP death_rate_interceptSEXP, SEXP death_rate_factorSEXP, SEXP death_rate_exponentSEXP, SEXP coalescentSEXP) {
+Rcpp::List generate_random_tree_CPP(const long max_tips, const double max_time, const double birth_rate_intercept, const double birth_rate_factor, const double birth_rate_exponent, const double death_rate_intercept, const double death_rate_factor, const double death_rate_exponent, const bool coalescent, const long Nsplits);
+RcppExport SEXP castor_generate_random_tree_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP birth_rate_interceptSEXP, SEXP birth_rate_factorSEXP, SEXP birth_rate_exponentSEXP, SEXP death_rate_interceptSEXP, SEXP death_rate_factorSEXP, SEXP death_rate_exponentSEXP, SEXP coalescentSEXP, SEXP NsplitsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -166,7 +196,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type death_rate_factor(death_rate_factorSEXP);
     Rcpp::traits::input_parameter< const double >::type death_rate_exponent(death_rate_exponentSEXP);
     Rcpp::traits::input_parameter< const bool >::type coalescent(coalescentSEXP);
-    rcpp_result_gen = Rcpp::wrap(generate_random_tree_CPP(max_tips, max_time, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, coalescent));
+    Rcpp::traits::input_parameter< const long >::type Nsplits(NsplitsSEXP);
+    rcpp_result_gen = Rcpp::wrap(generate_random_tree_CPP(max_tips, max_time, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, coalescent, Nsplits));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -388,6 +419,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::string& >::type tip_distribution(tip_distributionSEXP);
     Rcpp::traits::input_parameter< const bool >::type use_realized_depths(use_realized_depthsSEXP);
     rcpp_result_gen = Rcpp::wrap(get_trait_richness_collectors_curve_CPP(Ntips, Nnodes, Nedges, Ntraits, root, tree_edge, edge_length, tip2first_trait, tip2last_trait, traits, rarefaction_depths, Nrepeats, tip_distribution, use_realized_depths));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_phylogenetic_independent_contrasts_CPP
+Rcpp::List get_phylogenetic_independent_contrasts_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Ntraits, const IntegerVector& tree_edge, const NumericVector& edge_length, const NumericVector& tip_states, const bool only_bifurcations, const bool scaled);
+RcppExport SEXP castor_get_phylogenetic_independent_contrasts_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NtraitsSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_statesSEXP, SEXP only_bifurcationsSEXP, SEXP scaledSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Ntraits(NtraitsSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type tip_states(tip_statesSEXP);
+    Rcpp::traits::input_parameter< const bool >::type only_bifurcations(only_bifurcationsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type scaled(scaledSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_phylogenetic_independent_contrasts_CPP(Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, only_bifurcations, scaled));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -654,9 +704,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// simulate_Brownian_motion_model_CPP
-Rcpp::List simulate_Brownian_motion_model_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const NumericVector& edge_length, const NumericVector& root_states, const double diffusivity, const bool include_tips, const bool include_nodes, const long Nsimulations);
-RcppExport SEXP castor_simulate_Brownian_motion_model_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP root_statesSEXP, SEXP diffusivitySEXP, SEXP include_tipsSEXP, SEXP include_nodesSEXP, SEXP NsimulationsSEXP) {
+// simulate_scalar_Brownian_motion_model_CPP
+Rcpp::List simulate_scalar_Brownian_motion_model_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const NumericVector& edge_length, const NumericVector& root_states, const double diffusivity, const bool include_tips, const bool include_nodes, const long Nsimulations);
+RcppExport SEXP castor_simulate_scalar_Brownian_motion_model_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP root_statesSEXP, SEXP diffusivitySEXP, SEXP include_tipsSEXP, SEXP include_nodesSEXP, SEXP NsimulationsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -670,7 +720,29 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const bool >::type include_tips(include_tipsSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_nodes(include_nodesSEXP);
     Rcpp::traits::input_parameter< const long >::type Nsimulations(NsimulationsSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_Brownian_motion_model_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_states, diffusivity, include_tips, include_nodes, Nsimulations));
+    rcpp_result_gen = Rcpp::wrap(simulate_scalar_Brownian_motion_model_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_states, diffusivity, include_tips, include_nodes, Nsimulations));
+    return rcpp_result_gen;
+END_RCPP
+}
+// simulate_multivariate_Brownian_motion_model_CPP
+Rcpp::List simulate_multivariate_Brownian_motion_model_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Ntraits, const IntegerVector& tree_edge, const NumericVector& edge_length, const NumericVector& root_states, const std::vector<double>& diffusivity, const std::vector<double>& cholesky, const bool include_tips, const bool include_nodes, const long Nsimulations);
+RcppExport SEXP castor_simulate_multivariate_Brownian_motion_model_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NtraitsSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP root_statesSEXP, SEXP diffusivitySEXP, SEXP choleskySEXP, SEXP include_tipsSEXP, SEXP include_nodesSEXP, SEXP NsimulationsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Ntraits(NtraitsSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type root_states(root_statesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type diffusivity(diffusivitySEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type cholesky(choleskySEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_tips(include_tipsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_nodes(include_nodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nsimulations(NsimulationsSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_multivariate_Brownian_motion_model_CPP(Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, root_states, diffusivity, cholesky, include_tips, include_nodes, Nsimulations));
     return rcpp_result_gen;
 END_RCPP
 }

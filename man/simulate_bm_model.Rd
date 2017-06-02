@@ -1,25 +1,25 @@
 \name{simulate_bm_model}
 \alias{simulate_bm_model}
 \title{
-Simulate a Brownian motion model for continuous trait evolution.
+Simulate a Brownian motion model for multivariate trait co-evolution.
 }
 \description{
-Given a rooted phylogenetic tree and a Brownian motion (BM) model for the evolution of a continuous (numeric) unbounded trait, simulate random outcomes of the model on all nodes and/or tips of the tree. The function traverses nodes from root to tips and randomly assigns a state to each node or tip based on its parent's previously assigned state and the specified model parameters. The generated states have joint distributions consistent with the BM model. Optionally, multiple independent simulations can be performed using the same model.
+Given a rooted phylogenetic tree and a Brownian motion (BM) model for the co-evolution of one or more continuous (numeric) unbounded traits, simulate random outcomes of the model on all nodes and/or tips of the tree. The function traverses nodes from root to tips and randomly assigns a multivariate state to each node or tip based on its parent's previously assigned state and the specified model parameters. The generated states have joint distributions consistent with the multivariate BM model. Optionally, multiple independent simulations can be performed using the same model.
 }
 \usage{
-simulate_bm_model(tree, diffusivity, root_states=0,
+simulate_bm_model(tree, diffusivity, root_states=NULL,
                   include_tips=TRUE, include_nodes=TRUE, 
-                  Nsimulations=1, drop=TRUE)
+                  Nsimulations=1, drop_dims=TRUE)
 }
 \arguments{
 \item{tree}{
 A rooted tree of class "phylo". The root is assumed to be the unique node with no incoming edge.
 }
 \item{diffusivity}{
-Numeric. Diffusion coefficient ("\eqn{D}", see below) of the Brownian motion model (in units trait_units^2/edge_length_units). The convention is that if the root's state is fixed, then the variance of a node's state at distance \eqn{L} from the root will be \eqn{2LD}.
+Either a single number, or a 2D quadratic positive definite symmetric matrix of size Ntraits x Ntraits. Diffusion coefficients ("\eqn{D}", see below) of the multivariate Brownian motion model (in units trait_units^2/edge_length_units). The convention is that if the root's state is fixed, then the covariance matrix of a node's state at distance \eqn{L} from the root will be \eqn{2LD}.
 }
 \item{root_states}{
-Numeric vector of arbitrary size, specifying the state of the root for each simulation. If smaller than \code{Nsimulations}, values in \code{root_states} are recycled in rotation.
+Numeric matrix of size NR x Ntraits (where NR can be arbitrary), specifying the state of the root for each simulation. If NR is smaller than \code{Nsimulations}, values in \code{root_states} are recycled in rotation. If \code{NULL} or empty, then the root state is set to 0 for all traits in all simulations.
 }
 \item{include_tips}{
 Include random states for the tips. If \code{FALSE}, no states will be returned for tips.
@@ -30,8 +30,8 @@ Include random states for the nodes. If \code{FALSE}, no states will be returned
 \item{Nsimulations}{
 Number of random independent simulations to perform. For each node and/or tip, there will be \code{Nsimulations} random states generated.
 }
-\item{drop}{
-Logical, specifying whether the returned \code{tip_states} and \code{node_states} (see below) should be vectors, if \code{Nsimulations==1}. If \code{drop==FALSE}, then \code{tip_states} and \code{tip_nodes} will always be 2D matrices.
+\item{drop_dims}{
+Logical, specifying whether singleton dimensions should be dropped from \code{tip_states} and \code{node_states}, if \code{Nsimulations==1} and/or Ntraits==1. If \code{drop_dims==FALSE}, then \code{tip_states} and \code{tip_nodes} will always be 3D matrices.
 }
 }
 
@@ -45,19 +45,19 @@ where \eqn{B} is the standard Brownian motion, or as a diffusion equation for th
 \deqn{
 \frac{\partial \rho}{\partial t} = D\frac{\partial^2\rho}{\partial x^2}.
 }
-The parameter \eqn{D} is referred to as the diffusion coefficient (or diffusivity), and \eqn{D=\sigma^2/2}.
+The matrix \eqn{D} is referred to as the diffusion coefficient matrix (or diffusivity matrix), and \eqn{D=\sigma\cdot\sigma^T/2}.
 
-If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). The asymptotic time complexity of this function is O(Nedges*Nsimulations), where Nedges is the number of edges in the tree.
+If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). The asymptotic time complexity of this function is O(Nedges*Nsimulations*Ntraits).
 }
 
 
 \value{
 A list with the following elements:
 \item{tip_states}{
-Either \code{NULL} (if \code{include_tips==FALSE}), or a 2D numeric matrix of size Nsimulations x Ntips, where Ntips is the number of tips in the tree. The [r,c]-th entry of this matrix will be the state of tip c generated by the r-th simulation. If \code{drop==TRUE} and \code{Nsimulations==1}, then \code{tip_states} will be a vector.
+Either \code{NULL} (if \code{include_tips==FALSE}), or a 3D numeric matrix of size Nsimulations x Ntips x Ntraits. The [r,c,i]-th entry of this matrix will be the state of trait i at tip c generated by the r-th simulation. If \code{drop_dims==TRUE} and \code{Nsimulations==1} and Ntraits==1, then \code{tip_states} will be a vector.
 }
 \item{node_states}{
-Either \code{NULL} (if \code{include_nodes==FALSE}), or a 2D numeric matrix of size Nsimulations x Nnodes, where Nnodes is the number of nodes in the tree. The [r,c]-th entry of this matrix will be the state of node c generated by the r-th simulation. If \code{drop==TRUE} and \code{Nsimulations==1}, then \code{node_states} will be a vector.
+Either \code{NULL} (if \code{include_nodes==FALSE}), or a 3D numeric matrix of size Nsimulations x Nnodes x Ntraits. The [r,c,i]-th entry of this matrix will be the state of trait i at node c generated by the r-th simulation. If \code{drop_dims==TRUE} and \code{Nsimulations==1} and Ntraits==1, then \code{node_states} will be a vector.
 }
 }
 
@@ -76,7 +76,7 @@ Either \code{NULL} (if \code{include_nodes==FALSE}), or a 2D numeric matrix of s
 # generate a random tree
 tree = generate_random_tree(max_tips=10000, birth_rate_intercept=1);
 
-# simulate continuous trait evolution on the tree
+# simulate scalar continuous trait evolution on the tree
 tip_states = simulate_bm_model(tree, diffusivity=1)$tip_states
 
 # plot histogram of simulated tip states

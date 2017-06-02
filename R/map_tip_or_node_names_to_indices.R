@@ -16,7 +16,7 @@ map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_inp
 		Nmax 		= length(tree$tip.label)+tree$Nnode;
 		if(is.character(A)) name_pool = c(tree$tip.label,tree$node.label);
 	}
-	if((!is.character(A)) && (!is.integer(A))) stop(sprintf("ERROR: %s must be a character or integer vector",list_title))
+	if((!is.character(A)) && (!is.numeric(A))) stop(sprintf("ERROR: %s must be a character or integer vector",list_title))
 	if(is.character(A)){
 		name2index = 1:Nmax;
 		names(name2index) = name_pool;

@@ -8,7 +8,7 @@ simulate_ou_model = function(	tree,
 								include_tips	= TRUE, 
 								include_nodes	= TRUE, 
 								Nsimulations	= 1,
-								drop			= TRUE){
+								drop_dims		= TRUE){
 	Ntips  = length(tree$tip.label);
 	Nnodes = tree$Nnode;
 	results = simulate_Ornstein_Uhlenbeck_model_CPP(Ntips				= Ntips,
@@ -25,7 +25,7 @@ simulate_ou_model = function(	tree,
 
 	tip_states  = NULL
 	node_states = NULL
-	if(include_tips) tip_states = (if(drop && Nsimulations==1) results$tip_states else matrix(results$tip_states, ncol=Ntips, byrow=TRUE));
-	if(include_nodes) node_states = (if(drop && Nsimulations==1) results$node_states else matrix(results$node_states, ncol=Nnodes, byrow=TRUE));
+	if(include_tips) tip_states = (if(drop_dims && Nsimulations==1) results$tip_states else matrix(results$tip_states, ncol=Ntips, byrow=TRUE));
+	if(include_nodes) node_states = (if(drop_dims && Nsimulations==1) results$node_states else matrix(results$node_states, ncol=Nnodes, byrow=TRUE));
 	return(list(tip_states=tip_states, node_states=node_states));
 }

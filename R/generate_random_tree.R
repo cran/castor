@@ -10,7 +10,10 @@ generate_random_tree = function( max_tips,
 								 death_rate_intercept 	= 0,
 								 death_rate_factor		= 0,
 								 death_rate_exponent	= 1,
-								 coalescent 			= TRUE){
+								 coalescent 			= TRUE,
+								 Nsplits				= 2,	 	# number of children generated at each diversification event. If set to 2, a bifurcating tree is generated. If >2, the tree will be multifurcating.
+								 tip_basename			= "",		# basename for tips (e.g. "tip."). 
+								 node_basename			= NULL){	# basename for nodes (e.g. "node."). If NULL, then nodes will not have any labels.
 	if(is.null(max_tips) && is.null(max_time)) stop("ERROR: At least one of max_tips and/or max_time must be non-NULL")
 	
 	results = generate_random_tree_CPP(	max_tips				= (if(is.null(max_tips)) -1 else max_tips),
@@ -21,10 +24,13 @@ generate_random_tree = function( max_tips,
 										death_rate_intercept 	= death_rate_intercept,
 										death_rate_factor		= death_rate_factor,
 										death_rate_exponent		= death_rate_exponent,
-										coalescent				= coalescent);
-	tree = list(Nnode 		= results$Nnodes,
-				tip.label 	= as.character(1:results$Ntips),
-				node.label 	= NULL,
+										coalescent				= coalescent,
+										Nsplits					= Nsplits);
+	Ntips	= results$Ntips
+	Nnodes 	= results$Nnodes
+	tree = list(Nnode 		= Nnodes,
+				tip.label 	= paste(tip_basename, 1:Ntips, sep=""),
+				node.label 	= (if(is.null(node_basename)) NULL else paste(node_basename, 1:Nnodes, sep="")),
 				edge 		= matrix(results$tree_edge,ncol=2,byrow=TRUE) + 1,
 				edge.length = results$edge_length,
 				root 		= results$root+1)

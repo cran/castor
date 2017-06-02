@@ -137,7 +137,8 @@ double get_array_min(const ARRAY_TYPE &X){
 }
 
 
-double get_array_nonzero_min(const NumericVector &X){
+template<class ARRAY_TYPE>
+double get_array_nonzero_min(const ARRAY_TYPE &X){
 	const long N = X.size();
 	double minX = NAN_D;
 	for(long n=0; n<N; ++n){
@@ -216,6 +217,29 @@ long get_nearest_index(const IntegerVector &haystack, const long needle){
 }
 
 
+
+// Convert a dense binary matrix from row-major format (i.e. provided as a list of lists of non-zero column entries)
+// to column-major format, i.e. return a list of lists of non-zero row entries
+// Note that since the matrix is assumed to be binary (0/1), the actual values don't need to be provided and neither are they returned; we only need to keep track of which cells are non-zero
+// [[Rcpp::export]]
+Rcpp::List dense_binary_matrix_row2column_major_CPP(const long 			NR,
+													const long 			NC,
+													const Rcpp::List	&dense_rows, 	// (INPUT) list of size NR, with the r-th entry being an integer vector of arbitrary size containing the columns with non-zero entries in row r
+													const bool			Rindexing){		// (INPUT) if true, then indices listed in dense_rows are 1-based (as opposed to 0-based, as expected in C++), and the indices listed in the returned dense_columns should also be 1-based. If false, then 0-based indexing is used in input and output
+	const long index_shift = (Rindexing ? -1 : 0);
+	std::vector< std::vector<long> > dense_columns(NC); // dense_columns[c][] will be a list of row indices, so that dense_columns[c][i] is the i-th non-zero entry in column c (matrix[i,c]!=0)
+	vector<long> dense_row;
+	for(long r=0; r<NR; ++r){
+		dense_row = Rcpp::as<vector<long> >(dense_rows[r]);
+		for(long i=0; i<dense_row.size(); ++i){
+			dense_columns[dense_row[i]+index_shift].push_back(r-index_shift);
+		}
+	}
+	return Rcpp::wrap(dense_columns);
+}
+
+
+
 #pragma mark -
 #pragma mark Random numbers
 #pragma mark 
@@ -242,14 +266,20 @@ double random_standard_normal(){
 }
 
 
+
 // generate a sample from an OU process, conditional upon a previous sample
 inline double getNextOUsample(	double mean,
 								double decay_rate,
 								double stationary_std,
 								double dt,
 								double previous){
-	const double rho = ((1.0/decay_rate)<dt*STRANDOM_EPSILON ? 0 : exp(-dt*decay_rate));
-	return mean*(1-rho) + rho*previous + sqrt(1-rho*rho)*random_standard_normal()*stationary_std;								
+	// use transition probability density (Gaussian, known analytically)
+	const double std 		 = stationary_std * sqrt(1-exp(-2*dt*decay_rate));
+	const double expectation = mean + (previous-mean) * exp(-dt*decay_rate);
+	return expectation + std*random_standard_normal();
+	// Alternative: Use correlation structure, and the fact that OU is Gaussian
+	//const double rho = ((1.0/decay_rate)<dt*STRANDOM_EPSILON ? 0 : exp(-dt*decay_rate));
+	//return mean*(1-rho) + rho*previous + sqrt(1-rho*rho)*random_standard_normal()*stationary_std;								
 }
 
 
@@ -2463,12 +2493,148 @@ Rcpp::List collapse_tree_at_resolution_CPP(	const long			Ntips,
 
 
 
+// Eliminate multifurcations in a tree by replacing them with multiple bifurcations
+// Tips indices remain the same, but edge indices and the total number of nodes/edges may increase (if the tree includes multifurcations)
+// Old nodes retain their index, and new nodes will have indices Nnodes,...,(Nnew_nodes-1)
+// The tree need not be rooted
+template<class INTEGER_ARRAY, class NUMERIC_ARRAY>
+void multifurcations_to_bifurcations(	const long			Ntips,
+										const long 			Nnodes,
+										const long			Nedges,
+										const INTEGER_ARRAY	&tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+										const NUMERIC_ARRAY &edge_length,		// (INPUT) 1D array of size Nedges listing edge lengths, or an empty vector (all edges have length 1)
+										const double		dummy_edge_length,	// (INPUT) length to be used for new auxiliary edges (connecting old to new nodes) when splitting multifurcations. This will typically be zero, or a small number if zero-length edges are not desired.
+										long				&Nnew_nodes,		// (OUTPUT) number of nodes in the new tree
+										long				&Nnew_edges,		// (OUTPUT) number of edges in the new tree
+										std::vector<long>	&new_tree_edge,		// (OUTPUT) 2D array of size Nnew_edges x 2, in row-major format, with elements in 0,..,(Nclades-1)
+										std::vector<double>	&new_edge_length,	// (OUTPUT) 1D array of size Nnew_edges, listing the lengths of edges in the new tree
+										std::vector<long>	&old2new_edge){		// (OUTPUT) 1D array of size Nedges, with values in 0,..,(Nnew_edges-1) mapping old edges to new edges
+	long edge, child, Nchildren;
+	
+	// get edge mappings
+	std::vector<long> node2first_edge, node2last_edge, edge_mapping;
+	get_node2edge_mappings(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							node2first_edge,
+							node2last_edge,
+							edge_mapping);
+							
+	// determine number of nodes/edges in the new tree (based on the number & size of multifurcations)
+	Nnew_edges = Nedges;
+	for(long node=0; node<Nnodes; ++node){
+		Nchildren = node2last_edge[node] - node2first_edge[node] + 1;
+		if(Nchildren>2) Nnew_edges += (Nchildren-2);
+	}
+	Nnew_nodes = Nnodes + (Nnew_edges - Nedges);
+	
+	if(Nnew_edges==Nedges){
+		// return tree without modification
+		new_tree_edge 	= Rcpp::as< std::vector<long> >(tree_edge);
+		new_edge_length	= (edge_length.size()==0 ? std::vector<double>(Nedges,1) : Rcpp::as< std::vector<double> >(edge_length));
+		old2new_edge.resize(Nedges);
+		for(edge=0; edge<Nedges; ++edge) old2new_edge[edge] = edge;
+		return;
+	}
+							
+	// iterate through nodes and expand any multifurcations
+	new_tree_edge.clear();
+	new_edge_length.clear();
+	new_tree_edge.reserve(2*Nnew_edges);
+	new_edge_length.reserve(Nnew_edges);
+	old2new_edge.resize(Nedges);
+	long next_new_node = Nnodes;
+	for(long node=0, clade, next_parent; node<Nnodes; ++node){
+		clade = Ntips + node;
+		Nchildren = node2last_edge[node] - node2first_edge[node] + 1;
+		if(Nchildren>0){
+			// the first child is always preserved
+			edge = edge_mapping[node2first_edge[node]];
+			new_tree_edge.push_back(clade);
+			new_tree_edge.push_back(tree_edge[2*edge+1]);
+			new_edge_length.push_back(edge_length.size()==0 ? 1.0 : edge_length[edge]);
+			old2new_edge[edge] = new_edge_length.size()-1;
+		}
+		if(Nchildren<=2){
+			// node does not multifurcate, so also preserve 2nd child (if available) and move on to the next node
+			if(Nchildren>1){
+				edge = edge_mapping[node2first_edge[node]+1];
+				new_tree_edge.push_back(clade);
+				new_tree_edge.push_back(tree_edge[2*edge+1]);
+				new_edge_length.push_back(edge_length.size()==0 ? 1.0 : edge_length[edge]);
+				old2new_edge[edge] = new_edge_length.size()-1;
+			}
+			continue;
+		}
+		// for all children but the first and last create a new node
+		next_parent = clade;
+		for(long e=1+node2first_edge[node]; e<node2last_edge[node]; ++e){
+			edge  = edge_mapping[e];
+			child = tree_edge[2*edge+1];
+			// create new edge next_parent --> next_new_node
+			new_tree_edge.push_back(next_parent);
+			new_tree_edge.push_back(Ntips+next_new_node);
+			new_edge_length.push_back(dummy_edge_length);
+			// add child to the new node
+			new_tree_edge.push_back(Ntips+next_new_node);
+			new_tree_edge.push_back(child);
+			new_edge_length.push_back(edge_length.size()==0 ? 1.0 : edge_length[edge]);
+			old2new_edge[edge] = new_edge_length.size()-1;
+			next_parent = Ntips + next_new_node;
+			++next_new_node;
+		}
+		// add last child to the last new node (next_parent)
+		edge  = edge_mapping[node2last_edge[node]];
+		child = tree_edge[2*edge+1];
+		new_tree_edge.push_back(next_parent);
+		new_tree_edge.push_back(child);
+		new_edge_length.push_back(edge_length.size()==0 ? 1.0 : edge_length[edge]);
+		old2new_edge[edge] = new_edge_length.size()-1;
+	}
+}
+
+
+
+// Replace multifurcations with multiple bifurcations
+// The tree need not be rooted
+// Rcpp wrapper function
+// [[Rcpp::export]]
+Rcpp::List multifurcations_to_bifurcations_CPP(	const long			Ntips,
+												const long 			Nnodes,
+												const long			Nedges,
+												const IntegerVector	&tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+												const NumericVector &edge_length,		// (INPUT) 1D array of size Nedges listing edge lengths, or an empty vector (all edges have length 1)
+												const double		dummy_edge_length){	// (INPUT) length to be used for new auxiliary edges (connecting old to new nodes) when splitting multifurcations. This will typically be zero, or a small number if zero-length edges are not desired.
+	long Nnew_nodes, Nnew_edges;
+	std::vector<long> new_tree_edge, old2new_edge;
+	std::vector<double> new_edge_length;
+	multifurcations_to_bifurcations(Ntips,
+									Nnodes,
+									Nedges,
+									tree_edge,
+									edge_length,
+									dummy_edge_length,
+									Nnew_nodes,
+									Nnew_edges,
+									new_tree_edge,
+									new_edge_length,
+									old2new_edge);
+											
+	return Rcpp::List::create(	Rcpp::Named("Nnew_nodes") 		= Nnew_nodes,
+								Rcpp::Named("Nnew_edges") 		= Nnew_edges,
+								Rcpp::Named("new_tree_edge") 	= Rcpp::wrap(new_tree_edge),
+								Rcpp::Named("new_edge_length") 	= Rcpp::wrap(new_edge_length),
+								Rcpp::Named("old2new_edge") 	= Rcpp::wrap(old2new_edge));
+}
+
 
 // Generate a random phylogenetic tree under a simple speciation model, where species are born or go extinct as a Poissonian process
-// New species are added by splitting one of the currently extant tips (chosen randomly)
+// New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
 // Special case is the Yule model: New species appear as a Poisson process with a constant birth rate, and without extinctions
 // More generally, the species birth rate can be a power-law function of extant tips count: birth_rate = intercept + factor*number_of_extant_tips^exponent
 // Similarly, the death rate of tips can be a power-law function of extant tip count: death_rate = intercept + factor*number_of_extant_tips^exponent
+// The resulting tree will be bifurcating (if Nsplits=2) or multifurcating (if Nsplits>2).
 // Reference:
 //   Steel and McKenzie (2001). Properties of phylogenetic trees generated by Yule-type speciation models. Mathematical Biosciences. 170:91-112.
 // [[Rcpp::export]]
@@ -2480,8 +2646,10 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,				// (INPUT) max nu
 									const double 	death_rate_intercept,	// (INPUT) intercept of Poissonian rate at which extant tips are removed from the tree
 									const double 	death_rate_factor,		// (INPUT) power-law factor of Poissonian rate at which extant tips are removed from the tree
 									const double 	death_rate_exponent,	// (INPUT) power-law exponent of Poissonian rate at which extant tips are removed from the tree
-									const bool		coalescent){			// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
+									const bool		coalescent,				// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
+									const long		Nsplits){				// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
 	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
+	long next_Nsplits = max(2l, Nsplits);
 	std::vector<long> tree_edge;
 	std::vector<long> extant_tips;
 	std::vector<double> clade2end_time;
@@ -2517,20 +2685,23 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,				// (INPUT) max nu
 		clade2end_time[clade] = time;
 		
 		if(birth){
-			// split chosen tip into two daughter-tips & create 2 new edges
+			// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
+			if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? extant_tips.size() : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
 			// child 1:
 			++Nedges;
 			tree_edge.push_back(clade);
 			tree_edge.push_back(Nclades);
 			extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
 			clade2end_time.push_back(-1);
-			// child 2:
-			++Nedges;
-			tree_edge.push_back(clade);
-			tree_edge.push_back(Nclades);
-			extant_tips.push_back(Nclades++);
-			clade2end_time.push_back(-1);
-			++Ntips;
+			// remaining children:
+			for(long c=1; c<next_Nsplits; ++c){
+				++Nedges;
+				tree_edge.push_back(clade);
+				tree_edge.push_back(Nclades);
+				extant_tips.push_back(Nclades++);
+				clade2end_time.push_back(-1);
+				++Ntips;
+			}
 		}else{
 			// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
 			extant_tips[tip] = extant_tips.back();
@@ -3329,6 +3500,42 @@ Rcpp::List count_clades_per_time_point_CPP(	const long 			Ntips,
 
 
 
+// returns true if the tree includes nodes that have more than 2 children
+template<class ARRAY_TYPE>
+bool tree_has_multifurcations(	const long			Ntips,
+								const long 			Nnodes,
+								const long			Nedges,
+								const ARRAY_TYPE	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+	std::vector<long> child_count_per_node(Nnodes,0);
+	for(long edge=0; edge<Nedges; ++edge) ++child_count_per_node[tree_edge[2*edge+0]-Ntips];
+	for(long node=0; node<Nnodes; ++node){
+		if(child_count_per_node[node]>2) return true;
+	}
+	return false;
+}
+
+
+template<class ARRAY_TYPE>
+void count_monofurcations_and_multifurcations(	const long			Ntips,
+												const long 			Nnodes,
+												const long			Nedges,
+												const ARRAY_TYPE	&tree_edge,				// (INPUT) 2D array (in row-major format) of size Nedges x 2
+												long				&Nmonofurcations,		// (OUTPUT) number of monofurcating nodes
+												long				&Nbifurcations,			// (OUTPUT) number of bifurcating nodes
+												long				&Nmultifurcations){		// (OUTPUT) number of multifurcating nodes
+	std::vector<long> child_count_per_node(Nnodes,0);
+	for(long edge=0; edge<Nedges; ++edge) ++child_count_per_node[tree_edge[2*edge+0]-Ntips];
+	Nmonofurcations = Nbifurcations = Nmultifurcations = 0;
+	for(long node=0; node<Nnodes; ++node){
+		if(child_count_per_node[node]==1) ++Nmonofurcations;
+		else if(child_count_per_node[node]==2) ++Nbifurcations;
+		else ++Nmultifurcations;
+	}
+}
+
+
+
+
 #pragma mark -
 #pragma mark Writing trees to file
 #pragma mark 
@@ -3340,7 +3547,7 @@ Rcpp::List count_clades_per_time_point_CPP(	const long 			Ntips,
 std::string tree_to_Newick_string_CPP(	const long			Ntips,
 										const long 			Nnodes,
 										const long			Nedges,
-										IntegerVector 		tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2, or an empty std::vector (no tree available).
+										IntegerVector 		tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
 										const NumericVector	&edge_length,		// (INPUT) 1D array of size Nedges, or empty
 										const StringVector	&tip_labels,		// (INPUT) 1D array of size Ntips, or empty
 										const StringVector	&node_labels,		// (INPUT) 1D array of size Nnodes, or empty
@@ -3756,8 +3963,8 @@ Rcpp::List autocorrelation_function_of_continuous_trait_CPP(const long 			Ntips,
 	IntegerVector tipsA(Npairs);
 	IntegerVector tipsB(Npairs);
 	for(long p=0; p<Npairs; ++p){
-		tipsA[p] = uniformIntWithin(0,Ntips);
-		tipsB[p] = uniformIntWithin(0,Ntips);
+		tipsA[p] = uniformIntWithin(0,Ntips-1);
+		tipsB[p] = uniformIntWithin(0,Ntips-1);
 	}
 
 	// calculate distance for each tip pair
@@ -4088,6 +4295,236 @@ Rcpp::List get_trait_richness_collectors_curve_CPP(	const long			Ntips,
 
 
 
+
+
+
+
+
+
+// Calculate Phylogenetic Independent Contrasts (PIC) for multiple continuous traits on a tree [Felsenstein 1985, page 10]
+// One PIC is returned for each non-monofurcating node (or each bifurcating node, if only_bifurcations=true).
+// If only_bifurcations==false, then:
+//    If multifurcations are present and, these are internally expanded to bifurcations and an additional PIC is returned for each such bifurcation.
+//    Hence, the number of returned PICs is the number of bifurcations in the tree, after multifurcations have been expanded to bifurcations.
+// Literature:
+//    Felsenstein (1985). Phylogenies and the Comparative Method. The American Naturalist. 125:1-15.
+// Requirements:
+//   Tree can include multi- and mono-furcations.
+//   Tree must be rooted. Root will be determined automatically as the node with no parent.
+void get_phylogenetic_independent_contrasts(const long			Ntips,
+											const long 			Nnodes,
+											const long			Nedges,
+											const long			Ntraits,
+											const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+											const NumericVector &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+											const NumericVector	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
+											const bool			only_bifurcations,	// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
+											const bool			scaled,				// (INPUT) if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
+											std::vector<double>	&PICs,				// (OUTPUT) 2D array of size Npics x Ntraits, in row-major format, listing PICs for each trait and for each considered node
+											std::vector<double>	&distances,			// (OUTPUT) 1D array of size Npics, listing phylogenetic distances corresponding to the PICs. Under a Brownian motion mode, these are proportional to the variance of each PIC
+											std::vector<long>	&PIC_nodes){		// (OUTPUT) 1D array of size Npics, listing node indices for which PICs were calculated. Negative values indicate nodes that were not actually in the original tree, but were created temporarily during expansion of multifurcations
+	// check if tree has monofurcations & multifurcations
+	long Nmonofurcations, Nbifurcations, Nmultifurcations;
+	count_monofurcations_and_multifurcations(	Ntips,
+												Nnodes,
+												Nedges,
+												tree_edge,
+												Nmonofurcations,
+												Nbifurcations,
+												Nmultifurcations);
+	
+	std::vector<long> local_tree_edge;
+	std::vector<double> local_edge_length;
+	long Nlocal_edges, Nlocal_nodes;
+	if((!only_bifurcations) && (Nmultifurcations>0)){
+		// Tree has multifurcations, so expand them first to bifurcations
+		// Note that the number of monofurcations will remain unchanged, but the number of bifurcations/nodes/edges will increase
+		std::vector<long> dummy;
+		multifurcations_to_bifurcations(Ntips,
+										Nnodes,
+										Nedges,
+										tree_edge,
+										edge_length,
+										0,
+										Nlocal_nodes,
+										Nlocal_edges,
+										local_tree_edge,
+										local_edge_length,
+										dummy);
+	}else{
+		local_tree_edge 	=  Rcpp::as<vector<long> >(tree_edge);
+		local_edge_length 	=  Rcpp::as<vector<double> >(edge_length);
+		Nlocal_nodes 		= Nnodes;
+		Nlocal_edges 		= Nedges;
+	}
+	const long Nlocal_clades = Ntips + Nlocal_nodes;
+	const long Npics = (only_bifurcations ? Nbifurcations : (Nlocal_nodes - Nmonofurcations));
+	
+	// get incoming edge for each clade
+	std::vector<long> incoming_edge_per_clade;
+	get_incoming_edge_per_clade(Ntips, Nlocal_nodes, Nlocal_edges, local_tree_edge, incoming_edge_per_clade);
+	
+	// get root
+	const long root = get_root_from_incoming_edge_per_clade(Ntips, local_tree_edge, incoming_edge_per_clade);
+
+	// prepare tree traversal route (root-->tips) and edge mappings
+	std::vector<long> traversal_queue, node2first_edge, node2last_edge, edge_mapping;
+	get_tree_traversal_root_to_tips(Ntips,
+									Nlocal_nodes,
+									Nlocal_edges,
+									root,
+									local_tree_edge,
+									false,	// don't include tips
+									false,	// edge mappings are not pre-calculated
+									traversal_queue,
+									node2first_edge,
+									node2last_edge,	
+									edge_mapping,
+									false,
+									"");
+									
+	// prepare incoming edge length per clade (will be modified later on as part of Felsenstein's algorithm)
+	std::vector<double> incoming_length_per_clade(Nlocal_clades);
+	if(local_edge_length.size()>0){
+		for(long clade=0; clade<Nlocal_clades; ++clade){
+			if(clade!=root) incoming_length_per_clade[clade] = local_edge_length[incoming_edge_per_clade[clade]];
+		}
+	}else{
+		incoming_length_per_clade.assign(incoming_length_per_clade.size(),1);
+		incoming_length_per_clade[root] = 0;
+	}
+	
+									
+	// calculate Felsenstein's PICs in a postorder traversal (tips-->root)
+	const double edge_length_epsilon = RELATIVE_EPSILON * get_array_nonzero_min(local_edge_length); // substitute to be used for zero edge lengths
+	std::vector<double> node_states(Nlocal_nodes*Ntraits,0);	// 2D numeric array of size Nlocal_nodes x Ntraits
+	PICs.clear(); PICs.reserve(Npics*Ntraits);
+	distances.clear(); distances.reserve(Npics);
+	PIC_nodes.clear(); PIC_nodes.reserve(Npics);
+	long edge1, edge2, child, child1, child2, node, clade, trait;
+	double length, total_weight, X1, X2;
+	for(long q=traversal_queue.size()-1; q>=0; --q){
+		clade	= traversal_queue[q];
+		node	= clade - Ntips;
+		// calculate Felsenstein's X_k (node_states) and nu_k (incoming_length_per_clade)
+		total_weight = 0;
+		for(long e=node2first_edge[node]; e<=node2last_edge[node]; ++e){
+			child 	= local_tree_edge[2*edge_mapping[e]+1];
+			length 	= incoming_length_per_clade[child];
+			if(length==0) length = edge_length_epsilon;
+			for(trait=0; trait<Ntraits; ++trait){
+				node_states[node*Ntraits+trait] += (1.0/length) * (child<Ntips ? tip_states[child*Ntraits+trait] : node_states[(child-Ntips)*Ntraits+trait]);
+			}
+			total_weight += (1.0/length);
+		}
+		for(trait=0; trait<Ntraits; ++trait) node_states[node*Ntraits+trait] /= total_weight;
+		incoming_length_per_clade[clade] += 1.0/total_weight;
+		
+		// calculate PICs using Felsenstein's X_i & nu_i (skip over monofurcating nodes)
+		if(1+node2last_edge[node]-node2first_edge[node] != 2) continue; // node is not bifurcating
+		edge1		= edge_mapping[node2first_edge[node]];
+		edge2		= edge_mapping[node2first_edge[node]+1];
+		child1 		= local_tree_edge[2*edge1+1];
+		child2 		= local_tree_edge[2*edge2+1];
+		for(trait=0; trait<Ntraits; ++trait){
+			X1 = (child1<Ntips ? tip_states[child1*Ntraits+trait] : node_states[(child1-Ntips)*Ntraits+trait]);
+			X2 = (child2<Ntips ? tip_states[child2*Ntraits+trait] : node_states[(child2-Ntips)*Ntraits+trait]);
+			PICs.push_back(X2 - X1);
+		}
+		distances.push_back(incoming_length_per_clade[child1] + incoming_length_per_clade[child2]);
+		PIC_nodes.push_back(node<Nnodes ? node : -1); // keep track which node this PIC corresponds to. -1 means this temporary node did not exist in the original tree
+	}
+	
+	// rescale if needed
+	if(scaled){
+		for(long p=0; p<Npics; ++p){
+			for(trait=0; trait<Ntraits; ++trait){
+				PICs[p*Ntraits+trait] /= sqrt(distances[p]);
+			}
+		}
+	}
+}
+
+
+
+
+// Calculate Phylogenetic Independent Contrasts (PIC) for multiple continuous traits on a tree [Felsenstein 1985, page 10]
+// This is an Rcpp wrapper for the function get_phylogenetic_independent_contrasts(..)
+// [[Rcpp::export]]
+Rcpp::List get_phylogenetic_independent_contrasts_CPP(	const long			Ntips,
+														const long 			Nnodes,
+														const long			Nedges,
+														const long			Ntraits,
+														const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+														const NumericVector &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+														const NumericVector	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
+														const bool			only_bifurcations,	// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
+														const bool			scaled){			// (INPUT)if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
+		std::vector<double> PICs, distances;
+		std::vector<long> PIC_nodes;
+		get_phylogenetic_independent_contrasts(	Ntips,
+												Nnodes,
+												Nedges,
+												Ntraits,
+												tree_edge,
+												edge_length,
+												tip_states,
+												only_bifurcations,
+												scaled,
+												PICs,
+												distances,
+												PIC_nodes);
+		return Rcpp::List::create(	Rcpp::Named("PICs")  		= Rcpp::wrap(PICs),
+									Rcpp::Named("distances") 	= Rcpp::wrap(distances),
+									Rcpp::Named("nodes") 		= Rcpp::wrap(PIC_nodes));
+}
+
+
+
+
+
+// Fit a multivariate Brownian motion model for multiple correlated continuous traits evolving under Brownian motion
+// Estimates the diffusivity matrix D[i,j], so that exp(-X^T*D^{-1}*X/(4*L))/sqrt(det(2*pi*D)) is the probability density for the multidimensional trait vector X after phylogenetic distance L, if initially located at the origin.
+void fit_Brownian_motion_model(	const long			Ntips,
+								const long 			Nnodes,
+								const long			Nedges,
+								const long			Ntraits,
+								const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+								const NumericVector &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+								const NumericVector	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
+								std::vector<double>	&diffusivity){		// (OUTPUT) 2D array of size Ntraits x Ntraits, in row-major format, listing the fitted diffusion matrix D
+											
+	// calculate phylogenetic independent contrasts (PIC)
+	// PICs correspond to independent increments of a multivariate Brownian motion process
+	std::vector<double> PICs, distances;
+	std::vector<long> PIC_nodes;
+	get_phylogenetic_independent_contrasts(	Ntips,
+											Nnodes,
+											Nedges,
+											Ntraits,
+											tree_edge,
+											edge_length,
+											tip_states,
+											false,
+											true,	// rescale PICs by phylogenetic distances
+											PICs,
+											distances,
+											PIC_nodes);
+											
+	// estimate diffusivity matrix based on independent contrasts
+	// maximum-likelihood estimator on the intrinsic geometry of positive-definite matrices
+	const long Npics = distances.size();
+	diffusivity.assign(Ntraits*Ntraits,0); // 2D matrix of size Ntraits x Ntraits, in row-major format
+	for(long t1=0; t1<Ntraits; ++t1){
+		for(long t2=t1; t2<Ntraits; ++t2){
+			for(long p=0; p<Npics; ++p){
+				diffusivity[t1*Ntraits+t2] += PICs[p*Ntraits+t1]*PICs[p*Ntraits+t2];
+			}
+			diffusivity[t1*Ntraits+t2] /= (2*Npics);
+			diffusivity[t2*Ntraits+t1]  = diffusivity[t1*Ntraits+t2];
+		}
+	}
+}
 
 
 
@@ -5463,17 +5900,16 @@ void aux_get_quadratic_parameters_for_squared_change_parsimony(	const long				Nt
 
 
 
-
 // Reconstruct of continuous ancestral states via squared change parsimony
 // This is related to Phylogenetically Independent Contrasts ASR), with the difference that PIC reconstruction for a node only takes into account the subtree descending from a node.
 // Note that the "mean node value" X_i of a node used to calculate the phylogenetic independent contrasts (PICs) by Felsenstein, 
-//		is in fact the value that would have been reconstructed at P by (weighted) squared-change parsimony were P's clade the whole tree; 
+//		is in fact the value that would have been reconstructed at P by (weighted) squared-change parsimony were P's clade is the whole tree; 
 //		that is, it minimizes locally (over P's clade) the sum of (weighted) squared changes [as explained by Maddison 1991].
 //		For the root, this is also the global optimum.
 //		Hence, to obtain ancestral states for non-root nodes, you need to reroot at each node.
 //		Maddison (1991) provides an alternative postorder-traversal algorithm to Felsenstein (whose original intention was not ASR), for arriving at the same local estimates for each node (=global estimate for the root) 
 //		by keeping track of "quadratic parameters" at each tip/node. The quadratic parameters of each node can be calculated purely based on the  quadratic parameters of its children, and branch lengths can be included for weighting.
-//		It turns out that the calculation of quadratic parameters sensu Maddison is more easily generalizable to multifurcations, as well as to accommodate edges with length zero.
+//		It turns out that the calculation of quadratic parameters sensu Maddison is more easily generalizable to multifurcations.
 // To obtain the classical PIC estimates, set global=false. To obtain Maddison's global estimates (via rerooting) set global=true.
 // Literature:
 //    Felsenstein (1985). Phylogenies and the Comparative Method. The American Naturalist. 125:1-15.
@@ -5487,7 +5923,7 @@ Rcpp::List ASR_via_squared_change_parsimony_CPP(const long			Ntips,
 												const long			Nedges,
 												const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
 												const NumericVector &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
-												const NumericVector	&tip_states,		// (INPUT) known states at each tip
+												const NumericVector	&tip_states,		// (INPUT) numeric states of the trait at each tip
 												bool				global){			// (INPUT) if true, then global squared-change parsimony state estimates are returned (as recommended by Maddison). This requires rerooting at each node and updating the quadratic parameters. If false, then the local estimate of each node (i.e. only considering its descending subtree) are returned. This corresponds to classical PIC.
 	long node, clade;
 	const double edge_length_epsilon = RELATIVE_EPSILON * get_array_nonzero_min(edge_length); // substitute to be used for zero edge lengths
@@ -5526,7 +5962,7 @@ Rcpp::List ASR_via_squared_change_parsimony_CPP(const long			Ntips,
 																	false, // egde mappings are not inout
 																	edge_length_epsilon,
 																	traversal_queue[q]-Ntips, // focal node for which to calculate quadratic parameters (based on its children)
-																	quadratic_parameters_per_node);;
+																	quadratic_parameters_per_node);
 	}
 	const double TSS = quadratic_parameters_per_node[(root-Ntips)*3+2] - SQR(quadratic_parameters_per_node[(root-Ntips)*3+1])/(4*quadratic_parameters_per_node[(root-Ntips)*3+0]); // minimized total sum of squared changes over the tree [Maddison 1991, Formula 7]
 	
@@ -5773,8 +6209,7 @@ Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long			Ntips,
 		}
 	}
 	if(!include_nodes) node_states.clear(); // clear memory if content is not to be returned
-	
-		
+			
 	return Rcpp::List::create(	Rcpp::Named("tip_states")  = Rcpp::wrap(tip_states),
 								Rcpp::Named("node_states") = Rcpp::wrap(node_states));
 }
@@ -5937,18 +6372,19 @@ Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_model_CPP(	const long			Ntips,
 }
 
 
-// simulate a specific Brownian motion model of continuous trait evolution on a tree, starting from the root and moving towards the tips
+// simulate a Brownian motion model of continuous trait evolution for a scalar continuous trait, starting from the root and moving towards the tips
+// The BM model is specified by means of its diffusivity D
 // [[Rcpp::export]]
-Rcpp::List simulate_Brownian_motion_model_CPP(	const long			Ntips,
-												const long 			Nnodes,
-												const long			Nedges,
-												const IntegerVector &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-												const NumericVector &edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-												const NumericVector	&root_states,			// (INPUT) 1D array of arbitrary size, specifying root states for each simulation. If smaller than Nsimulations, values are recycled in rotation. If empty, zero is used as root state.
-												const double		diffusivity,			// (INPUT) diffusion coefficient of the BM model, dX = sqrt(2D) * dB
-												const bool			include_tips,			// (INPUT) include states for tips in the output
-												const bool			include_nodes,			// (INPUT) include states for nodes in the output
-												const long			Nsimulations){			// (INPUT) number of random simulations (draws) of the model on the tree. If 1, then a single simulation is performed, yielding a single random state for each node and/or tip.
+Rcpp::List simulate_scalar_Brownian_motion_model_CPP(	const long			Ntips,
+														const long 			Nnodes,
+														const long			Nedges,
+														const IntegerVector &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+														const NumericVector &edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+														const NumericVector	&root_states,			// (INPUT) 1D array of arbitrary size, specifying root states for each simulation. If smaller than Nsimulations, values are recycled in rotation. If empty, zero is used as root state.
+														const double		diffusivity,			// (INPUT) diffusion coefficient of the BM model, dX = sqrt(2D) * dB
+														const bool			include_tips,			// (INPUT) include states for tips in the output
+														const bool			include_nodes,			// (INPUT) include states for nodes in the output
+														const long			Nsimulations){			// (INPUT) number of random simulations (draws) of the model on the tree. If 1, then a single simulation is performed, yielding a single random state for each node and/or tip.
 	if((Nsimulations<=0) || ((!include_tips) && (!include_nodes))){
 		return	Rcpp::List::create(	Rcpp::Named("tip_states")  = NumericVector(),
 									Rcpp::Named("node_states") = NumericVector());
@@ -6003,6 +6439,92 @@ Rcpp::List simulate_Brownian_motion_model_CPP(	const long			Ntips,
 		
 	return Rcpp::List::create(	Rcpp::Named("tip_states")  = Rcpp::wrap(tip_states),
 								Rcpp::Named("node_states") = Rcpp::wrap(node_states));
+}
+
+
+
+
+// simulate a Brownian motion model of co-evolution of multiple continuous traits on a tree, starting from the root and moving towards the tips
+// The BM model is specified by means of its diffusivity matrix D (which can account for correlations between traits)
+// [[Rcpp::export]]
+Rcpp::List simulate_multivariate_Brownian_motion_model_CPP(	const long					Ntips,
+															const long 					Nnodes,
+															const long					Nedges,
+															const long					Ntraits,
+															const IntegerVector 		&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+															const NumericVector			&edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+															const NumericVector			&root_states,			// (INPUT) 2D array of size NR x Ntraits in row-major format, where NR can be arbitrary, specifying root states for each simulation. If NR is smaller than Nsimulations, values are recycled in rotation. If empty, zero is used as root state for all traits.
+															const std::vector<double>	&diffusivity,			// (INPUT) 2D array of size Ntraits x Ntraits, in row-major format, listing the diffusivity matrix of the BM model, dX = sqrt(2D) * dB
+															const std::vector<double>	&cholesky,				// (INPUT) 2D array of size Ntraits x Ntraits, in row-major format, cholesky decomposition of the diffusivity matrix. This is a lower-triangular matrix such that diffusivity = cholesky * cholesky^T.
+															const bool					include_tips,			// (INPUT) include states for tips in the output
+															const bool					include_nodes,			// (INPUT) include states for nodes in the output
+															const long					Nsimulations){			// (INPUT) number of random simulations (draws) of the model on the tree. If 1, then a single simulation is performed, yielding a single random state for each node and/or tip.
+	if((Nsimulations<=0) || ((!include_tips) && (!include_nodes))){
+		return	Rcpp::List::create(	Rcpp::Named("tip_states")  = NumericVector(),
+									Rcpp::Named("node_states") = NumericVector());
+	}
+	const long Nroot_states = root_states.size()/Ntraits;
+
+	// get incoming edge for each clade
+	std::vector<long> incoming_edge_per_clade;
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
+
+	// find root based on mapping clade-->incoming_edge
+	const long root = get_root_from_incoming_edge_per_clade(Ntips, tree_edge, incoming_edge_per_clade);
+
+	// get tree traversal route (tips --> root)
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										include_tips,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+										
+	
+	// traverse root-->tips and draw random states, conditional upon their parent's state
+	// node_states[] will be a 3D array in layer-row-major format, i.e. indexed as simulation*Nnodes*Ntraits+node*Ntraits+trait
+	// similarly for tip_states
+	std::vector<double> tip_states, node_states, parent_state(Ntraits), state(Ntraits), standard_normals(Ntraits);
+	if(include_tips) tip_states.resize(Nsimulations*Ntips*Ntraits);
+	node_states.resize(Nsimulations*Nnodes*Ntraits); // always store node states, since needed for moving root-->tips
+	long clade, edge, parent, trait;
+	for(long r=0; r<Nsimulations; ++r){
+		for(long q=0; q<traversal_queue.size(); ++q){
+			clade = traversal_queue[q];
+			if(clade==root){
+				for(trait=0; trait<Ntraits; ++trait) state[trait] = (Nroot_states==0 ? 0.0 : root_states[(r % Nroot_states)*Ntraits+trait]);
+			}else{
+				edge	= incoming_edge_per_clade[clade];
+				parent	= tree_edge[edge*2+0];
+				// generate multivartiate (potentially correlated) normally distributed numbers as:
+				// mean + cholesky * standard_normals
+				for(trait=0; trait<Ntraits; ++trait){
+					parent_state[trait]		= node_states[r*Nnodes*Ntraits + (parent-Ntips)*Ntraits+trait];
+					standard_normals[trait]	= random_standard_normal();
+				}
+				multiply_matrix_with_vector(Ntraits, Ntraits,cholesky,standard_normals,state);
+				for(trait=0; trait<Ntraits; ++trait){
+					state[trait] = parent_state[trait] + sqrt(2*(edge_length.size()==0 ? 1.0 : edge_length[edge])) * state[trait];
+				}
+			}
+			for(trait=0; trait<Ntraits; ++trait){
+				if((clade<Ntips) && include_tips) tip_states[r*Ntips*Ntraits + clade*Ntraits + trait] = state[trait];
+				else if(clade>=Ntips) node_states[r*Nnodes*Ntraits + (clade-Ntips)*Ntraits + trait]   = state[trait];
+			}
+		}
+	}
+	if(!include_nodes) node_states.clear(); // clear memory if content is not to be returned
+		
+	return Rcpp::List::create(	Rcpp::Named("tip_states")  = Rcpp::wrap(tip_states),	// 3D array of size Nsimulations x Ntips x Ntraits, in layer-row-major format, i.e. indexed as simulation*Ntips*Ntraits+tip*Ntraits+trait
+								Rcpp::Named("node_states") = Rcpp::wrap(node_states));	// 3D array of size Nsimulations x Nnodes x Ntraits, in layer-row-major format, i.e. indexed as simulation*Nnodes*Ntraits+node*Ntraits+trait
 }
 
 
