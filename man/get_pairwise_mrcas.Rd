@@ -47,7 +47,7 @@ An integer vector of size Npairs with values in 1,..,Ntips (tips) and/or in (Nti
 \examples{
 # generate a random tree
 Ntips = 100
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # pick 3 random pairs of tips or nodes
 Npairs = 3

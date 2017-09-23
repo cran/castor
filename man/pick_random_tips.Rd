@@ -52,7 +52,7 @@ A 2D integer matrix of size Nsubsets x size, with each row containing indices of
 \examples{
 # generate random tree
 Ntips = 1000
-tree  = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree  = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # pick random tip subsets
 Nsubsets = 100

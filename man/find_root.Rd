@@ -39,7 +39,7 @@ Index of the tree's root, as listed in \code{tree$edge}. An integer ranging from
 \examples{
 # generate a random tree
 Ntips = 100
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # reroot the tree at the 20-th node
 new_root_node = 20

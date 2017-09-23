@@ -8,48 +8,80 @@ Generate a random phylogenetic tree via simulation of a Poissonian speciation/ex
 \deqn{
 B = I + F\cdot N^E,
 }
-where \eqn{B} is the birth rate, \eqn{I} is the intercept, \eqn{F} is the power-law factor, \eqn{N} is the current number of extant tips and \eqn{E} is the power-law exponent. In the case of a constant birth rate (\eqn{F=0}) and zero death rate, this becomes the Yule speciation model (Aldous, 2001; Steel and McKenzie, 2001), which assumes that new species are added at a constant Poissonian rate by splitting of a random extant tip.
+where \eqn{B} is the birth (or speciation) rate, \eqn{I} is the intercept, \eqn{F} is the power-law factor, \eqn{N} is the current number of extant tips and \eqn{E} is the power-law exponent. Optionally, the per-capita birth and death rates can be extended by adding a custom time series provided by the user.
 }
 \usage{
-generate_random_tree(max_tips, max_time=NULL, 
-                     birth_rate_intercept=0, 
-                     birth_rate_factor=0, birth_rate_exponent=1,
-                     death_rate_intercept=0, 
-                     death_rate_factor=0, death_rate_exponent=1,
-                     coalescent=TRUE, Nsplits=2, 
-                     tip_basename="", node_basename=NULL)
+generate_random_tree(parameters           = list(),
+                     max_tips             = NULL, 
+                     max_time             = NULL,
+                     max_time_eq          = NULL,
+                     coalescent           = TRUE,
+                     as_generations       = FALSE,
+                     Nsplits              = 2,
+                     added_rates_times    = NULL,
+                     added_birth_rates_pc = NULL,
+                     added_death_rates_pc = NULL,
+                     added_periodic       = FALSE,
+                     tip_basename         = "", 
+                     node_basename        = NULL,
+                     include_birth_times  = FALSE,
+                     include_death_times  = FALSE)
+
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
+\item{parameters}{
+A named list specifying the birth-death model parameters, with one or more of the following entries:
+
+\code{birth_rate_intercept}: Non-negative number. The intercept of the Poissonian rate at which new species (tips) are added. In units 1/time. By default this is 0.
+
+\code{birth_rate_factor}:
+Non-negative number. The power-law factor of the Poissonian rate at which new species (tips) are added. In units 1/time. By default this is 0.
+
+\code{birth_rate_exponent}:
+Numeric. The power-law exponent of the Poissonian rate at which new species (tips) are added. Unitless. By default this is 1.
+
+\code{death_rate_intercept}:
+Non-negative number. The intercept of the Poissonian rate at which extant species (tips) go extinct. In units 1/time. By default this is 0.
+
+\code{death_rate_factor}:
+Non-negative number. The power-law factor of the Poissonian rate at which extant species (tips) go extinct. In units 1/time. By default this is 0.
+
+\code{death_rate_exponent}:
+Numeric. The power-law exponent of the Poissonian rate at which extant species (tips) go extinct. Unitless. By default this is 1.
+
+\code{rarefaction}:
+Numeric between 0 and 1. Rarefaction to be applied at the end of the simulation (fraction of random tips kept in the tree). Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction.
+}
 \item{max_tips}{
-Maximum number of tips of the tree to be generated. If \code{coalescent=TRUE}, this refers to the number of extant tips. Otherwise, it refers to the number of extinct + extant tips. If \code{NULL}, the number of tips is unlimited (so be careful).
+Maximum number of tips of the tree to be generated. If \code{coalescent=TRUE}, this refers to the number of extant tips. Otherwise, it refers to the number of extinct + extant tips. If \code{NULL} or <=0, the number of tips is unlimited (so be careful).
 }
 \item{max_time}{
-Maximum duration of the simulation.
+Maximum duration of the simulation. If \code{NULL} or <=0, this constraint is ignored.
 }
-\item{birth_rate_intercept}{
-Non-negative number. The intercept of the Poissonian rate at which new species (tips) are added. In units 1/time.
-}
-\item{birth_rate_factor}{
-Non-negative number. The power-law factor of the Poissonian rate at which new species (tips) are added. In units 1/time.
-}
-\item{birth_rate_exponent}{
-Numeric. The power-law exponent of the Poissonian rate at which new species (tips) are added. Unitless.
-}
-\item{death_rate_intercept}{
-Non-negative number. The intercept of the Poissonian rate at which extant species (tips) go extinct. In units 1/time.
-}
-\item{death_rate_factor}{
-Non-negative number. The power-law factor of the Poissonian rate at which extant species (tips) go extinct. In units 1/time.
-}
-\item{death_rate_exponent}{
-Numeric. The power-law exponent of the Poissonian rate at which extant species (tips) go extinct. Unitless.
+\item{max_time_eq}{
+Maximum duration of the simulation, counting from the first point at which speciation/extinction equilibrium is reached, i.e. when (birth rate - death rate) changed sign for the first time. If \code{NULL} or <0, this constraint is ignored.
 }
 \item{coalescent}{
 Logical, specifying whether only the coalescent tree (i.e. the tree spanning the extant tips) should be returned. If \code{coalescent==FALSE} and the death rate is non-zero, then the tree may include non-extant tips (i.e. tips whose distance from the root is less than the total time of evolution). In that case, the tree will not be ultrametric.
 }
+\item{as_generations}{
+Logical, specifying whether edge lengths should correspond to generations. If FALSE, then edge lengths correspond to time.
+}
 \item{Nsplits}{
 Integer greater than 1. Number of child-tips to generate at each diversification event. If set to 2, the generated tree will be bifurcating. If >2, the tree will be multifurcating.
+}
+\item{added_rates_times}{
+Numeric vector, listing time points (in ascending order) for the custom per-capita birth and/or death rates time series (see \code{added_birth_rates_pc} and \code{added_death_rates_pc} below). Can also be \code{NULL}, in which case the custom time series are ignored.
+}
+\item{added_birth_rates_pc}{
+Numeric vector of the same size as \code{added_rates_times}, listing per-capita birth rates to be added to the power law part. Can also be \code{NULL}, in which case this option is ignored and birth rates are purely described by the power law.
+}
+\item{added_death_rates_pc}{
+Numeric vector of the same size as \code{added_rates_times}, listing per-capita death rates to be added to the power law part. Can also be \code{NULL}, in which case this option is ignored and death rates are purely described by the power law.
+}
+\item{added_periodic}{
+Logical, indicating whether \code{added_birth_rates_pc} and \code{added_death_rates_pc} should be extended periodically if needed (i.e. if not defined for the entire simulation time). If \code{FALSE}, added birth & death rates are extended with zeros.
 }
 \item{tip_basename}{
 Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then tip labels will be integers "1", "2" and so on.
@@ -57,16 +89,48 @@ Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then t
 \item{node_basename}{
 Character. Prefix to be used for node labels (e.g. "node."). If \code{NULL}, no node labels will be included in the tree.
 }
+\item{include_birth_times}{
+Logical. If \code{TRUE}, then the times of speciation events (in order of occurrence) will also be returned.
+}
+\item{include_death_times}{
+Logical. If \code{TRUE}, then the times of extinction events (in order of occurrence) will also be returned.
+}
 }
 
 
 \details{
 If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
+
+Both the per-capita birth and death rates can be made into completely arbitrary functions of time, by setting all power-law coefficients to zero and providing custom time series \code{added_birth_rates_pc} and \code{added_death_rates_pc}.
 }
 
 
 \value{
-A rooted bifurcating (if \code{Nsplits==2}) or multifurcating (if \code{Nsplits>2}) tree of class "phylo", generated according to the specified birth/death model. If \code{coalescent==TRUE} or if all death rates are zero, then the tree will be ultrametric.
+A named list with the following elements:
+\item{tree}{
+A rooted bifurcating (if \code{Nsplits==2}) or multifurcating (if \code{Nsplits>2}) tree of class "phylo", generated according to the specified birth/death model. If \code{coalescent==TRUE} or if all death rates are zero, and only if \code{as_generations==FALSE}, then the tree will be ultrametric. If \code{as_generations==TRUE} and \code{coalescent==FALSE}, all edges will have unit length.
+}
+\item{root_time}{
+Numeric, giving the time at which the tree's root was first split during the simulation. Note that if \code{coalescent==TRUE}, this may be later than the first speciation event during the simulation.
+}
+\item{final_time}{
+Numeric, giving the final time at the end of the simulation. Note that if \code{coalescent==TRUE}, then this may be greater than the total time span of the tree (since the root of the coalescent tree need not correspond to the first speciation event).
+}
+\item{equilibrium_time}{
+Numeric, giving the first time where the sign of (death rate - birth rate) changed from the beginning of the simulation, i.e. when speciation/extinction equilibrium was reached. May be infinite if the simulation stoped before reaching this point.
+}
+\item{Nbirths}{
+Total number of birth events (speciations) that occurred during tree growth. This may be lower than the total number of tips in the tree if death rates were non-zero and \code{coalescent==TRUE}, or if \code{Nsplits>2}.
+}
+\item{Ndeaths}{
+Total number of deaths (extinctions) that occurred during tree growth.
+}
+\item{birth_times}{
+Numeric vector, listing the times of speciation events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.
+}
+\item{death_times}{
+Numeric vector, listing the times of extinction events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.
+}
 }
 
 \author{Stilianos Louca}
@@ -81,14 +145,17 @@ M. Steel and A. McKenzie (2001). Properties of phylogenetic trees generated by Y
 %}
 
 \examples{
-# Yule speciation model
-tree = generate_random_tree(max_tips=100, birth_rate_intercept=1)
+# Simple speciation model
+parameters = list(birth_rate_intercept=1)
+tree = generate_random_tree(parameters,max_tips=100)$tree
 
 # Exponential growth rate model
-tree = generate_random_tree(max_tips=100, birth_rate_factor=1)
+parameters = list(birth_rate_factor=1)
+tree = generate_random_tree(parameters,max_tips=100)$tree
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 % Only 1 keyword per line
 \keyword{random}
 \keyword{speciation}
+\keyword{tree model}

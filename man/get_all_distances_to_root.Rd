@@ -39,9 +39,9 @@ A numeric vector of size Ntips+Nnodes, with the i-th element being the distance 
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, 
-                            birth_rate_intercept=1, 
-                            death_rate_intercept=0.5)
+tree = generate_random_tree(list(birth_rate_intercept=1, 
+                            	 death_rate_intercept=0.5),
+                            max_tips=Ntips)$tree
 
 # calculate distances to root
 all_distances = get_all_distances_to_root(tree)

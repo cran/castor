@@ -56,6 +56,12 @@ asr_max_parsimony = function(	tree,
 			for(i in 1:Nstates){
 				transition_costs[i,] = sapply(1:Nstates, function(j) abs(j-i))
 			}
+		}else if(transition_costs=="exponential"){
+			# all transitions are allowed, but penalized exponentially to the number of steps
+			transition_costs = matrix(0, nrow=Nstates, ncol=Nstates)
+			for(i in 1:Nstates){
+				transition_costs[i,] = sapply(1:Nstates, function(j) exp(abs(j-i)))
+			}
 		}else{
 			stop(sprintf("ERROR: Uknown transition_costs '%s'",transition_costs));
 		}

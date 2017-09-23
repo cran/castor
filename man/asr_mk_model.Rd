@@ -106,7 +106,7 @@ Z. Yang, S. Kumar and M. Nei (1995). A new method for inference of ancestral nuc
 \examples{
 # generate random tree
 Ntips = 1000
-tree  = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree  = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # create random transition matrix
 Nstates = 5

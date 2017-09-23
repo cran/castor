@@ -44,7 +44,7 @@ A list of the same size as \code{mrca_nodes}, whose n-th element is an integer v
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # pick random nodes
 focal_nodes = sample.int(n=tree$Nnode, size=3, replace=FALSE)

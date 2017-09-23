@@ -30,8 +30,8 @@ An integer vector of size Nnodes, with the i-th entry being the number of tips d
 }
 
 \examples{
-# generate a random tree according to the Yule model
-tree = generate_random_tree(max_tips=1000, birth_rate_intercept=1)
+# generate a tree using a simple speciation model 
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=1000)$tree
 
 # count number of tips descending from each node
 tips_per_node = count_tips_per_node(tree);

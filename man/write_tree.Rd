@@ -45,7 +45,7 @@ If \code{file==""}, then a string is returned containing the Newick representati
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=100, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=100)$tree
 
 # obtain a string representation of the tree in Newick format
 Newick_string = write_tree(tree)

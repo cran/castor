@@ -46,6 +46,9 @@ A new tree of class "phylo", containing only bifurcations (and monofurcations, i
 \item{old2new_edge}{
 Integer vector of length Nedges, mapping edge indices in the old tree to edge indices in the new tree.
 }
+\item{Nnodes_added}{
+Integer. Number of nodes added to the new tree.
+}
 }
 
 \author{Stilianos Louca}
@@ -59,7 +62,7 @@ Integer vector of length Nedges, mapping edge indices in the old tree to edge in
 \examples{
 # generate a random multifurcating tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1, Nsplits=5)
+tree = generate_random_tree(list(birth_rate_intercept=1), Ntips, Nsplits=5)$tree
 
 # expand multifurcations to bifurcations
 new_tree = multifurcations_to_bifurcations(tree)$tree
@@ -70,4 +73,4 @@ cat(sprintf("New tree has \%d nodes\n",new_tree$Nnode))
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{subtree}
+\keyword{multifurcations}

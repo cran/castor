@@ -40,13 +40,14 @@ A tree object of class "phylo", with the \code{edge} element modified such that 
 %}
 
 \seealso{
+\code{\link{root_via_outgroup}},
 \code{\link{find_root}}
 }
 
 \examples{
 # generate a random tree
 Ntips = 100
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # reroot the tree at the 20-th node
 new_root_node = 20

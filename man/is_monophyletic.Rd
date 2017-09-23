@@ -40,7 +40,7 @@ A logical, indicating whether the focal tips form a monophyletic set.
 \examples{
 # generate random tree
 Ntips = 100
-tree  = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree  = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # pick a random subset of focal tips
 focal_tips = which(sample.int(2,size=Ntips,replace=TRUE)==1)

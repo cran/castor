@@ -23,15 +23,15 @@ Logical, specifying whether to perform some basic checks on the validity of the 
 
 
 \details{
-The BM model is described by the stochastic differential equation
+The BM model is defined by the stochastic differential equation
 \deqn{
-dX = \sigma dB
+dX = \sigma \cdot dW
 }
-where \eqn{B} is a multivariate standard Brownian motion, or equivalently, as a diffusion equation for the probability density
+where \eqn{W} is a multidimensional Wiener process with Ndegrees independent components and \eqn{\sigma} is a matrix of size Ntraits x Ndegrees. Alternatively, the same model can be defined as a Fokker-Planck equation for the probability density \eqn{\rho}:
 \deqn{
-\frac{\partial \rho}{\partial t} = D\frac{\partial^2\rho}{\partial x^2}.
+\frac{\partial \rho}{\partial t} = \sum_{i,j}D_{ij}\frac{\partial^2\rho}{\partial x_i\partial x_j}.
 }
-The matrix \eqn{D} is referred to as the diffusion coefficient matrix (or diffusivity matrix), and \eqn{D=\sigma\cdot\sigma^T/2}.
+The matrix \eqn{D} is referred to as the diffusivity matrix (or diffusion tensor), and \eqn{2D=\sigma\cdot\sigma^T}. Note that \eqn{\sigma} can be obtained from \eqn{D} by means of a Cholesky decomposition.
 
 The function uses phylogenetic independent contrasts (Felsenstein, 1985) to retrieve independent increments of the multivariate random walk. The diffusivity matrix \eqn{D} is then fitted using maximum-likelihood on the intrinsic geometry of positive-definite matrices.
 
@@ -62,10 +62,10 @@ J. Felsenstein (1985). Phylogenies and the Comparative Method. The American Natu
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=10000, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1), 10000)$tree
 
 
-# Example 1: Univariate case
+# Example 1: Scalar case
 # - - - - - - - - - - - - - -
 # simulate scalar continuous trait on the tree
 D = 1

@@ -63,7 +63,7 @@ J. R. Zanefeld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 \examples{
 # generate random tree
 Ntips = 100
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # simulate a discrete trait
 Nstates = 5

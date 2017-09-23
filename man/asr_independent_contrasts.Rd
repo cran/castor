@@ -70,7 +70,7 @@ W. P. Maddison (1991). Squared-change parsimony reconstructions of ancestral sta
 \examples{
 # generate random tree
 Ntips = 100
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # simulate a continuous trait
 tip_states = simulate_ou_model(tree, stationary_mean=0, spread=1, decay_rate=0.001)$tip_states

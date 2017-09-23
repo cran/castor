@@ -70,7 +70,7 @@ J. Felsenstein (1985). Phylogenies and the Comparative Method. The American Natu
 \examples{
 # generate random tree
 Ntips = 100
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # simulate a continuous trait
 tip_states = simulate_bm_model(tree, diffusivity=0.1, include_nodes=FALSE)$tip_states;

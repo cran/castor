@@ -7,8 +7,11 @@ Extract a subtree spanning a specific subset of tips.
 Given a rooted tree and a subset of tips, extract the subtree containing only those tips. The root of the tree is kept.
 }
 \usage{
-get_subtree_with_tips(tree, only_tips=NULL, omit_tips=NULL, 
-                      collapse_monofurcations=TRUE, force_keep_root=FALSE)
+get_subtree_with_tips(tree, 
+                      only_tips               = NULL, 
+                      omit_tips               = NULL, 
+                      collapse_monofurcations = TRUE, 
+                      force_keep_root         = FALSE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -44,6 +47,9 @@ A list with the following elements:
 \item{subtree}{
 A new tree of class "phylo", containing only the tips specified by \code{tips_to_keep} and the nodes & edges connecting those tips to the root. The returned tree will include \code{edge.lengh} as a member variable, listing the lengths of the remaining (possibly concatenated) edges. 
 }
+\item{root_shift}{
+Numeric, indicating the phylogenetic distance between the old and the new root. Will always be non-negative.
+}
 \item{new2old_tip}{
 Integer vector of length Ntips_kept (=number of tips in the extracted subtree) with values in 1,..,Ntips, mapping tip indices of the subtree to tip indices in the original tree. In particular, \code{tree$tip.label[new2old_tip]} will be equal to \code{subtree$tip.label}.
 }
@@ -66,7 +72,7 @@ For example, \code{new2old_node[1]} is the index that the first node of the subt
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # choose a random subset of tips
 tip_subset = sample.int(Ntips, size=as.integer(Ntips/10), replace=FALSE)

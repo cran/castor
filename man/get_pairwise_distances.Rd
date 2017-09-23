@@ -50,7 +50,7 @@ A numeric vector of size Npairs, with the i-th element being the patristic dista
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # pick 3 random pairs of tips or nodes
 Npairs = 3

@@ -37,7 +37,7 @@ An integer in 1,..,(Ntips+Nnodes), representing the MRCA using the same index as
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # pick 3 random tips or nodes
 descendants = sample.int(n=(Ntips+tree$Nnode), size=3, replace=FALSE)

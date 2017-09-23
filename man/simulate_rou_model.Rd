@@ -68,7 +68,7 @@ Y. Hu, C. Lee, M. H. Lee, J. Song (2015). Parameter estimation for reflected Orn
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=10000, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=10000)$tree
 
 # simulate evolution of a continuous trait whose value is always >=1
 tip_states = simulate_rou_model(tree, reflection_point=1, spread=2, decay_rate=0.1)$tip_states

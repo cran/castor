@@ -1,21 +1,45 @@
 # Perform random simulation of a Brownian Motion model of continuous multivariate trait evolution, moving from root to tips.
 # The root's state is explicitly specified at each simulation.
 # Optionally, multiple independent simulations can be performed using the same model (e.g. as part of some Monte Carlo integration)
-# The diffusivity matrix D is a non-negative definite symmetric matrix, such that exp(-X^T*D^{-1}*X/(4*L))/sqrt(det(2*pi*D)) is the probability density for the multidimensional trait vector X after phylogenetic distance L, if initially located at the origin.
+# The diffusivity matrix D is a non-negative definite symmetric matrix of size Ntraits x Ntraits, such that exp(-X^T*D^{-1}*X/(4*L))/sqrt(det(2*pi*D)) is the probability density for the multidimensional trait vector X after phylogenetic distance L, if initially located at the origin.
+# Alternatively, the noise-amplitude matrix sigma is a Ntraits x Ndegrees matrix, such that dX = sigma * dB is the SDE of the model
 simulate_bm_model = function(	tree, 
-								diffusivity,				# either a single number, or a 2D array of size Ntraits, diffusivity matrix of the model (in units trait_units^2/edge_length)
-								root_states 	= NULL, 	# 2D numeric matrix of size NR x Ntrait (where NR can be arbitrary), specifying states for the root. If NR is smaller than Nsimulations, then values are recycled. If NULL, zero is used as root state for all traits.
+								diffusivity		= NULL,		# either a single number, or a 2D array of size Ntraits x Ntraits, diffusivity matrix of the model (in units trait_units^2/edge_length)
+								sigma			= NULL,		# either a single number, or a 2D array of size Ntraits x Ndegrees, noise-amplitude matrix of the model (in units trait_units/sqrt(edge_length)). Can be provided alternatively to diffusivity.
 								include_tips	= TRUE, 
 								include_nodes	= TRUE, 
+								root_states 	= NULL, 	# 2D numeric matrix of size NR x Ntrait (where NR can be arbitrary), specifying states for the root. If NR is smaller than Nsimulations, then values are recycled. If NULL, zero is used as root state for all traits.
 								Nsimulations	= 1,
-								drop_dims	= TRUE){
+								drop_dims		= TRUE){
 	Ntips  	 	= length(tree$tip.label);
 	Nnodes  	= tree$Nnode;
-	Ntraits 	= (if(is.vector(diffusivity)) 1 else nrow(diffusivity))
-	if((Ntraits>1) && (nrow(diffusivity)!=ncol(diffusivity))) stop(sprintf("ERROR: Diffusivity matrix must be quadratic (instead, it has dimensions %d x %d)",nrow(diffusivity),ncol(diffusivity)))
 	if(is.null(root_states)) root_states = numeric()
+
+	# check model structure
+	if(is.null(sigma) && is.null(diffusivity)) stop("ERROR: Incomplete model specification: Both sigma and diffusivity are NULL")
+	if((!is.null(sigma)) && (!is.null(diffusivity))) stop("ERROR: Redundant model specification: Both sigma and diffusivity are non-NULL, but only one should be specified")
+	if(!is.null(sigma)){
+		if(is.vector(sigma)){
+			Ntraits  = 1; 
+			Ndegrees = 1;
+		}else{
+			Ntraits  = nrow(sigma);
+			Ndegrees = ncol(sigma);
+		}
+		diffusivity = sigma %*% t(sigma);
+	}else{
+		if(is.vector(diffusivity)){
+			Ntraits = 1;
+		}else{
+			Ntraits  = nrow(diffusivity)
+			if(nrow(diffusivity)!=ncol(diffusivity)) stop(sprintf("ERROR: Diffusivity matrix must be quadratic (instead, it has dimensions %d x %d)",nrow(diffusivity),ncol(diffusivity)))
+		}
+		Ndegrees = Ntraits;
+		sigma 	 = sqrt(2) * t(chol(diffusivity)); # Cholesky decomposition, i.e. lower-triangular matrix such that diffusivity = cholesky * cholesky^T
+	}
 	
-	if(Ntraits==1){
+	# run simulation
+	if((Ntraits==1) && (Ndegrees==1)){
 		results = simulate_scalar_Brownian_motion_model_CPP(Ntips				= Ntips,
 															Nnodes				= Nnodes,
 															Nedges				= nrow(tree$edge),
@@ -27,19 +51,18 @@ simulate_bm_model = function(	tree,
 															include_nodes		= include_nodes,
 															Nsimulations		= Nsimulations);	
 	}else{
-		cholesky = t(chol(diffusivity)); # lower-triangular part of Chlesky decomposition, i.e. such that diffusivity = cholesky * cholesky^T
-		results = simulate_multivariate_Brownian_motion_model_CPP(	Ntips				= Ntips,
-																	Nnodes				= Nnodes,
-																	Nedges				= nrow(tree$edge),
-																	Ntraits				= Ntraits,
-																	tree_edge 			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based,
-																	edge_length		 	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
-																	root_states			= as.vector(t(root_states)),
-																	diffusivity			= as.vector(t(diffusivity)), 	# flatten in row-major format
-																	cholesky			= as.vector(t(cholesky)), 		# flatten in row-major format
-																	include_tips		= include_tips,
-																	include_nodes		= include_nodes,
-																	Nsimulations		= Nsimulations);
+		results = simulate_multivariate_Brownian_motion_model_CPP(	Ntips			= Ntips,
+																	Nnodes			= Nnodes,
+																	Nedges			= nrow(tree$edge),
+																	Ntraits			= Ntraits,
+																	Ndegrees		= Ndegrees,
+																	tree_edge 		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based,
+																	edge_length		= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
+																	root_states		= as.vector(t(root_states)),
+																	sigma			= as.vector(t(sigma)), 		# flatten in row-major format
+																	include_tips	= include_tips,
+																	include_nodes	= include_nodes,
+																	Nsimulations	= Nsimulations);
 	}
 
 	# unflatten returned arrays

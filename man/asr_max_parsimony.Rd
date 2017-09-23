@@ -20,10 +20,10 @@ A rooted tree of class "phylo". The root is assumed to be the unique node with n
 An integer vector of size Ntips, specifying the state of each tip in the tree as an integer from 1 to Nstates, where Nstates is the possible number of states (see below).
 }
 \item{Nstates}{
-Either \code{NULL}, or an integer specifying the number of possible states of the trait. If \code{NULL}, then it will be computed based on the maximum value encountered in \code{tip_states}
+Either \code{NULL}, or an integer specifying the number of possible states of the trait. If \code{NULL}, then Nstates will be computed based on the maximum value encountered in \code{tip_states}
 }
 \item{transition_costs}{
-Either "all_equal","sequential", "proportional", or a quadratic non-negatively valued matrix of size Nstates x Nstates, specifying the transition costs between all possible states (which can include 0 as well as \code{Inf}). The [r,c]-th entry of the matrix is the cost of transitioning from state r to state c. The option "all_equal" specifies that all transitions are permitted and are equally costly. "sequential" means that only transitions between adjacent states are permitted and are all equally costly. "proportional" means that all transitions are permitted, but the cost increases proportional to the distance between states. The options "sequential" and "proportional" only make sense if states exhibit an order relation (as reflected in their integer representation).
+Either "all_equal","sequential", "proportional", "exponential", or a quadratic non-negatively valued matrix of size Nstates x Nstates, specifying the transition costs between all possible states (which can include 0 as well as \code{Inf}). The [r,c]-th entry of the matrix is the cost of transitioning from state r to state c. The option "all_equal" specifies that all transitions are permitted and are equally costly. "sequential" means that only transitions between adjacent states are permitted and are all equally costly. "proportional" means that all transitions are permitted, but the cost increases proportional to the distance between states. "exponential" means that all transitions are permitted, but the cost increases exponentially with the distance between states. The options "sequential" and "proportional" only make sense if states exhibit an order relation (as reflected in their integer representation).
 }
 \item{edge_exponent}{
 Non-negative real-valued number. Optional exponent for weighting transition costs by the inverse length of edge lengths. If 0, edge lengths do not influence the ancestral state reconstruction (this is the conventional max-parsimony). If >0, then at each edge the transition costs are multiplied by \eqn{1/L^e}, where \eqn{L} is the edge length and \eqn{e} is the edge exponent. This parameter is mostly experimental; modify at your own discretion.
@@ -79,7 +79,7 @@ J. Felsenstein (2004). Inferring Phylogenies. Sinauer Associates, Sunderland, Ma
 \examples{
 # generate random tree
 Ntips = 10
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # simulate a discrete trait
 Nstates = 5

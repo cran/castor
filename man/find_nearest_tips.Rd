@@ -70,7 +70,7 @@ M. G. I. Langille, J. Zaneveld, J. G. Caporaso et al (2013). Predictive function
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # pick a random set of "target" tips
 target_tips = sample.int(n=Ntips, size=as.integer(Ntips/10), replace=FALSE)

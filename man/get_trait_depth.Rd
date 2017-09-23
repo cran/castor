@@ -7,8 +7,13 @@ Calculate depth of phylogenetic conservatism for a binary trait.
 Given a rooted phylogenetic tree and presences/absences of a binary trait for each tip, calculate the mean phylogenetic depth at which the trait is conserved across clades, in terms of the consenTRAIT metric introduced by Martiny et al (2013). This is the mean depth of clades that are positive in the trait (i.e. in which a sufficient fraction of tips exhibits the trait).
 }
 \usage{
-get_trait_depth(tree, tip_states, min_fraction=0.9, 
-                count_singletons=TRUE, weighted=FALSE, Npermutations=0)
+get_trait_depth(tree, 
+                tip_states, 
+                min_fraction        = 0.9, 
+                count_singletons    = TRUE,
+                singleton_resolution= 0,
+                weighted            = FALSE, 
+                Npermutations       = 0)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -23,6 +28,9 @@ Minimum fraction of tips in a clade exhibiting the trait, for the clade to be co
 }
 \item{count_singletons}{
 Logical, specifying whether to include singletons in the statistics (tips positive in the trait, but not part of a larger positive clade). The phylogenetic depth of singletons is taken to be half the length of their incoming edge, as proposed by Martiny et al (2013). If FALSE, singletons are ignored.
+}
+\item{singleton_resolution}{
+Numeric, specifying the phylogenetic resolution at which to resolve singletons. Any clade found to be positive in a trait will be considered a singleton if the distance of the clade's root to all descending tips is below this threshold.
 }
 \item{weighted}{
 Whether to weight positive clades by their number of positive tips. If FALSE, each positive clades is weighted equally, as proposed by Martiny et al (2013).
@@ -63,7 +71,15 @@ Statistical significance (P-values) of mean_depth, under a null model of random 
 \item{mean_random_depth}{
 Mean random mean_depth, under a null model of random trait presences/absences (see details above).
 }
-
+\item{positive_clades}{
+Integer vector, listing indices of tips and nodes (from 1 to Ntips+Nnodes) that were found to be positive in the trait and counted towards the statistic.
+}
+\item{positives_per_clade}{
+Integer vector of size Ntips+Nnodes, listing the number of descending tips per clade (tip or node) that were positive in the trait.
+}
+\item{mean_depth_per_clade}{
+Numeric vector of size Ntips+Nnodes, listing the mean phylogenetic depth of each clade (tip or node), i.e. the average distance to all its descending tips.
+}
 }
 
 
@@ -79,7 +95,7 @@ A. C. Martiny, K. Treseder and G. Pusch (2013). Phylogenetic trait conservatism 
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=1000, max_time=100, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=1000)$tree
 
 # simulate binary trait evolution on the tree
 Q = get_random_mk_transition_matrix(Nstates=2, rate_model="ARD", max_rate=0.1)
@@ -94,4 +110,4 @@ cat(sprintf("Mean depth = \%g, std = \%g\n",results$mean_depth,sqrt(results$var_
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Prunning }
+\keyword{trait evolution}

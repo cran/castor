@@ -64,7 +64,7 @@ J. R. Zanefeld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=10000, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=10000)$tree
 
 # simulate continuous trait evolution on the tree
 tip_states = simulate_bm_model(tree, diffusivity=1)$tip_states
@@ -77,4 +77,4 @@ plot(ACF$distances, ACF$autocorrelations, type="l", xlab="distance", ylab="ACF")
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Prunning }
+\keyword{trait evolution}

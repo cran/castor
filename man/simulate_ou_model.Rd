@@ -67,7 +67,7 @@ Either \code{NULL} (if \code{include_nodes==FALSE}), or a 2D numeric matrix of s
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=10000, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=10000)$tree
 
 # simulate evolution of a continuous trait
 tip_states = simulate_ou_model(tree, stationary_mean=10, spread=1, decay_rate=0.1)$tip_states

@@ -66,7 +66,7 @@ Either \code{NULL} (if \code{include_nodes==FALSE}), or a 2D integer matrix of s
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(max_tips=1000, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=1000)$tree
 
 # simulate discrete trait evolution on the tree (5 states)
 Nstates = 5

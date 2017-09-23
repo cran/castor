@@ -24,10 +24,10 @@ An integer vector of size Ntips, specifying the state of each tip in the tree as
 Either \code{NULL}, or an integer specifying the number of possible states of the trait. If \code{NULL}, then it will be computed based on the maximum non-\code{NA} value encountered in \code{tip_states}
 }
 \item{transition_costs}{
-Either "all_equal","sequential", "proportional", or a quadratic non-negatively valued matrix specifying the transition costs between all possible states (which can include 0 as well as \code{Inf}). If \code{Nstates} is not NULL, then this must be a quadratic matrix of size Nstates x Nstates, with the [r,c]-th entry being the cost of transitioning from state i to state j. If \code{Nstates} is NULL, then \code{transition_costs} can be an arbitrarily sized matrix whose row and column names must include all values (after converting to characters) encountered in \code{tip_states}; in that case, transition costs will be extracted based on row and column names. The option "all_equal" specifies that all transitions are permitted and are equally costly. "sequential" means that only transitions between adjacent states are permitted and are all equally costly. "proportional" means that all transitions are permitted, but the cost increases proportional to the distance between states. The options "sequential" and "proportional" only make sense if states exhibit an order relation (states are sorted by natural character ordering).
+Same as for the function \code{\link{asr_max_parsimony}}.
 }
 \item{edge_exponent}{
-Non-negative real-valued number. Optional exponent for weighting transition costs by the inverse length of edge lengths. If 0, edge lengths do not influence the ancestral state reconstruction (this is the conventional max-parsimony). If >0, then at each edge the transition costs are multiplied by \eqn{1/L^e}, where \eqn{L} is the edge length and \eqn{e} is the edge exponent. This parameter is mostly experimental; modify at your own discretion.
+Same as for the function \code{\link{asr_max_parsimony}}.
 }
 \item{weight_by_scenarios}{
 Logical, indicating whether to weight each optimal state of a node by the number of optimal maximum-parsimony scenarios in which the node is in that state. If FALSE, then all possible states of a node are weighted equally (i.e. are assigned equal probabilities).
@@ -79,7 +79,7 @@ J. R. Zanefeld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 \examples{
 # generate random tree
 Ntips = 10
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1);
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # simulate a discrete trait
 Nstates = 5

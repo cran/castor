@@ -20,5 +20,8 @@ get_tree_traversal_root_to_tips = function(tree, include_tips){
 													include_tips	= include_tips);
 	
 	# update indices from 0-based to 1-based and wrap results into a list
-	return(list(queue=results$queue+1, node2first_edge=results$node2first_edge+1, node2last_edge=results$node2last_edge+1, edges=results$edges+1))	
+	return(list(queue=results$queue+1, 
+				node2first_edge=results$node2first_edge+1, 
+				node2last_edge=results$node2last_edge+1, 
+				edges=results$edges+1))	
 }

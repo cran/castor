@@ -54,7 +54,7 @@ Integer vector of length Nedges_kept (=number of edges in the extracted subtree)
 \examples{
 # generate a random tree
 Ntips = 1000
-tree = generate_random_tree(max_tips=Ntips, birth_rate_intercept=1)
+tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # extract subtree descending from a random node
 node = sample.int(tree$Nnode,size=1)
