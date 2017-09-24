@@ -1,6 +1,6 @@
-fce2962a9d2807aeebddf166931b5757 *DESCRIPTION
+e11bc63f06f21fa1cca4eefcb6569fd9 *DESCRIPTION
 fbd2792fe1b5e4a19de2847835be5fce *NAMESPACE
-ea0531935275319d384aa16631b5a244 *R/RcppExports.R
+c10ff5f5cacf895b11e09d03119a17c9 *R/RcppExports.R
 93a1f04f79a55620c14af8dc4ce52ba0 *R/asr_empirical_probabilities.R
 9dc91c47c8266a56bcb99176c4bca7ef *R/asr_independent_contrasts.R
 042c306bc74cb8eee3d3c222a656bc5b *R/asr_max_parsimony.R
@@ -111,6 +111,6 @@ b833b9d41f8b480257e8d6ba5c7d9aab *man/simulate_mk_model.Rd
 2bbf6a07c19063755e483f17632ed16c *man/simulate_rou_model.Rd
 6eedd51c294e066c88a6e5e567a633bd *man/trim_tree_at_height.Rd
 d9c5082b996e3a3af197e028cddac0e1 *man/write_tree.Rd
-3add2b8f6122b0dc501b27f3a7d709cd *src/RcppExports.cpp
-cd65820e799cc0c84335cd2b483e4e7e *src/phylogenetics_cpp_routines.cpp
+5a59566a4a0f05663f08c5dc8bda2534 *src/RcppExports.cpp
+989af132d7dd82561d133b71adab149b *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

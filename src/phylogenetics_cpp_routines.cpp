@@ -640,7 +640,7 @@ double get_thread_monotonic_walltime_seconds(){
 		struct timespec T;
 		clock_gettime(CLOCK_MONOTONIC, &T); // Note that CLOCK_MONOTONIC_RAW is not available on all Linux distros
 		return double(T.tv_sec) + 1e-9*T.tv_nsec;
-	#elifdef IS_WINDOWS
+	#elif defined(IS_WINDOWS)
 		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows
 		return clock()/double(CLOCKS_PER_SEC);
 	#else
