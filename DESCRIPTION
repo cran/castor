@@ -1,8 +1,8 @@
 Package: castor
 Type: Package
 Title: Efficient Phylogenetics on Large Trees
-Version: 1.2.1
-Date: 2017-09-23
+Version: 1.2.2
+Date: 2017-09-30
 Author: Stilianos Louca
 Maintainer: Stilianos Louca <louca@zoology.ubc.ca>
 Description: Efficient tree manipulation functions including pruning, rerooting, calculation of most-recent common ancestors, calculating distances from the tree root and calculating pairwise distance matrices. Calculation of phylogenetic signal and mean trait depth (trait conservatism). Ancestral state reconstruction and hidden character prediction of discrete characters, using Maximum Likelihood and Maximum Parsimony methods. Simulating and fitting models of trait evolution, and generating random trees using birth-death models.
@@ -11,6 +11,6 @@ Depends: Rcpp (>= 0.12.10)
 Imports: parallel, naturalsort, stats
 LinkingTo: Rcpp
 NeedsCompilation: yes
-Packaged: 2017-09-24 08:52:00 UTC; SteliosLouca
+Packaged: 2017-09-27 21:22:01 UTC; stilianoslouca
 Repository: CRAN
-Date/Publication: 2017-09-24 10:59:51 UTC
+Date/Publication: 2017-09-27 21:49:16 UTC

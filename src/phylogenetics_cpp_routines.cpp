@@ -628,12 +628,6 @@ double get_thread_monotonic_walltime_seconds(){
 		int error_code = mach_timebase_info(&info);
 		if (error_code != KERN_SUCCESS) return 0.0;
 		return 1e-9 * mach_absolute_time() * double(info.numer)/double(info.denom);
-		/*
-		// wrong: non-monotonic, i.e. affected by manual changes in system time
-		struct timeval T;
-		gettimeofday(&T, NULL);
-		return double(T.tv_sec) + 1e-6*T.tv_usec;
-		*/
 	#elif defined(unix) || defined(__unix) || defined(__unix__) || defined(__linux__)
 		// POSIX code
 		// For details on clock_gettime() see: http://www.tin.org/bin/man.cgi?section=3&topic=clock_gettime
@@ -641,7 +635,7 @@ double get_thread_monotonic_walltime_seconds(){
 		clock_gettime(CLOCK_MONOTONIC, &T); // Note that CLOCK_MONOTONIC_RAW is not available on all Linux distros
 		return double(T.tv_sec) + 1e-9*T.tv_nsec;
 	#elif defined(IS_WINDOWS)
-		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows
+		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows. Update: It requires the windows.h library, which causes problems with Rcpp on CRAN.
 		return clock()/double(CLOCKS_PER_SEC);
 	#else
 		return 0; // not implemented for other systems
@@ -3446,6 +3440,18 @@ void get_incoming_edge_per_clade(	const long			Ntips,
 }
 
 
+template<class ARRAY_TYPE>
+void get_incoming_edge_per_tip(	const long			Ntips,
+								const long			Nedges,
+								const ARRAY_TYPE	&tree_edge,					// (INPUT) 2D array of size Nedges x 2, in row-major format
+								std::vector<long>	&incoming_edge_per_tip){	// (OUTPUT) 1D array of size Ntips, with values in 0,..,Nedges-1. 
+	incoming_edge_per_tip.assign(Ntips,-1);
+	for(long edge=0, child; edge<Nedges; ++edge){
+		child = tree_edge[edge*2+1];
+		if(child<Ntips) incoming_edge_per_tip[child] = edge;
+	}
+}
+
 
 // for a given phylogenetic tree, create list of incoming edges for each clade
 // normally each clade has either 0 or 1 incoming edges
@@ -3970,6 +3976,962 @@ std::vector<std::vector<long> > get_adjacent_edges_per_edge_CPP(const long 				N
 	
 	return adjacent_edges_per_edge;
 }	
+
+
+
+
+
+#pragma mark -
+#pragma mark Tree statistics
+#pragma mark 
+
+
+
+
+
+// Count the number of tips descending from each node
+// The tree must be rooted; the root should be the unique node with no parent
+void get_total_tip_count_per_node(	const long			Ntips,
+									const long 			Nnodes,
+									const long			Nedges,
+									const IntegerVector &tree_edge, 			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+									std::vector<long>	&node2total_tip_count){	// (OUTPUT) array of size Nnodes, with each entry being the total number of tips descending from the node
+	long clade;
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (tips --> root)
+	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+
+	// calculate number of descending tips per node, traversing tips-->root (excluding the root)
+	node2total_tip_count.assign(Nnodes,0);
+	for(long q=traversal_queue.size()-1; q>=1; --q){
+		clade = traversal_queue[q];
+		node2total_tip_count[clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2total_tip_count[clade-Ntips]);
+	}
+}
+
+
+// Count the number of tips descending from each node
+// This is an Rcpp wrapper function for get_total_tip_count_per_node(..)
+// Requirements:
+//   The tree must be rooted; the root should be the unique node with no parent
+//   The tree can include multifurcations as well as monofurcations
+// [[Rcpp::export]]
+IntegerVector get_total_tip_count_per_node_CPP(	const long			Ntips,
+												const long 			Nnodes,
+												const long			Nedges,
+												const IntegerVector &tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+	std::vector<long> node2total_tip_count;
+	get_total_tip_count_per_node(	Ntips,
+									Nnodes,
+									Nedges,
+									tree_edge, 
+									node2total_tip_count);
+	return Rcpp::wrap(node2total_tip_count);
+}
+
+
+
+
+// Calculate sum of all branch lengths, for each subtree in a tree
+// This is equivalent to the 'phylogenetic diversity' measure introduced by Faith (1992).
+// References: 
+//    Faith (1992). Conservation evaluation and phylogenetic diversity. Biological Conservation 61:1-10.
+//    Mark Vellend et al. Measuring phylogenetic biodiversity. Table 14.2 (presence/absence based phylogenetic diversity)
+void get_cumulative_edge_lengths_per_node(	const long			Ntips,
+											const long 			Nnodes,
+											const long			Nedges,
+											const long 			root, 				// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1)
+											const IntegerVector &tree_edge, 		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+											const NumericVector &edge_length, 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+											std::vector<double>	&node2CBL){			// (OUTPUT) array of size Nnodes, with each entry being the cumulative branch length (phylogenetic diversity) of the subtree rooted in that node.
+	const long Nclades = Ntips+Nnodes;
+	long clade;
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+
+	// get tree traversal route (tips --> root)
+	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+	reverse_array(traversal_queue); // make tips-->roots
+
+	// calculate phylogenetic diversities (cumulative branch lengths), traversing tips-->root
+	node2CBL.assign(Nnodes,0);
+	for(long q=0; q<traversal_queue.size(); ++q){
+		clade  = traversal_queue[q];
+		if(clade==root) continue;
+		node2CBL[clade2parent[clade]-Ntips] += (clade<Ntips ? 0.0 : node2CBL[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
+	}
+}
+
+
+
+// Calculate the maximum & minimum distance of any tip to the root
+// [[Rcpp::export]]
+Rcpp::List get_min_max_tip_distance_from_root_CPP(	const long 			Ntips,
+													const long 			Nnodes,
+													const long 			Nedges,
+													const IntegerVector &tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+													const NumericVector &edge_length){	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+	const long Nclades = Ntips + Nnodes;
+	long parent, clade;
+										
+	// determine root
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue, node2first_edge, node2last_edge, edge_mapping;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										node2first_edge,
+										node2last_edge,
+										edge_mapping,
+										false,
+										"");
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+										
+	// calculate distance of each node to its nearest descending tip
+	// (traverse tips --> root)
+	std::vector<double> min_tip_distance_per_node(Nnodes,INFTY_D), max_tip_distance_per_node(Nnodes,0);
+	double min_distance, max_distance;
+	for(long q=traversal_queue.size()-1; q>=0; --q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent = tree_edge[incoming_edge_per_clade[clade]*2 + 0];
+		min_distance = (clade<Ntips ? 0.0 : min_tip_distance_per_node[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
+		max_distance = (clade<Ntips ? 0.0 : max_tip_distance_per_node[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
+		min_tip_distance_per_node[parent-Ntips]	= min(min_tip_distance_per_node[parent-Ntips], min_distance);
+		max_tip_distance_per_node[parent-Ntips]	= max(max_tip_distance_per_node[parent-Ntips], max_distance);
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("min_distance")	= Rcpp::wrap(min_tip_distance_per_node[root-Ntips]),
+								Rcpp::Named("max_distance")	= Rcpp::wrap(max_tip_distance_per_node[root-Ntips]));
+}
+
+
+
+
+
+// calculate distance from root, for each clade (tips+nodes)
+// distance from root = cumulative branch length from root to the clade
+void get_distances_from_root(	const long 			Ntips,
+								const long 			Nnodes,
+								const long 			Nedges,
+								const IntegerVector &tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+								const NumericVector &edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+								std::vector<double>	&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
+	const long Nclades = Ntips + Nnodes;
+	long parent, clade;
+										
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+										
+	// calculate distance from root for each clade
+	// (traverse root --> tips)
+	distances.resize(Nclades);
+	distances[root] = 0;
+	for(long q=0; q<traversal_queue.size(); ++q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		distances[clade] = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distances[parent];
+	}
+}
+
+
+
+// calculate distance from root, for each clade (tips+nodes)
+// distance from root = cumulative branch length from root to the clade
+// This is an Rcpp wrapper for the function get_distances_from_root(..)
+// [[Rcpp::export]]
+NumericVector get_distances_from_root_CPP(	const long 			Ntips,
+											const long 			Nnodes,
+											const long 			Nedges,
+											const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2 in row-major format
+											const NumericVector &edge_length){ 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+	std::vector<double> distances;
+	get_distances_from_root(Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							edge_length,
+							distances);
+	return Rcpp::wrap(distances);
+}
+
+
+
+
+
+
+
+
+
+// For each clade (tip & node) in a tree, find the closest tip (in terms of cumulative branch length).
+// Optionally, the search can be restricted to descending tips.
+// Optionally, the search can also be restricted to a subset of target tips.
+// If you want distances in terms of branch counts (instead of cumulative branch lengths), simply provide an empty edge_length[].
+// Requirements:
+//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
+//   The input tree can be multifurcating and/or monofurcating
+// [[Rcpp::export]]
+Rcpp::List get_closest_tip_per_clade_CPP(	const long 			Ntips,
+											const long 			Nnodes,
+											const long 			Nedges,
+											const IntegerVector &tree_edge,				// 2D array of size Nedges x 2 in row-major format
+											const NumericVector &edge_length, 			// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+											const IntegerVector	&onlyToTips,			// 1D array listing target tips to restrict search to, or an empty std::vector (consider all tips as targets)
+											bool				only_descending_tips,	// if true, then for each clade only descending tips are considered for nearest-distance. If false, some clades may have non-descending tips assigned as nearest tips.
+											bool 				verbose,
+											const std::string	&verbose_prefix){
+	const long Nclades = Ntips + Nnodes;
+	long parent, clade, tip, incoming_edge;
+	double candidate_distance;
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue_root2tips, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue_root2tips,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										verbose,
+										verbose_prefix);
+
+	// Step 1: calculate nearest descending tip per clade (traverse tips --> root)
+	std::vector<long> nearest_descending_tip_per_clade(Nclades,-1);
+	std::vector<double> distance_to_nearest_descending_tip_per_clade(Nclades,INFTY_D);
+	if(onlyToTips.size()==0){
+		// consider all tips as potential targets
+		for(long tip=0; tip<Ntips; ++tip){
+			nearest_descending_tip_per_clade[tip] = tip;
+			distance_to_nearest_descending_tip_per_clade[tip] = 0;
+		}
+	}else{
+		// only consider provided tips as targets
+		for(long t=0; t<onlyToTips.size(); ++t){
+			tip = onlyToTips[t];
+			nearest_descending_tip_per_clade[tip] = tip;
+			distance_to_nearest_descending_tip_per_clade[tip] = 0;
+		}
+	}
+	for(long q=traversal_queue_root2tips.size()-1; q>=0; --q){
+		clade = traversal_queue_root2tips[q];
+		if(clade==root) continue;
+		if(nearest_descending_tip_per_clade[clade]<0) continue; // no descending tip available from this clade
+		parent			= clade2parent[clade];
+		incoming_edge	= incoming_edge_per_clade[clade];
+		// propagate information about nearest descending tip, to parent (if better than already saved for the parent)
+		candidate_distance = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge]) + distance_to_nearest_descending_tip_per_clade[clade];
+		if(candidate_distance<distance_to_nearest_descending_tip_per_clade[parent]){
+			distance_to_nearest_descending_tip_per_clade[parent] = candidate_distance;
+			nearest_descending_tip_per_clade[parent] = nearest_descending_tip_per_clade[clade];
+		}
+	}
+	
+	if(only_descending_tips){
+		// only descending tips allowed, so we're finished
+		return Rcpp::List::create(	Rcpp::Named("nearest_tips") 		= Rcpp::wrap(nearest_descending_tip_per_clade),
+									Rcpp::Named("nearest_distances") 	= Rcpp::wrap(distance_to_nearest_descending_tip_per_clade));
+	}
+	
+	// Step 2: calculate nearest tip per clade, regardless of whether descending or not (traverse root --> tips)
+	std::vector<long> nearest_tip_per_clade(Nclades);
+	std::vector<double> distance_to_nearest_tip_per_clade(Nclades);
+	nearest_tip_per_clade[root] = nearest_descending_tip_per_clade[root];
+	distance_to_nearest_tip_per_clade[root] = distance_to_nearest_descending_tip_per_clade[root];
+	for(long q=0; q<traversal_queue_root2tips.size(); ++q){
+		clade = traversal_queue_root2tips[q];
+		if(clade==root) continue;
+		parent				= clade2parent[clade];
+		incoming_edge 		= incoming_edge_per_clade[clade];
+		candidate_distance 	= (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge]) + distance_to_nearest_tip_per_clade[parent];
+		if(candidate_distance<distance_to_nearest_descending_tip_per_clade[clade]){
+			// it's shorter to go upwards, than downwards
+			distance_to_nearest_tip_per_clade[clade] = candidate_distance;
+			nearest_tip_per_clade[clade] = nearest_tip_per_clade[parent];
+		}else{
+			// nearest descending tip is also nearest tip
+			distance_to_nearest_tip_per_clade[clade] = distance_to_nearest_descending_tip_per_clade[clade];
+			nearest_tip_per_clade[clade] = nearest_descending_tip_per_clade[clade];
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("nearest_tips") 		= Rcpp::wrap(nearest_tip_per_clade),
+								Rcpp::Named("nearest_distances") 	= Rcpp::wrap(distance_to_nearest_tip_per_clade));
+}
+
+
+
+
+
+// Calculate phylogenetic distance matrix between all pairs of focal_clades
+// Distance = cumulative branch length of both clades back to their most recent common ancestor (aka "patristic distance")
+// This function is slightly different from get_distances_between_clades_CPP(), in that here the distances between all possible clade pairs are returned.
+// The time complexity is O(Nfocals*Nfocals*Nanc + Ntips), where Nanc is the average number of ancestors per tip.
+// Requirements:
+//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
+//   The input tree can include multifurcations and monofurcations
+// Attention: 0-based indexing is used for input and output variables, so make sure to shift indices in R before calling this function
+
+// [[Rcpp::export]]
+NumericMatrix get_distance_matrix_between_clades_CPP(	const long 			Ntips,
+														const long 			Nnodes,
+														const long 			Nedges,
+														const IntegerVector &tree_edge,			// 2D array of size Nedges x 2 in row-major format
+														const NumericVector &edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+														const IntegerVector &focal_clades,		// 1D array of size Nfocals, containing values in 0:(Nclades-1). These will correspond to the rows & columns of the returned distance matrix.
+														bool 				verbose,
+														const std::string 	&verbose_prefix){
+	const long Nclades = Ntips + Nnodes;
+	const long Nfocals = focal_clades.size();
+	long parent, clade;
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										verbose,
+										verbose_prefix);
+															
+	// calculate number of ancestors and distance from root for each clade
+	// (traverse root --> tips)
+	std::vector<long> ancestor_count_per_clade(Nclades);
+	std::vector<double> distance_from_root_per_clade(Nclades);
+	ancestor_count_per_clade[root] 		= 0;
+	distance_from_root_per_clade[root] 	= 0;
+	for(long q=0; q<traversal_queue.size(); ++q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		ancestor_count_per_clade[clade] 	= 1 + ancestor_count_per_clade[parent];
+		distance_from_root_per_clade[clade]	=  (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distance_from_root_per_clade[parent];
+	}
+	const long total_ancestor_count = vector_sum(ancestor_count_per_clade);
+	
+	// calculate ancestry for each clade in a long list ancestors[]
+	// (traverse root --> tips)
+	std::vector<long> clade2first_ancestor(Nclades); // for each clade c, ancestors[clade2first_ancestor[c]..clade2last_ancestor[c]] will be the list of ancestor clades leading to the clade c
+	std::vector<long> clade2last_ancestor(Nclades);
+	clade2first_ancestor[0] = 0;
+	clade2last_ancestor[0] = clade2first_ancestor[0] + ancestor_count_per_clade[0] - 1;
+	for(long c=1; c<Nclades; ++c){
+		clade2first_ancestor[c] = clade2last_ancestor[c-1] + 1;
+		clade2last_ancestor[c]  = clade2first_ancestor[c] + ancestor_count_per_clade[c] - 1;
+	}
+	std::vector<long> ancestors(total_ancestor_count);
+	for(long q=0; q<traversal_queue.size(); ++q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		// step 1: copy the parent's ancestry to the child's ancestry
+		for(long a=clade2first_ancestor[parent]; a<=clade2last_ancestor[parent]; ++a){
+			ancestors[clade2first_ancestor[clade]+(a-clade2first_ancestor[parent])] = ancestors[a];
+		}
+		// step 2: append the parent to the clade's ancestry
+		ancestors[clade2last_ancestor[clade]] = parent;
+	}
+	
+	// calculate most-recent-common-ancestor and phylogenetic distance for each focal clade pair
+	long cladeA, cladeB, mrca;
+	NumericMatrix distances(Nfocals,Nfocals);
+	for(long i=0; i<Nfocals; ++i){
+		cladeA = focal_clades[i];
+		distances(i,i) = 0;
+		for(long j=i+1; j<Nfocals; ++j){
+			cladeB = focal_clades[j];
+			// step 1: determine most recent common ancestor
+			// check for trivial case
+			if(cladeA==cladeB){
+				mrca = cladeA;
+			}else{
+				// follow ancestry of both clades in synchrony, until they diverge
+				// note that the first ancestor of every clade will be the root
+				long a,b;
+				for(a=clade2first_ancestor[cladeA], b=clade2first_ancestor[cladeB]; (a<=clade2last_ancestor[cladeA]) && (b<=clade2last_ancestor[cladeB]); ++a, ++b){
+					if(ancestors[a]!=ancestors[b]) break;
+					else mrca = ancestors[a];
+				}
+				// check special case where one clade is descendant of the other (this would lead to a "premature" stop of the above loop)
+				if((a<=clade2last_ancestor[cladeA]) && (ancestors[a]==cladeB)){
+					mrca = cladeB;
+				}else if((b<=clade2last_ancestor[cladeB]) && (ancestors[b]==cladeA)){
+					mrca = cladeA;
+				}
+			}
+			// step 2: calculate distance
+			distances(i,j) = distance_from_root_per_clade[cladeA] + distance_from_root_per_clade[cladeB] - 2*distance_from_root_per_clade[mrca];
+			distances(j,i) = distances(i,j);
+		}
+	}
+	
+	return(distances);
+}
+												
+
+
+// Calculate phylogenetic distance for pairs of clades (cladesA[] vs cladesB[])
+// Distance = cumulative branch length of both clades back to their most recent common ancestor (aka "patristic distance")
+// There's some initial overhead involved with this function, but for large number of clade pairs this becomes more efficient
+// Time complexity is O(Ntips + Npairs*log(Ntips)).
+// Returns a NumericVector of size Npairs, with each entry being the distance between the two clades
+// This function is slightly different from get_distance_matrix_between_clades_CPP(), in that here only distances between specific clade pairs are returned.
+// Requirements:
+//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
+//   The input tree can be multifurcating and/or monofurcating
+// Attention: 0-based indexing is used for input and output variables, so make sure to shift indices in R before and after calling this function
+
+// [[Rcpp::export]]
+NumericVector get_distances_between_clades_CPP(	const long 			Ntips,
+												const long 			Nnodes,
+												const long 			Nedges,
+												const IntegerVector &tree_edge,			// 2D array of size Nedges x 2 in row-major format
+												const NumericVector &edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+												const IntegerVector &cladesA,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
+												const IntegerVector	&cladesB,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
+												bool 				verbose,
+												const std::string 	&verbose_prefix){
+	const long Npairs = cladesA.size();
+	const long Nclades = Ntips + Nnodes;
+	long parent, clade;
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										verbose,
+										verbose_prefix);
+															
+	// calculate number of ancestors and distance from root for each clade
+	// (traverse root --> tips)
+	std::vector<long> ancestor_count_per_clade(Nclades);
+	std::vector<double> distance_from_root_per_clade(Nclades);
+	ancestor_count_per_clade[root] 		= 0;
+	distance_from_root_per_clade[root] 	= 0;
+	for(long q=0; q<traversal_queue.size(); ++q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		ancestor_count_per_clade[clade] 	= 1 + ancestor_count_per_clade[parent];
+		distance_from_root_per_clade[clade]	=  (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distance_from_root_per_clade[parent];
+	}
+	const long total_ancestor_count = vector_sum(ancestor_count_per_clade);
+	
+	// calculate ancestry for each clade in a long list ancestors[]
+	// (traverse root --> tips)
+	std::vector<long> clade2first_ancestor(Nclades); // for each clade c, ancestors[clade2first_ancestor[c]..clade2last_ancestor[c]] will be the list of ancestor clades leading to the clade c
+	std::vector<long> clade2last_ancestor(Nclades);
+	clade2first_ancestor[0] = 0;
+	clade2last_ancestor[0] = clade2first_ancestor[0] + ancestor_count_per_clade[0] - 1;
+	for(long c=1; c<Nclades; ++c){
+		clade2first_ancestor[c] = clade2last_ancestor[c-1] + 1;
+		clade2last_ancestor[c]  = clade2first_ancestor[c] + ancestor_count_per_clade[c] - 1;
+	}
+	std::vector<long> ancestors(total_ancestor_count);
+	for(long q=0; q<traversal_queue.size(); ++q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		// step 1: copy the parent's ancestry to the child's ancestry
+		for(long a=clade2first_ancestor[parent]; a<=clade2last_ancestor[parent]; ++a){
+			ancestors[clade2first_ancestor[clade]+(a-clade2first_ancestor[parent])] = ancestors[a];
+		}
+		// step 2: append the parent to the clade's ancestry
+		ancestors[clade2last_ancestor[clade]] = parent;
+	}
+	
+	// calculate most-recent-common-ancestor for each clade pair
+	std::vector<long> mrca_per_pair(Npairs);
+	long cladeA, cladeB;
+	for(long p=0; p<Npairs; ++p){
+		cladeA = cladesA[p];
+		cladeB = cladesB[p];
+		// check for trivial case
+		if(cladeA==cladeB){
+			mrca_per_pair[p] = cladeA;
+			continue;
+		}
+		// follow ancestry of both clades in synchrony, until they diverge
+		// note that the first ancestor of every clade will be the root
+		long a, b, mrca=-1;
+		for(a=clade2first_ancestor[cladeA], b=clade2first_ancestor[cladeB]; (a<=clade2last_ancestor[cladeA]) && (b<=clade2last_ancestor[cladeB]); ++a, ++b){
+			if(ancestors[a]!=ancestors[b]) break;
+			else mrca = ancestors[a];
+		}
+		// check special case where one clade is descendant of the other (this would lead to a "premature" stop of the above loop)
+		if((a<=clade2last_ancestor[cladeA]) && (ancestors[a]==cladeB)){
+			mrca = cladeB;
+		}else if((b<=clade2last_ancestor[cladeB]) && (ancestors[b]==cladeA)){
+			mrca = cladeA;
+		}
+		mrca_per_pair[p] = mrca;
+	}
+	
+	// calculate pairwise distances
+	NumericVector distances(Npairs);
+	for(long p=0; p<Npairs; ++p){
+		distances[p] = distance_from_root_per_clade[cladesA[p]] + distance_from_root_per_clade[cladesB[p]] - 2*distance_from_root_per_clade[mrca_per_pair[p]];
+	}
+	return(distances);
+}
+
+
+
+
+// Count the number of extant clades per time point (depth point), where time points are taken on a regular grid
+// The tree need not be ultrametric, although in general this function only makes sense for ultrametric trees (e.g. where edge lengths are time intervals)
+// [[Rcpp::export]]
+Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
+												const long 			Nnodes,
+												const long 			Nedges,
+												const IntegerVector	&tree_edge,		// (INPUT) 2D array of size Nedges x 2, flattened in row-major format
+												const NumericVector	&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+												const long			Ntimes,			// (INPUT) number of time points
+												const bool			include_slopes){	// (INPUT) if true, slopes of the clades_per_time_point curve are also returned	
+	// calculate clade distances from root
+	const NumericVector clade_times = get_distances_from_root_CPP(	Ntips,
+																	Nnodes,
+																	Nedges,
+																	tree_edge,
+																	edge_length);
+	const double max_time = get_array_max(clade_times);
+	const double min_time = 0;
+	
+	// determine distance bins
+	const double time_step = (1.0-1e-7)*(max_time-min_time)/(Ntimes-1);
+	std::vector<double> time_points(Ntimes);
+	for(long t=0; t<Ntimes; ++t){
+		time_points[t] = min_time + time_step*t;
+	}
+	
+	// calculate number of clades within each time point
+	std::vector<long> diversities(Ntimes,0);
+	for(long edge=0, child, parent; edge<Nedges; ++edge){
+		parent = tree_edge[edge*2+0];
+		child  = tree_edge[edge*2+1];
+		const long last_time_point 	= max(0L,min(Ntimes-1,long(floor((clade_times[child]-min_time)/time_step))));
+		const long first_time_point = (parent<0 ? last_time_point : max(0L,min(Ntimes-1,long(ceil((clade_times[parent]-min_time)/time_step)))));
+		if(first_time_point==last_time_point){ ++diversities[first_time_point]; }
+		else{ for(long t=first_time_point; t<=last_time_point; ++t) ++diversities[t]; }
+	}
+		
+	// calculate slopes (symmetric difference coefficient)
+	// use one-sided differences at the edges
+	std::vector<double> slopes(include_slopes ? Ntimes : 0);
+	std::vector<double> relative_slopes(include_slopes ? Ntimes : 0);
+	if(include_slopes && (Ntimes>=2)){
+		for(long t=0, left, right; t<Ntimes; ++t){
+			left  				= max(t-1,0L);
+			right 				= min(t+1,Ntimes-1);
+			const double dt		= (time_points[right]-time_points[left]);
+			const double CC		= ((left<t && t<right) ? (diversities[left]+diversities[t]+diversities[right])/3.0 : (diversities[left]+diversities[right])/2.0);
+			slopes[t] 			= (diversities[right]-diversities[left])/dt;
+			relative_slopes[t] 	= (CC==0 ? NAN_D : slopes[t]/CC);
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("time_points") 		= Rcpp::wrap(time_points),
+								Rcpp::Named("diversities") 		= Rcpp::wrap(diversities),
+								Rcpp::Named("slopes") 			= Rcpp::wrap(slopes),
+								Rcpp::Named("relative_slopes") 	= Rcpp::wrap(relative_slopes));
+}
+
+
+
+// Count number of extant clades at arbitrary time points
+// [[Rcpp::export]]
+IntegerVector count_clades_at_times_CPP(const long			Ntips,
+										const long 			Nnodes,
+										const long			Nedges,
+										IntegerVector 		tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+										const NumericVector	&edge_length,		// (INPUT) 1D array of size Nedges, or empty
+										const NumericVector	&times){			// (INPUT) 1D array of size Ntimes
+	const long Nclades = Ntips + Nnodes;
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
+	
+	// calculate distances from root
+	std::vector<double> distances_from_root(Nclades);
+	get_distances_from_root(Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							edge_length,
+							distances_from_root);
+	
+	const long Ntimes = times.size();
+	std::vector<long> diversities(Ntimes,0);
+	for(long t=0; t<Ntimes; ++t){
+		for(long clade=0; clade<Nclades; ++clade){
+			if(clade==root) continue;
+			if((distances_from_root[clade]>=times[t]) && (distances_from_root[clade2parent[clade]]<=times[t])){
+				diversities[t] += 1;
+			}
+		}
+	}
+	return(Rcpp::wrap(diversities));
+}
+
+
+
+// returns true if the tree includes nodes that have more than 2 children
+template<class ARRAY_TYPE>
+bool tree_has_multifurcations(	const long			Ntips,
+								const long 			Nnodes,
+								const long			Nedges,
+								const ARRAY_TYPE	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+	std::vector<long> child_count_per_node(Nnodes,0);
+	for(long edge=0; edge<Nedges; ++edge) ++child_count_per_node[tree_edge[2*edge+0]-Ntips];
+	for(long node=0; node<Nnodes; ++node){
+		if(child_count_per_node[node]>2) return true;
+	}
+	return false;
+}
+
+
+template<class ARRAY_TYPE>
+void count_monofurcations_and_multifurcations(	const long			Ntips,
+												const long 			Nnodes,
+												const long			Nedges,
+												const ARRAY_TYPE	&tree_edge,				// (INPUT) 2D array (in row-major format) of size Nedges x 2
+												long				&Nmonofurcations,		// (OUTPUT) number of monofurcating nodes
+												long				&Nbifurcations,			// (OUTPUT) number of bifurcating nodes
+												long				&Nmultifurcations){		// (OUTPUT) number of multifurcating nodes
+	std::vector<long> child_count_per_node(Nnodes,0);
+	for(long edge=0; edge<Nedges; ++edge) ++child_count_per_node[tree_edge[2*edge+0]-Ntips];
+	Nmonofurcations = Nbifurcations = Nmultifurcations = 0;
+	for(long node=0; node<Nnodes; ++node){
+		if(child_count_per_node[node]==1) ++Nmonofurcations;
+		else if(child_count_per_node[node]==2) ++Nbifurcations;
+		else ++Nmultifurcations;
+	}
+}
+
+
+
+
+// Extract speciation events and extinction events (with associated waiting times) from tree
+//   Speciation event = non-root node
+//   Extinction event = non-crown tip, i.e. tip that is not at maximum distance from the root
+// The returned info may be used for fitting birth-death tree-generation models
+// [[Rcpp::export]]
+Rcpp::List get_speciation_extinction_events_CPP(const long				Ntips,
+												const long 				Nnodes,
+												const long				Nedges,
+												IntegerVector 			tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+												const NumericVector		&edge_length,		// (INPUT) 1D array of size Nedges, or empty
+												const double			min_age,			// (INPUT) min phylogenetic distance from the tree crown, to be considered. If <=0, this constraint is ignored.
+												const double			max_age,			// (INPUT) max phylogenetic distance from the tree crown, to be considered. If <=0, this constraint is ignored.
+												const IntegerVector		&only_clades,		// (INPUT) optional list of clade indices to consider. Can also be empty, in which case no filtering is done.
+												const IntegerVector		&omit_clades){		// (INPUT) optional list of clade indices to omit. Can also be empty.
+	const long Nclades = Ntips + Nnodes;
+	long clade, parent;
+										
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get incoming edge for each clade
+	std::vector<long> incoming_edge_per_clade;
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
+
+	// get tree traversal route (tips --> root)											
+	std::vector<long> queue_root2tips, node2first_edge, node2last_edge, edge_mapping;
+	get_tree_traversal_root_to_tips(Ntips,
+									Nnodes,
+									Nedges,
+									root,
+									tree_edge,
+									true,
+									false,
+									queue_root2tips,
+									node2first_edge,
+									node2last_edge,
+									edge_mapping,
+									false,
+									"");
+								
+	// calculate distance from root for each clade (traverse root --> tips)
+	std::vector<double> distances_from_root(Nclades);
+	distances_from_root[root] = 0;
+	for(long q=0; q<queue_root2tips.size(); ++q){
+		clade = queue_root2tips[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		distances_from_root[clade] = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distances_from_root[parent];
+	}
+	
+	// sort clades in chronological order (increasing distance from root)
+	std::vector<long> chronological_clade_order;
+	qsortIndices(distances_from_root, chronological_clade_order);
+	const double max_distance_from_root = distances_from_root[chronological_clade_order.back()];
+	
+	// count number of extant species at the time of each clade
+	std::vector<long> diversity_at_clade(Nclades);
+	long current_diversity = 1;
+	for(long c=0; c<Nclades; ++c){
+		clade = chronological_clade_order[c];
+		diversity_at_clade[clade] = current_diversity;
+		if(clade<Ntips) --current_diversity; // a tip marks an extinction event
+		else current_diversity += node2last_edge[clade-Ntips] - node2first_edge[clade-Ntips]; // a node marks a speciation event, generating N-1 new species (where N is the number of children)
+	}
+	
+	// figure out which clades to consider
+	std::vector<bool> include_clade(Nclades,(only_clades.size()==0));
+	for(long c=0; c<only_clades.size(); ++c) include_clade[only_clades[c]] = true;
+	for(long c=0; c<omit_clades.size(); ++c) include_clade[omit_clades[c]] = false;
+	if(max_age>0){
+		// only consider clades above a certain distance from the root
+		for(long c=0; c<Nclades; ++c){
+			clade = chronological_clade_order[c];
+			include_clade[clade] = include_clade[clade] && ((max_distance_from_root-distances_from_root[clade])<=max_age);
+		}
+	}
+	if(min_age>0){
+		// only consider clades below a certain distance from the root
+		for(long c=0; c<Nclades; ++c){
+			clade = chronological_clade_order[c];
+			include_clade[clade] = include_clade[clade] && ((max_distance_from_root-distances_from_root[clade])>=min_age);
+		}
+	}
+	
+	// figure out number of speciation events
+	long Nspeciations = 0;
+	long Npoints = 0;
+	for(long c=0; c<Nclades; ++c){
+		clade = chronological_clade_order[c];
+		if(include_clade[clade]) ++Npoints;
+		if((clade>=Ntips) && include_clade[clade]) ++Nspeciations;
+	}
+	if(Nspeciations>0) --Nspeciations;  // the first event should be discarded, because it has unknown waiting time
+	
+	// extract speciation events
+	// speciation_waiting_times[event] = waiting time to speciation event (counted from previous considered speciation event)
+	// speciation_diversities[event] = number of extant clades during the speciation event
+	std::vector<double> speciation_waiting_times(Nspeciations);
+	std::vector<long> 	speciation_diversities(Nspeciations);
+	std::vector<long> 	speciation_clades(Nspeciations);
+	std::vector<double> speciation_times(Nspeciations);
+	double previous_time = -1; // negative means undefined
+	for(long c=0, event=0; c<Nclades; ++c){
+		clade = chronological_clade_order[c];
+		if(!include_clade[clade]) continue; // omit this clade
+		if(clade<Ntips) continue; // not a speciation event
+		if(previous_time<0){
+			// this is the first speciation event encountered, so just record its time but don't include in returned events
+			previous_time = distances_from_root[clade];
+			continue;
+		}
+		speciation_diversities[event]	= diversity_at_clade[clade];
+		speciation_clades[event]		= clade;
+		speciation_times[event]			= distances_from_root[clade];
+		speciation_waiting_times[event]	= speciation_times[event] - previous_time;
+		previous_time 					= speciation_times[event];
+		++event;
+	}
+	
+	// extract extinction events (non-crown tips mark extinctions)
+	std::vector<long> extinction_tips;
+	previous_time = -1;
+	for(long c=0; c<Nclades; ++c){
+		clade = chronological_clade_order[c];
+		if((clade>=Ntips) || (distances_from_root[clade]>=(1.0-RELATIVE_EPSILON)*max_distance_from_root)) continue; // non-crown tips correspond to extinction events
+		if(previous_time<0){
+			// this is the first extinction event encountered, so just record its time but don't include in returned events
+			previous_time = distances_from_root[clade];
+			continue;
+		}
+		extinction_tips.push_back(clade);
+	}
+	const long Nextinctions = extinction_tips.size();
+	std::vector<double> extinction_waiting_times(Nextinctions);
+	std::vector<long> 	extinction_diversities(Nextinctions);
+	std::vector<double> extinction_times(Nextinctions);
+	for(long event=0; event<Nextinctions; ++event){
+		clade 							= extinction_tips[event];
+		extinction_diversities[event]	= diversity_at_clade[clade];
+		extinction_times[event]			= distances_from_root[clade];
+		extinction_waiting_times[event]	= extinction_times[event] - previous_time;
+		previous_time 					= extinction_times[event];
+	}
+	
+	// all considered points (tips & nodes) in chronological order
+	std::vector<double> times(Npoints);
+	std::vector<long>   diversities(Npoints), clades(Npoints);
+	for(long c=0, point=0; c<Nclades; ++c){
+		clade = chronological_clade_order[c];
+		if(!include_clade[clade]) continue;
+		times[point] 		= distances_from_root[clade];
+		diversities[point]	= diversity_at_clade[clade];
+		clades[point]		= clade;
+		++point;
+	}
+		
+	return Rcpp::List::create(	Rcpp::Named("Nspeciations")				= Nspeciations,							// number of speciation events included
+								Rcpp::Named("speciation_waiting_times")	= Rcpp::wrap(speciation_waiting_times),	// waiting time until each speciation event (distance from the previous speciation event)
+								Rcpp::Named("speciation_diversities") 	= Rcpp::wrap(speciation_diversities), 	// number of clades just prior to the speciation
+								Rcpp::Named("speciation_times")			= Rcpp::wrap(speciation_times),			// time at the speciation event
+								Rcpp::Named("speciation_clades")		= Rcpp::wrap(speciation_clades),		// clade marking each speciation event
+								Rcpp::Named("Nextinctions")				= Nextinctions,							// number of extinction events included
+								Rcpp::Named("extinction_waiting_times")	= Rcpp::wrap(extinction_waiting_times),	// waiting time until each extinction event (distance from the previous extinction event)
+								Rcpp::Named("extinction_diversities") 	= Rcpp::wrap(extinction_diversities), 	// number of clades just prior to the extinction
+								Rcpp::Named("extinction_times")			= Rcpp::wrap(extinction_times),			// time at the extinction event
+								Rcpp::Named("extinction_tips")			= Rcpp::wrap(extinction_tips),			// tip marking each extinction event
+								Rcpp::Named("max_distance_from_root")	= max_distance_from_root,				// maximum distance of any tip to the root. Note that this may be outside of the span of times[]
+								Rcpp::Named("times")					= Rcpp::wrap(times),					// time at each clade, in chronological order (root is first)
+								Rcpp::Named("clades")					= Rcpp::wrap(clades),					// clade associated with each time point
+								Rcpp::Named("diversities")				= Rcpp::wrap(diversities));				// number of clades just prior to the splitting or extinction of each clade, in chronological order (root is first)
+}
+
 
 
 
@@ -5348,6 +6310,46 @@ Rcpp::List trim_tree_at_height_CPP(	const long			Ntips,
 }
 
 
+
+
+// extend terminal edges (edges leading to tips) so that each tip has the same fixed distance (new_height) from the root
+// if a tip already extends beyond the specified new_height, its incoming edge remains unchanged
+// this is a quick-and-dirty way to make the tree ultrametric
+// [[Rcpp::export]]
+Rcpp::List extend_tree_to_height_CPP(	const long			Ntips,
+										const long 			Nnodes,
+										const long			Nedges,
+										const IntegerVector	&tree_edge,		// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+										const NumericVector &edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+										double				new_height){	// (INPUT) phylogenetic distance from the root, to which all tips are to be extended. If negative, this is set to the max_distance_to_root of the input tree		
+	// get incoming edge per tip (terminal edges)
+	std::vector<long> incoming_edge_per_tip;
+	get_incoming_edge_per_tip(Ntips, Nedges, tree_edge, incoming_edge_per_tip);
+	
+	// calculate all current distances from root
+	std::vector<double> distances_from_root;
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, distances_from_root);
+	if(new_height<0) new_height = get_array_max(distances_from_root);
+	
+	// extend terminal edges to new_height
+	double max_extension = 0;
+	std::vector<double> new_edge_length(Nedges);
+	if(edge_length.size()==0){
+		new_edge_length.assign(Nedges,1);
+	}else{
+		for(long edge=0; edge<Nedges; ++edge) new_edge_length[edge] = edge_length[edge];
+	}
+	for(long tip=0; tip<Ntips; ++tip){
+		const double extension = new_height - distances_from_root[tip];
+		if(extension>0) new_edge_length[incoming_edge_per_tip[tip]] += extension;
+		max_extension = max(max_extension, extension);
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("new_edge_length")	= Rcpp::wrap(new_edge_length),
+								Rcpp::Named("max_extension")	= Rcpp::wrap(max_extension)); // max length that was added to any edge
+}
+
+
 // Eliminate multifurcations in a tree by replacing them with multiple bifurcations
 // Tips indices remain the same, but edge indices and the total number of nodes/edges may increase (if the tree includes multifurcations)
 // Old nodes retain their index, and new nodes will have indices Nnodes,...,(Nnew_nodes-1)
@@ -6078,6 +7080,100 @@ Rcpp::List generate_random_tree_BM_rates_CPP(	const long 	 	max_tips,					// (IN
 
 
 
+
+// Pick random subsets of tips from a tree, by traversing from root-->tips and at each node choosing randomly between children
+// The size of each random subset is Nrandoms, the number of independent subsets is Nsubsets
+// [[Rcpp::export]]
+std::vector<long> pick_random_tips_CPP(	const long			Ntips,
+										const long 			Nnodes,
+										const long			Nedges,
+										const IntegerVector &tree_edge, 			// (INPUT) 2D array (in row-major format) of size Nedges x 2, or an empty std::vector (no tree available).
+										const long			Nrandoms,				// (INPUT) number of random tips to pick at each experiment (i.e. in each independent subset)
+										const long			Nsubsets,				// (INPUT) number of times the experiment should be repeated, i.e. each time drawing Nrandoms tips anew.
+										const bool			with_replacement){		// (INPUT) pick tips with replacement. If false, then children with no descending tips left to pick from, are excluded from traversal; all other children of a node remain equally probable.
+	
+	const long Nclades = Ntips+Nnodes;
+	long tip, clade;
+	if((!with_replacement) && (Nrandoms>Ntips)) return std::vector<long>(); // this should not happen
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+		
+	// prepare access structures for random tip selection
+	std::vector<long> node2first_child, node2last_child, children, node2total_tip_count;
+	get_children_per_node(	Ntips,
+							Nnodes,
+							Nedges,
+							root,
+							tree_edge,
+							node2first_child,
+							node2last_child,
+							children);
+	if(!with_replacement){
+		get_total_tip_count_per_node(	Ntips,
+										Nnodes,
+										Nedges,
+										tree_edge,
+										node2total_tip_count);
+	}
+	std::vector<long> 	tips_remaining_per_node;
+	std::vector<double> clade2weight;
+	
+	// pick Nrepeats random tip subsets of size Nrandoms
+	std::vector<long> random_tips(Nsubsets*Nrandoms);
+	for(long s=0; s<Nsubsets; ++s){
+		if(!with_replacement){
+			// re-initialize counters for this repeat
+			tips_remaining_per_node = node2total_tip_count;
+			clade2weight.resize(Nclades);
+			for(clade=0; clade<Nclades; ++clade){
+				clade2weight[clade] = (clade<Ntips ? 1.0 : (tips_remaining_per_node[clade-Ntips]>0 ? 1 : 0));
+			}
+		}
+		for(long t=0; t<Nrandoms; ++t){
+			if(with_replacement){
+				tip = get_tip_by_random_uniform_traversal(	Ntips,
+															root,
+															node2first_child,
+															node2last_child,
+															children);
+			}else{
+				tip = get_tip_by_random_traversal(	Ntips,
+													root,
+													node2first_child,
+													node2last_child,
+													children,
+													clade2weight);
+				clade2weight[tip] = 0; // prevent re-inclusion of this tip in the future (i.e. don't replace)
+				// propagate information upwards
+				clade = tip;
+				while(clade!=root){
+					clade = clade2parent[clade];
+					tips_remaining_per_node[clade-Ntips] -= 1;
+					if(tips_remaining_per_node[clade-Ntips]<=0){
+						// no more tips to draw from this clade, so set weight to zero
+						clade2weight[clade] = 0.0;
+					}
+				}					
+			}
+			random_tips[s*Nrandoms + t] = tip;
+		}
+		// abort if the user has interrupted the calling R program
+		Rcpp::checkUserInterrupt();
+	}
+	return random_tips;
+}
+
+
+
+
+
+
+
 #pragma mark -
 #pragma mark Tree dating
 #pragma mark 
@@ -6175,1049 +7271,6 @@ std::vector<double> propagate_max_ages_downstream_CPP(	const long 					Ntips,
 	
 	return max_node_ages;
 }
-
-
-
-#pragma mark -
-#pragma mark Tree statistics
-#pragma mark 
-
-
-
-
-
-// Count the number of tips descending from each node
-// The tree must be rooted; the root should be the unique node with no parent
-void get_total_tip_count_per_node(	const long			Ntips,
-									const long 			Nnodes,
-									const long			Nedges,
-									const IntegerVector &tree_edge, 			// (INPUT) 2D array (in row-major format) of size Nedges x 2
-									std::vector<long>	&node2total_tip_count){	// (OUTPUT) array of size Nnodes, with each entry being the total number of tips descending from the node
-	long clade;
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-
-	// get tree traversal route (tips --> root)
-	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										false,
-										"");
-
-	// calculate number of descending tips per node, traversing tips-->root (excluding the root)
-	node2total_tip_count.assign(Nnodes,0);
-	for(long q=traversal_queue.size()-1; q>=1; --q){
-		clade = traversal_queue[q];
-		node2total_tip_count[clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2total_tip_count[clade-Ntips]);
-	}
-}
-
-
-// Count the number of tips descending from each node
-// This is an Rcpp wrapper function for get_total_tip_count_per_node(..)
-// Requirements:
-//   The tree must be rooted; the root should be the unique node with no parent
-//   The tree can include multifurcations as well as monofurcations
-// [[Rcpp::export]]
-IntegerVector get_total_tip_count_per_node_CPP(	const long			Ntips,
-												const long 			Nnodes,
-												const long			Nedges,
-												const IntegerVector &tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
-	std::vector<long> node2total_tip_count;
-	get_total_tip_count_per_node(	Ntips,
-									Nnodes,
-									Nedges,
-									tree_edge, 
-									node2total_tip_count);
-	return Rcpp::wrap(node2total_tip_count);
-}
-
-
-// Pick random subsets of tips from a tree, by traversing from root-->tips and at each node choosing randomly between children
-// The size of each random subset is Nrandoms, the number of independent subsets is Nsubsets
-// [[Rcpp::export]]
-std::vector<long> pick_random_tips_CPP(	const long			Ntips,
-										const long 			Nnodes,
-										const long			Nedges,
-										const IntegerVector &tree_edge, 			// (INPUT) 2D array (in row-major format) of size Nedges x 2, or an empty std::vector (no tree available).
-										const long			Nrandoms,				// (INPUT) number of random tips to pick at each experiment (i.e. in each independent subset)
-										const long			Nsubsets,				// (INPUT) number of times the experiment should be repeated, i.e. each time drawing Nrandoms tips anew.
-										const bool			with_replacement){		// (INPUT) pick tips with replacement. If false, then children with no descending tips left to pick from, are excluded from traversal; all other children of a node remain equally probable.
-	
-	const long Nclades = Ntips+Nnodes;
-	long tip, clade;
-	if((!with_replacement) && (Nrandoms>Ntips)) return std::vector<long>(); // this should not happen
-	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-		
-	// prepare access structures for random tip selection
-	std::vector<long> node2first_child, node2last_child, children, node2total_tip_count;
-	get_children_per_node(	Ntips,
-							Nnodes,
-							Nedges,
-							root,
-							tree_edge,
-							node2first_child,
-							node2last_child,
-							children);
-	if(!with_replacement){
-		get_total_tip_count_per_node(	Ntips,
-										Nnodes,
-										Nedges,
-										tree_edge,
-										node2total_tip_count);
-	}
-	std::vector<long> 	tips_remaining_per_node;
-	std::vector<double> clade2weight;
-	
-	// pick Nrepeats random tip subsets of size Nrandoms
-	std::vector<long> random_tips(Nsubsets*Nrandoms);
-	for(long s=0; s<Nsubsets; ++s){
-		if(!with_replacement){
-			// re-initialize counters for this repeat
-			tips_remaining_per_node = node2total_tip_count;
-			clade2weight.resize(Nclades);
-			for(clade=0; clade<Nclades; ++clade){
-				clade2weight[clade] = (clade<Ntips ? 1.0 : (tips_remaining_per_node[clade-Ntips]>0 ? 1 : 0));
-			}
-		}
-		for(long t=0; t<Nrandoms; ++t){
-			if(with_replacement){
-				tip = get_tip_by_random_uniform_traversal(	Ntips,
-															root,
-															node2first_child,
-															node2last_child,
-															children);
-			}else{
-				tip = get_tip_by_random_traversal(	Ntips,
-													root,
-													node2first_child,
-													node2last_child,
-													children,
-													clade2weight);
-				clade2weight[tip] = 0; // prevent re-inclusion of this tip in the future (i.e. don't replace)
-				// propagate information upwards
-				clade = tip;
-				while(clade!=root){
-					clade = clade2parent[clade];
-					tips_remaining_per_node[clade-Ntips] -= 1;
-					if(tips_remaining_per_node[clade-Ntips]<=0){
-						// no more tips to draw from this clade, so set weight to zero
-						clade2weight[clade] = 0.0;
-					}
-				}					
-			}
-			random_tips[s*Nrandoms + t] = tip;
-		}
-		// abort if the user has interrupted the calling R program
-		Rcpp::checkUserInterrupt();
-	}
-	return random_tips;
-}
-
-
-
-
-// Calculate sum of all branch lengths, for each subtree in a tree
-// This is equivalent to the 'phylogenetic diversity' measure introduced by Faith (1992).
-// References: 
-//    Faith (1992). Conservation evaluation and phylogenetic diversity. Biological Conservation 61:1-10.
-//    Mark Vellend et al. Measuring phylogenetic biodiversity. Table 14.2 (presence/absence based phylogenetic diversity)
-void get_cumulative_edge_lengths_per_node(	const long			Ntips,
-											const long 			Nnodes,
-											const long			Nedges,
-											const long 			root, 				// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1)
-											const IntegerVector &tree_edge, 		// (INPUT) 2D array (in row-major format) of size Nedges x 2
-											const NumericVector &edge_length, 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-											std::vector<double>	&node2CBL){			// (OUTPUT) array of size Nnodes, with each entry being the cumulative branch length (phylogenetic diversity) of the subtree rooted in that node.
-	const long Nclades = Ntips+Nnodes;
-	long clade;
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-
-	// get tree traversal route (tips --> root)
-	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										false,
-										"");
-	reverse_array(traversal_queue); // make tips-->roots
-
-	// calculate phylogenetic diversities (cumulative branch lengths), traversing tips-->root
-	node2CBL.assign(Nnodes,0);
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade  = traversal_queue[q];
-		if(clade==root) continue;
-		node2CBL[clade2parent[clade]-Ntips] += (clade<Ntips ? 0.0 : node2CBL[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
-	}
-}
-
-
-
-// Calculate the maximum & minimum distance of any tip to the root
-// [[Rcpp::export]]
-Rcpp::List get_min_max_tip_distance_from_root_CPP(	const long 			Ntips,
-													const long 			Nnodes,
-													const long 			Nedges,
-													const IntegerVector &tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
-													const NumericVector &edge_length){	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-	const long Nclades = Ntips + Nnodes;
-	long parent, clade;
-										
-	// determine root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-	
-	// get tree traversal route (root --> tips)											
-	std::vector<long> traversal_queue, node2first_edge, node2last_edge, edge_mapping;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										node2first_edge,
-										node2last_edge,
-										edge_mapping,
-										false,
-										"");
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-										
-	// calculate distance of each node to its nearest descending tip
-	// (traverse tips --> root)
-	std::vector<double> min_tip_distance_per_node(Nnodes,INFTY_D), max_tip_distance_per_node(Nnodes,0);
-	double min_distance, max_distance;
-	for(long q=traversal_queue.size()-1; q>=0; --q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = tree_edge[incoming_edge_per_clade[clade]*2 + 0];
-		min_distance = (clade<Ntips ? 0.0 : min_tip_distance_per_node[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
-		max_distance = (clade<Ntips ? 0.0 : max_tip_distance_per_node[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
-		min_tip_distance_per_node[parent-Ntips]	= min(min_tip_distance_per_node[parent-Ntips], min_distance);
-		max_tip_distance_per_node[parent-Ntips]	= max(max_tip_distance_per_node[parent-Ntips], max_distance);
-	}
-
-	return Rcpp::List::create(	Rcpp::Named("min_distance")	= Rcpp::wrap(min_tip_distance_per_node[root-Ntips]),
-								Rcpp::Named("max_distance")	= Rcpp::wrap(max_tip_distance_per_node[root-Ntips]));
-}
-
-
-
-
-
-// calculate distance from root, for each clade (tips+nodes)
-// distance from root = cumulative branch length from root to the clade
-void get_distances_from_root(	const long 			Ntips,
-								const long 			Nnodes,
-								const long 			Nedges,
-								const IntegerVector &tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
-								const NumericVector &edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-								std::vector<double>	&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
-	const long Nclades = Ntips + Nnodes;
-	long parent, clade;
-										
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
-	// get tree traversal route (root --> tips)											
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										false,
-										"");
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-										
-	// calculate distance from root for each clade
-	// (traverse root --> tips)
-	distances.resize(Nclades);
-	distances[root] = 0;
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		distances[clade] = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distances[parent];
-	}
-}
-
-
-
-// calculate distance from root, for each clade (tips+nodes)
-// distance from root = cumulative branch length from root to the clade
-// This is an Rcpp wrapper for the function get_distances_from_root(..)
-// [[Rcpp::export]]
-NumericVector get_distances_from_root_CPP(	const long 			Ntips,
-											const long 			Nnodes,
-											const long 			Nedges,
-											const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2 in row-major format
-											const NumericVector &edge_length){ 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-	std::vector<double> distances;
-	get_distances_from_root(Ntips,
-							Nnodes,
-							Nedges,
-							tree_edge,
-							edge_length,
-							distances);
-	return Rcpp::wrap(distances);
-}
-
-
-
-
-
-
-
-
-
-// For each clade (tip & node) in a tree, find the closest tip (in terms of cumulative branch length).
-// Optionally, the search can be restricted to descending tips.
-// Optionally, the search can also be restricted to a subset of target tips.
-// If you want distances in terms of branch counts (instead of cumulative branch lengths), simply provide an empty edge_length[].
-// Requirements:
-//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
-//   The input tree can be multifurcating and/or monofurcating
-// [[Rcpp::export]]
-Rcpp::List get_closest_tip_per_clade_CPP(	const long 			Ntips,
-											const long 			Nnodes,
-											const long 			Nedges,
-											const IntegerVector &tree_edge,				// 2D array of size Nedges x 2 in row-major format
-											const NumericVector &edge_length, 			// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-											const IntegerVector	&onlyToTips,			// 1D array listing target tips to restrict search to, or an empty std::vector (consider all tips as targets)
-											bool				only_descending_tips,	// if true, then for each clade only descending tips are considered for nearest-distance. If false, some clades may have non-descending tips assigned as nearest tips.
-											bool 				verbose,
-											const std::string	&verbose_prefix){
-	const long Nclades = Ntips + Nnodes;
-	long parent, clade, tip, incoming_edge;
-	double candidate_distance;
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
-	// get tree traversal route (root --> tips)											
-	std::vector<long> traversal_queue_root2tips, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue_root2tips,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										verbose,
-										verbose_prefix);
-
-	// Step 1: calculate nearest descending tip per clade (traverse tips --> root)
-	std::vector<long> nearest_descending_tip_per_clade(Nclades,-1);
-	std::vector<double> distance_to_nearest_descending_tip_per_clade(Nclades,INFTY_D);
-	if(onlyToTips.size()==0){
-		// consider all tips as potential targets
-		for(long tip=0; tip<Ntips; ++tip){
-			nearest_descending_tip_per_clade[tip] = tip;
-			distance_to_nearest_descending_tip_per_clade[tip] = 0;
-		}
-	}else{
-		// only consider provided tips as targets
-		for(long t=0; t<onlyToTips.size(); ++t){
-			tip = onlyToTips[t];
-			nearest_descending_tip_per_clade[tip] = tip;
-			distance_to_nearest_descending_tip_per_clade[tip] = 0;
-		}
-	}
-	for(long q=traversal_queue_root2tips.size()-1; q>=0; --q){
-		clade = traversal_queue_root2tips[q];
-		if(clade==root) continue;
-		if(nearest_descending_tip_per_clade[clade]<0) continue; // no descending tip available from this clade
-		parent			= clade2parent[clade];
-		incoming_edge	= incoming_edge_per_clade[clade];
-		// propagate information about nearest descending tip, to parent (if better than already saved for the parent)
-		candidate_distance = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge]) + distance_to_nearest_descending_tip_per_clade[clade];
-		if(candidate_distance<distance_to_nearest_descending_tip_per_clade[parent]){
-			distance_to_nearest_descending_tip_per_clade[parent] = candidate_distance;
-			nearest_descending_tip_per_clade[parent] = nearest_descending_tip_per_clade[clade];
-		}
-	}
-	
-	if(only_descending_tips){
-		// only descending tips allowed, so we're finished
-		return Rcpp::List::create(	Rcpp::Named("nearest_tips") 		= Rcpp::wrap(nearest_descending_tip_per_clade),
-									Rcpp::Named("nearest_distances") 	= Rcpp::wrap(distance_to_nearest_descending_tip_per_clade));
-	}
-	
-	// Step 2: calculate nearest tip per clade, regardless of whether descending or not (traverse root --> tips)
-	std::vector<long> nearest_tip_per_clade(Nclades);
-	std::vector<double> distance_to_nearest_tip_per_clade(Nclades);
-	nearest_tip_per_clade[root] = nearest_descending_tip_per_clade[root];
-	distance_to_nearest_tip_per_clade[root] = distance_to_nearest_descending_tip_per_clade[root];
-	for(long q=0; q<traversal_queue_root2tips.size(); ++q){
-		clade = traversal_queue_root2tips[q];
-		if(clade==root) continue;
-		parent				= clade2parent[clade];
-		incoming_edge 		= incoming_edge_per_clade[clade];
-		candidate_distance 	= (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge]) + distance_to_nearest_tip_per_clade[parent];
-		if(candidate_distance<distance_to_nearest_descending_tip_per_clade[clade]){
-			// it's shorter to go upwards, than downwards
-			distance_to_nearest_tip_per_clade[clade] = candidate_distance;
-			nearest_tip_per_clade[clade] = nearest_tip_per_clade[parent];
-		}else{
-			// nearest descending tip is also nearest tip
-			distance_to_nearest_tip_per_clade[clade] = distance_to_nearest_descending_tip_per_clade[clade];
-			nearest_tip_per_clade[clade] = nearest_descending_tip_per_clade[clade];
-		}
-	}
-	
-	return Rcpp::List::create(	Rcpp::Named("nearest_tips") 		= Rcpp::wrap(nearest_tip_per_clade),
-								Rcpp::Named("nearest_distances") 	= Rcpp::wrap(distance_to_nearest_tip_per_clade));
-}
-
-
-
-
-
-// Calculate phylogenetic distance matrix between all pairs of focal_clades
-// Distance = cumulative branch length of both clades back to their most recent common ancestor (aka "patristic distance")
-// This function is slightly different from get_distances_between_clades_CPP(), in that here the distances between all possible clade pairs are returned.
-// The time complexity is O(Nfocals*Nfocals*Nanc + Ntips), where Nanc is the average number of ancestors per tip.
-// Requirements:
-//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
-//   The input tree can include multifurcations and monofurcations
-// Attention: 0-based indexing is used for input and output variables, so make sure to shift indices in R before calling this function
-
-// [[Rcpp::export]]
-NumericMatrix get_distance_matrix_between_clades_CPP(	const long 			Ntips,
-														const long 			Nnodes,
-														const long 			Nedges,
-														const IntegerVector &tree_edge,			// 2D array of size Nedges x 2 in row-major format
-														const NumericVector &edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-														const IntegerVector &focal_clades,		// 1D array of size Nfocals, containing values in 0:(Nclades-1). These will correspond to the rows & columns of the returned distance matrix.
-														bool 				verbose,
-														const std::string 	&verbose_prefix){
-	const long Nclades = Ntips + Nnodes;
-	const long Nfocals = focal_clades.size();
-	long parent, clade;
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
-	// get tree traversal route (root --> tips)											
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										verbose,
-										verbose_prefix);
-															
-	// calculate number of ancestors and distance from root for each clade
-	// (traverse root --> tips)
-	std::vector<long> ancestor_count_per_clade(Nclades);
-	std::vector<double> distance_from_root_per_clade(Nclades);
-	ancestor_count_per_clade[root] 		= 0;
-	distance_from_root_per_clade[root] 	= 0;
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		ancestor_count_per_clade[clade] 	= 1 + ancestor_count_per_clade[parent];
-		distance_from_root_per_clade[clade]	=  (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distance_from_root_per_clade[parent];
-	}
-	const long total_ancestor_count = vector_sum(ancestor_count_per_clade);
-	
-	// calculate ancestry for each clade in a long list ancestors[]
-	// (traverse root --> tips)
-	std::vector<long> clade2first_ancestor(Nclades); // for each clade c, ancestors[clade2first_ancestor[c]..clade2last_ancestor[c]] will be the list of ancestor clades leading to the clade c
-	std::vector<long> clade2last_ancestor(Nclades);
-	clade2first_ancestor[0] = 0;
-	clade2last_ancestor[0] = clade2first_ancestor[0] + ancestor_count_per_clade[0] - 1;
-	for(long c=1; c<Nclades; ++c){
-		clade2first_ancestor[c] = clade2last_ancestor[c-1] + 1;
-		clade2last_ancestor[c]  = clade2first_ancestor[c] + ancestor_count_per_clade[c] - 1;
-	}
-	std::vector<long> ancestors(total_ancestor_count);
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		// step 1: copy the parent's ancestry to the child's ancestry
-		for(long a=clade2first_ancestor[parent]; a<=clade2last_ancestor[parent]; ++a){
-			ancestors[clade2first_ancestor[clade]+(a-clade2first_ancestor[parent])] = ancestors[a];
-		}
-		// step 2: append the parent to the clade's ancestry
-		ancestors[clade2last_ancestor[clade]] = parent;
-	}
-	
-	// calculate most-recent-common-ancestor and phylogenetic distance for each focal clade pair
-	long cladeA, cladeB, mrca;
-	NumericMatrix distances(Nfocals,Nfocals);
-	for(long i=0; i<Nfocals; ++i){
-		cladeA = focal_clades[i];
-		distances(i,i) = 0;
-		for(long j=i+1; j<Nfocals; ++j){
-			cladeB = focal_clades[j];
-			// step 1: determine most recent common ancestor
-			// check for trivial case
-			if(cladeA==cladeB){
-				mrca = cladeA;
-			}else{
-				// follow ancestry of both clades in synchrony, until they diverge
-				// note that the first ancestor of every clade will be the root
-				long a,b;
-				for(a=clade2first_ancestor[cladeA], b=clade2first_ancestor[cladeB]; (a<=clade2last_ancestor[cladeA]) && (b<=clade2last_ancestor[cladeB]); ++a, ++b){
-					if(ancestors[a]!=ancestors[b]) break;
-					else mrca = ancestors[a];
-				}
-				// check special case where one clade is descendant of the other (this would lead to a "premature" stop of the above loop)
-				if((a<=clade2last_ancestor[cladeA]) && (ancestors[a]==cladeB)){
-					mrca = cladeB;
-				}else if((b<=clade2last_ancestor[cladeB]) && (ancestors[b]==cladeA)){
-					mrca = cladeA;
-				}
-			}
-			// step 2: calculate distance
-			distances(i,j) = distance_from_root_per_clade[cladeA] + distance_from_root_per_clade[cladeB] - 2*distance_from_root_per_clade[mrca];
-			distances(j,i) = distances(i,j);
-		}
-	}
-	
-	return(distances);
-}
-												
-
-
-// Calculate phylogenetic distance for pairs of clades (cladesA[] vs cladesB[])
-// Distance = cumulative branch length of both clades back to their most recent common ancestor (aka "patristic distance")
-// There's some initial overhead involved with this function, but for large number of clade pairs this becomes more efficient
-// Time complexity is O(Ntips + Npairs*log(Ntips)).
-// Returns a NumericVector of size Npairs, with each entry being the distance between the two clades
-// This function is slightly different from get_distance_matrix_between_clades_CPP(), in that here only distances between specific clade pairs are returned.
-// Requirements:
-//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
-//   The input tree can be multifurcating and/or monofurcating
-// Attention: 0-based indexing is used for input and output variables, so make sure to shift indices in R before and after calling this function
-
-// [[Rcpp::export]]
-NumericVector get_distances_between_clades_CPP(	const long 			Ntips,
-												const long 			Nnodes,
-												const long 			Nedges,
-												const IntegerVector &tree_edge,			// 2D array of size Nedges x 2 in row-major format
-												const NumericVector &edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-												const IntegerVector &cladesA,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
-												const IntegerVector	&cladesB,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
-												bool 				verbose,
-												const std::string 	&verbose_prefix){
-	const long Npairs = cladesA.size();
-	const long Nclades = Ntips + Nnodes;
-	long parent, clade;
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
-	// get tree traversal route (root --> tips)											
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										verbose,
-										verbose_prefix);
-															
-	// calculate number of ancestors and distance from root for each clade
-	// (traverse root --> tips)
-	std::vector<long> ancestor_count_per_clade(Nclades);
-	std::vector<double> distance_from_root_per_clade(Nclades);
-	ancestor_count_per_clade[root] 		= 0;
-	distance_from_root_per_clade[root] 	= 0;
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		ancestor_count_per_clade[clade] 	= 1 + ancestor_count_per_clade[parent];
-		distance_from_root_per_clade[clade]	=  (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distance_from_root_per_clade[parent];
-	}
-	const long total_ancestor_count = vector_sum(ancestor_count_per_clade);
-	
-	// calculate ancestry for each clade in a long list ancestors[]
-	// (traverse root --> tips)
-	std::vector<long> clade2first_ancestor(Nclades); // for each clade c, ancestors[clade2first_ancestor[c]..clade2last_ancestor[c]] will be the list of ancestor clades leading to the clade c
-	std::vector<long> clade2last_ancestor(Nclades);
-	clade2first_ancestor[0] = 0;
-	clade2last_ancestor[0] = clade2first_ancestor[0] + ancestor_count_per_clade[0] - 1;
-	for(long c=1; c<Nclades; ++c){
-		clade2first_ancestor[c] = clade2last_ancestor[c-1] + 1;
-		clade2last_ancestor[c]  = clade2first_ancestor[c] + ancestor_count_per_clade[c] - 1;
-	}
-	std::vector<long> ancestors(total_ancestor_count);
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		// step 1: copy the parent's ancestry to the child's ancestry
-		for(long a=clade2first_ancestor[parent]; a<=clade2last_ancestor[parent]; ++a){
-			ancestors[clade2first_ancestor[clade]+(a-clade2first_ancestor[parent])] = ancestors[a];
-		}
-		// step 2: append the parent to the clade's ancestry
-		ancestors[clade2last_ancestor[clade]] = parent;
-	}
-	
-	// calculate most-recent-common-ancestor for each clade pair
-	std::vector<long> mrca_per_pair(Npairs);
-	long cladeA, cladeB;
-	for(long p=0; p<Npairs; ++p){
-		cladeA = cladesA[p];
-		cladeB = cladesB[p];
-		// check for trivial case
-		if(cladeA==cladeB){
-			mrca_per_pair[p] = cladeA;
-			continue;
-		}
-		// follow ancestry of both clades in synchrony, until they diverge
-		// note that the first ancestor of every clade will be the root
-		long a, b, mrca=-1;
-		for(a=clade2first_ancestor[cladeA], b=clade2first_ancestor[cladeB]; (a<=clade2last_ancestor[cladeA]) && (b<=clade2last_ancestor[cladeB]); ++a, ++b){
-			if(ancestors[a]!=ancestors[b]) break;
-			else mrca = ancestors[a];
-		}
-		// check special case where one clade is descendant of the other (this would lead to a "premature" stop of the above loop)
-		if((a<=clade2last_ancestor[cladeA]) && (ancestors[a]==cladeB)){
-			mrca = cladeB;
-		}else if((b<=clade2last_ancestor[cladeB]) && (ancestors[b]==cladeA)){
-			mrca = cladeA;
-		}
-		mrca_per_pair[p] = mrca;
-	}
-	
-	// calculate pairwise distances
-	NumericVector distances(Npairs);
-	for(long p=0; p<Npairs; ++p){
-		distances[p] = distance_from_root_per_clade[cladesA[p]] + distance_from_root_per_clade[cladesB[p]] - 2*distance_from_root_per_clade[mrca_per_pair[p]];
-	}
-	return(distances);
-}
-
-
-
-
-// Count the number of extant clades per time point (depth point), where time points are taken on a regular grid
-// The tree need not be ultrametric, although in general this function only makes sense for ultrametric trees (e.g. where edge lengths are time intervals)
-// [[Rcpp::export]]
-Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
-												const long 			Nnodes,
-												const long 			Nedges,
-												const IntegerVector	&tree_edge,		// (INPUT) 2D array of size Nedges x 2, flattened in row-major format
-												const NumericVector	&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-												const long			Ntimes,			// (INPUT) number of time points
-												const bool			include_slopes){	// (INPUT) if true, slopes of the clades_per_time_point curve are also returned	
-	// calculate clade distances from root
-	const NumericVector clade_times = get_distances_from_root_CPP(	Ntips,
-																	Nnodes,
-																	Nedges,
-																	tree_edge,
-																	edge_length);
-	const double max_time = get_array_max(clade_times);
-	const double min_time = 0;
-	
-	// determine distance bins
-	const double time_step = (1.0-1e-7)*(max_time-min_time)/(Ntimes-1);
-	std::vector<double> time_points(Ntimes);
-	for(long t=0; t<Ntimes; ++t){
-		time_points[t] = min_time + time_step*t;
-	}
-	
-	// calculate number of clades within each time point
-	std::vector<long> diversities(Ntimes,0);
-	for(long edge=0, child, parent; edge<Nedges; ++edge){
-		parent = tree_edge[edge*2+0];
-		child  = tree_edge[edge*2+1];
-		const long last_time_point 	= max(0L,min(Ntimes-1,long(floor((clade_times[child]-min_time)/time_step))));
-		const long first_time_point = (parent<0 ? last_time_point : max(0L,min(Ntimes-1,long(ceil((clade_times[parent]-min_time)/time_step)))));
-		if(first_time_point==last_time_point){ ++diversities[first_time_point]; }
-		else{ for(long t=first_time_point; t<=last_time_point; ++t) ++diversities[t]; }
-	}
-		
-	// calculate slopes (symmetric difference coefficient)
-	// use one-sided differences at the edges
-	std::vector<double> slopes(include_slopes ? Ntimes : 0);
-	std::vector<double> relative_slopes(include_slopes ? Ntimes : 0);
-	if(include_slopes && (Ntimes>=2)){
-		for(long t=0, left, right; t<Ntimes; ++t){
-			left  				= max(t-1,0L);
-			right 				= min(t+1,Ntimes-1);
-			const double dt		= (time_points[right]-time_points[left]);
-			const double CC		= ((left<t && t<right) ? (diversities[left]+diversities[t]+diversities[right])/3.0 : (diversities[left]+diversities[right])/2.0);
-			slopes[t] 			= (diversities[right]-diversities[left])/dt;
-			relative_slopes[t] 	= (CC==0 ? NAN_D : slopes[t]/CC);
-		}
-	}
-	
-	return Rcpp::List::create(	Rcpp::Named("time_points") 		= Rcpp::wrap(time_points),
-								Rcpp::Named("diversities") 		= Rcpp::wrap(diversities),
-								Rcpp::Named("slopes") 			= Rcpp::wrap(slopes),
-								Rcpp::Named("relative_slopes") 	= Rcpp::wrap(relative_slopes));
-}
-
-
-
-// Count number of extant clades at arbitrary time points
-// [[Rcpp::export]]
-IntegerVector count_clades_at_times_CPP(const long			Ntips,
-										const long 			Nnodes,
-										const long			Nedges,
-										IntegerVector 		tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
-										const NumericVector	&edge_length,		// (INPUT) 1D array of size Nedges, or empty
-										const NumericVector	&times){			// (INPUT) 1D array of size Ntimes
-	const long Nclades = Ntips + Nnodes;
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
-	
-	// calculate distances from root
-	std::vector<double> distances_from_root(Nclades);
-	get_distances_from_root(Ntips,
-							Nnodes,
-							Nedges,
-							tree_edge,
-							edge_length,
-							distances_from_root);
-	
-	const long Ntimes = times.size();
-	std::vector<long> diversities(Ntimes,0);
-	for(long t=0; t<Ntimes; ++t){
-		for(long clade=0; clade<Nclades; ++clade){
-			if(clade==root) continue;
-			if((distances_from_root[clade]>=times[t]) && (distances_from_root[clade2parent[clade]]<=times[t])){
-				diversities[t] += 1;
-			}
-		}
-	}
-	return(Rcpp::wrap(diversities));
-}
-
-
-
-// returns true if the tree includes nodes that have more than 2 children
-template<class ARRAY_TYPE>
-bool tree_has_multifurcations(	const long			Ntips,
-								const long 			Nnodes,
-								const long			Nedges,
-								const ARRAY_TYPE	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
-	std::vector<long> child_count_per_node(Nnodes,0);
-	for(long edge=0; edge<Nedges; ++edge) ++child_count_per_node[tree_edge[2*edge+0]-Ntips];
-	for(long node=0; node<Nnodes; ++node){
-		if(child_count_per_node[node]>2) return true;
-	}
-	return false;
-}
-
-
-template<class ARRAY_TYPE>
-void count_monofurcations_and_multifurcations(	const long			Ntips,
-												const long 			Nnodes,
-												const long			Nedges,
-												const ARRAY_TYPE	&tree_edge,				// (INPUT) 2D array (in row-major format) of size Nedges x 2
-												long				&Nmonofurcations,		// (OUTPUT) number of monofurcating nodes
-												long				&Nbifurcations,			// (OUTPUT) number of bifurcating nodes
-												long				&Nmultifurcations){		// (OUTPUT) number of multifurcating nodes
-	std::vector<long> child_count_per_node(Nnodes,0);
-	for(long edge=0; edge<Nedges; ++edge) ++child_count_per_node[tree_edge[2*edge+0]-Ntips];
-	Nmonofurcations = Nbifurcations = Nmultifurcations = 0;
-	for(long node=0; node<Nnodes; ++node){
-		if(child_count_per_node[node]==1) ++Nmonofurcations;
-		else if(child_count_per_node[node]==2) ++Nbifurcations;
-		else ++Nmultifurcations;
-	}
-}
-
-
-
-
-// Extract speciation events and extinction events (with associated waiting times) from tree
-//   Speciation event = non-root node
-//   Extinction event = non-crown tip, i.e. tip that is not at maximum distance from the root
-// The returned info may be used for fitting birth-death tree-generation models
-// [[Rcpp::export]]
-Rcpp::List get_speciation_extinction_events_CPP(const long				Ntips,
-												const long 				Nnodes,
-												const long				Nedges,
-												IntegerVector 			tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
-												const NumericVector		&edge_length,		// (INPUT) 1D array of size Nedges, or empty
-												const double			min_age,			// (INPUT) min phylogenetic distance from the tree crown, to be considered. If <=0, this constraint is ignored.
-												const double			max_age,			// (INPUT) max phylogenetic distance from the tree crown, to be considered. If <=0, this constraint is ignored.
-												const IntegerVector		&only_clades,		// (INPUT) optional list of clade indices to consider. Can also be empty, in which case no filtering is done.
-												const IntegerVector		&omit_clades){		// (INPUT) optional list of clade indices to omit. Can also be empty.
-	const long Nclades = Ntips + Nnodes;
-	long clade, parent;
-										
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-
-	// get incoming edge for each clade
-	std::vector<long> incoming_edge_per_clade;
-	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
-
-	// get tree traversal route (tips --> root)											
-	std::vector<long> queue_root2tips, node2first_edge, node2last_edge, edge_mapping;
-	get_tree_traversal_root_to_tips(Ntips,
-									Nnodes,
-									Nedges,
-									root,
-									tree_edge,
-									true,
-									false,
-									queue_root2tips,
-									node2first_edge,
-									node2last_edge,
-									edge_mapping,
-									false,
-									"");
-								
-	// calculate distance from root for each clade (traverse root --> tips)
-	std::vector<double> distances_from_root(Nclades);
-	distances_from_root[root] = 0;
-	for(long q=0; q<queue_root2tips.size(); ++q){
-		clade = queue_root2tips[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		distances_from_root[clade] = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distances_from_root[parent];
-	}
-	
-	// sort clades in chronological order (increasing distance from root)
-	std::vector<long> chronological_clade_order;
-	qsortIndices(distances_from_root, chronological_clade_order);
-	const double max_distance_from_root = distances_from_root[chronological_clade_order.back()];
-	
-	// count number of extant species at the time of each clade
-	std::vector<long> diversity_at_clade(Nclades);
-	long current_diversity = 1;
-	for(long c=0; c<Nclades; ++c){
-		clade = chronological_clade_order[c];
-		diversity_at_clade[clade] = current_diversity;
-		if(clade<Ntips) --current_diversity; // a tip marks an extinction event
-		else current_diversity += node2last_edge[clade-Ntips] - node2first_edge[clade-Ntips]; // a node marks a speciation event, generating N-1 new species (where N is the number of children)
-	}
-	
-	// figure out which clades to consider
-	std::vector<bool> include_clade(Nclades,(only_clades.size()==0));
-	for(long c=0; c<only_clades.size(); ++c) include_clade[only_clades[c]] = true;
-	for(long c=0; c<omit_clades.size(); ++c) include_clade[omit_clades[c]] = false;
-	if(max_age>0){
-		// only consider clades above a certain distance from the root
-		for(long c=0; c<Nclades; ++c){
-			clade = chronological_clade_order[c];
-			include_clade[clade] = include_clade[clade] && ((max_distance_from_root-distances_from_root[clade])<=max_age);
-		}
-	}
-	if(min_age>0){
-		// only consider clades below a certain distance from the root
-		for(long c=0; c<Nclades; ++c){
-			clade = chronological_clade_order[c];
-			include_clade[clade] = include_clade[clade] && ((max_distance_from_root-distances_from_root[clade])>=min_age);
-		}
-	}
-	
-	// figure out number of speciation events
-	long Nspeciations = 0;
-	long Npoints = 0;
-	for(long c=0; c<Nclades; ++c){
-		clade = chronological_clade_order[c];
-		if(include_clade[clade]) ++Npoints;
-		if((clade>=Ntips) && include_clade[clade]) ++Nspeciations;
-	}
-	if(Nspeciations>0) --Nspeciations;  // the first event should be discarded, because it has unknown waiting time
-	
-	// extract speciation events
-	// speciation_waiting_times[event] = waiting time to speciation event (counted from previous considered speciation event)
-	// speciation_diversities[event] = number of extant clades during the speciation event
-	std::vector<double> speciation_waiting_times(Nspeciations);
-	std::vector<long> 	speciation_diversities(Nspeciations);
-	std::vector<long> 	speciation_clades(Nspeciations);
-	std::vector<double> speciation_times(Nspeciations);
-	double previous_time = -1; // negative means undefined
-	for(long c=0, event=0; c<Nclades; ++c){
-		clade = chronological_clade_order[c];
-		if(!include_clade[clade]) continue; // omit this clade
-		if(clade<Ntips) continue; // not a speciation event
-		if(previous_time<0){
-			// this is the first speciation event encountered, so just record its time but don't include in returned events
-			previous_time = distances_from_root[clade];
-			continue;
-		}
-		speciation_diversities[event]	= diversity_at_clade[clade];
-		speciation_clades[event]		= clade;
-		speciation_times[event]			= distances_from_root[clade];
-		speciation_waiting_times[event]	= speciation_times[event] - previous_time;
-		previous_time 					= speciation_times[event];
-		++event;
-	}
-	
-	// extract extinction events (non-crown tips mark extinctions)
-	std::vector<long> extinction_tips;
-	previous_time = -1;
-	for(long c=0; c<Nclades; ++c){
-		clade = chronological_clade_order[c];
-		if((clade>=Ntips) || (distances_from_root[clade]>=(1.0-RELATIVE_EPSILON)*max_distance_from_root)) continue; // non-crown tips correspond to extinction events
-		if(previous_time<0){
-			// this is the first extinction event encountered, so just record its time but don't include in returned events
-			previous_time = distances_from_root[clade];
-			continue;
-		}
-		extinction_tips.push_back(clade);
-	}
-	const long Nextinctions = extinction_tips.size();
-	std::vector<double> extinction_waiting_times(Nextinctions);
-	std::vector<long> 	extinction_diversities(Nextinctions);
-	std::vector<double> extinction_times(Nextinctions);
-	for(long event=0; event<Nextinctions; ++event){
-		clade 							= extinction_tips[event];
-		extinction_diversities[event]	= diversity_at_clade[clade];
-		extinction_times[event]			= distances_from_root[clade];
-		extinction_waiting_times[event]	= extinction_times[event] - previous_time;
-		previous_time 					= extinction_times[event];
-	}
-	
-	// all considered points (tips & nodes) in chronological order
-	std::vector<double> times(Npoints);
-	std::vector<long>   diversities(Npoints), clades(Npoints);
-	for(long c=0, point=0; c<Nclades; ++c){
-		clade = chronological_clade_order[c];
-		if(!include_clade[clade]) continue;
-		times[point] 		= distances_from_root[clade];
-		diversities[point]	= diversity_at_clade[clade];
-		clades[point]		= clade;
-		++point;
-	}
-		
-	return Rcpp::List::create(	Rcpp::Named("Nspeciations")				= Nspeciations,							// number of speciation events included
-								Rcpp::Named("speciation_waiting_times")	= Rcpp::wrap(speciation_waiting_times),	// waiting time until each speciation event (distance from the previous speciation event)
-								Rcpp::Named("speciation_diversities") 	= Rcpp::wrap(speciation_diversities), 	// number of clades just prior to the speciation
-								Rcpp::Named("speciation_times")			= Rcpp::wrap(speciation_times),			// time at the speciation event
-								Rcpp::Named("speciation_clades")		= Rcpp::wrap(speciation_clades),		// clade marking each speciation event
-								Rcpp::Named("Nextinctions")				= Nextinctions,							// number of extinction events included
-								Rcpp::Named("extinction_waiting_times")	= Rcpp::wrap(extinction_waiting_times),	// waiting time until each extinction event (distance from the previous extinction event)
-								Rcpp::Named("extinction_diversities") 	= Rcpp::wrap(extinction_diversities), 	// number of clades just prior to the extinction
-								Rcpp::Named("extinction_times")			= Rcpp::wrap(extinction_times),			// time at the extinction event
-								Rcpp::Named("extinction_tips")			= Rcpp::wrap(extinction_tips),			// tip marking each extinction event
-								Rcpp::Named("max_distance_from_root")	= max_distance_from_root,				// maximum distance of any tip to the root. Note that this may be outside of the span of times[]
-								Rcpp::Named("times")					= Rcpp::wrap(times),					// time at each clade, in chronological order (root is first)
-								Rcpp::Named("clades")					= Rcpp::wrap(clades),					// clade associated with each time point
-								Rcpp::Named("diversities")				= Rcpp::wrap(diversities));				// number of clades just prior to the splitting or extinction of each clade, in chronological order (root is first)
-}
-
-
 
 
 

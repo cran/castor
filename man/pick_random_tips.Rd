@@ -7,7 +7,11 @@ Pick random subsets of tips on a tree.
 Given a rooted phylogenetic tree, this function picks random subsets of tips by traversing the tree from root to tips, choosing a random child at each node until reaching a tip. Multiple random independent subsets can be generated if needed.
 }
 \usage{
-pick_random_tips(tree, size=1, Nsubsets=1, with_replacement=TRUE, drop=TRUE)
+pick_random_tips( tree, 
+                  size              = 1, 
+                  Nsubsets          = 1, 
+                  with_replacement  = TRUE, 
+                  drop_dims         = TRUE)
 }
 \arguments{
 \item{tree}{
@@ -22,7 +26,7 @@ Integer. Number of independent subsets to pick.
 \item{with_replacement}{
 Logical. If \code{TRUE}, each tip can be picked multiple times within a subset (i.e. are "replaced" in the urn). If \code{FALSE}, tips are picked without replacement in each subset. In that case, \code{size} must not be greater than the number of tips in the tree.
 }
-\item{drop}{
+\item{drop_dims}{
 Logical, specifying whether to return a vector (instead of a matrix) if \code{Nsubsets==1}.
 }
 }
@@ -38,7 +42,7 @@ The time required by this function per random subset decreases with the number o
 
 
 \value{
-A 2D integer matrix of size Nsubsets x size, with each row containing indices of randomly picked tips (i.e. in 1,..,Ntips) within a specific subset. If \code{drop==TRUE} and \code{Nsubsets==1}, then a vector is returned instead of a matrix.
+A 2D integer matrix of size Nsubsets x size, with each row containing indices of randomly picked tips (i.e. in 1,..,Ntips) within a specific subset. If \code{drop_dims==TRUE} and \code{Nsubsets==1}, then a vector is returned instead of a matrix.
 }
 
 \author{Stilianos Louca}

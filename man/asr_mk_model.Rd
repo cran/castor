@@ -7,13 +7,21 @@ Ancestral state reconstruction with Mk models and rerooting
 Ancestral state reconstruction of a discrete trait using a fixed-rates continuous-time Markov model (a.k.a. "Mk model"). This function can estimate the (instantaneous) transition matrix using maximum likelihood, or take a specified transition matrix. The function can optionally calculate marginal ancestral state estimates for each node in the tree, using the rerooting method by Yang et al. (1995).
 }
 \usage{
-asr_mk_model(tree, tip_states, Nstates=NULL, tip_priors=NULL, 
-             rate_model="ARD", transition_matrix=NULL, 
-             include_ancestral_likelihoods=TRUE, 
-             root_prior="empirical", 
-             Ntrials=1, optimization_algorithm="nlminb",
-             store_exponentials=TRUE,
-             check_input=TRUE, Nthreads=1)
+asr_mk_model( tree, 
+              tip_states, 
+              Nstates = NULL, 
+              tip_priors = NULL, 
+              rate_model = "ER", 
+              transition_matrix = NULL, 
+              include_ancestral_likelihoods = TRUE, 
+              root_prior = "empirical", 
+              Ntrials = 1, 
+              optim_algorithm = "nlminb",
+              optim_max_iterations = 200,
+              optim_rel_tol = 1e-8,
+              store_exponentials = TRUE,
+              check_input =TRUE, 
+              Nthreads = 1)
 }
 \arguments{
 \item{tree}{
@@ -44,8 +52,14 @@ Include the marginal ancestral state distribution for each node (conditional sca
 \item{Ntrials}{
 Number of trials (starting points) for fitting the transition matrix. Only relevant if \code{transition_matrix=NULL}. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.
 }
-\item{optimization_algorithm}{
+\item{optim_algorithm}{
 Either "optim" or "nlminb", specifying which optimization algorithm to use for maximum-likelihood estimation of the transition matrix. Only relevant if \code{transition_matrix==NULL}.
+}
+\item{optim_max_iterations}{
+Maximum number of iterations (per fitting trial) allowed for optimizing the likelihood function.
+}
+\item{optim_rel_tol}{
+Relative tolerance (stop criterion) for optimizing the likelihood function.
 }
 \item{store_exponentials}{
 Logical, specifying whether to pre-calculate and store exponentials of the transition matrix during calculation of ancestral likelihoods. This may reduce computation time because each exponential is only calculated once, but requires more memory since all exponentials are stored. 
@@ -68,7 +82,13 @@ This function allows the specification of the precise tip states (if these are k
 
 Tips must be represented in \code{tip_states} or \code{tip_priors} in the same order as in \code{tree$tip.label}. None of the input vectors or matrixes need include row or column names; if they do, however, they are checked for consistency (if \code{check_input==TRUE}).
 
-The rerooting method by Yang et al (2015) is used to reconstruct the marginal ancestral state probabilities for each node by treating the node as a root and calculating its conditional scaled likelihoods.
+The rerooting method by Yang et al (2015) is used to reconstruct the marginal ancestral state probabilities for each node by treating the node as a root and calculating its conditional scaled likelihoods. Note that the re-rooting algorithm is strictly speaking only valid for reversible Mk models, that is, satisfying the criterion
+\deqn{
+\pi_i Q_{ij}=\pi_j Q_{ji},\quad\forall i,j,
+}
+where \eqn{Q} is the transition rate matrix and \eqn{\pi} is the stationary distribution of the model. The rate models ``ER'', `SYM'', ``SUEDE'' and ``SRD'' are reversible. For example, for ``SUEDE'' or ``SRD'' choose \eqn{\pi_{i+1}=\pi_{i}Q_{i,i+1}/Q_{i+1,i}}. In contrast, ``ARD'' models are generally not reversible.
+
+
 
 If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). This function is similar to \code{rerootingMethod} in the \code{phytools} package (v0.5-64) and similar to \code{ape::ace} (v4.1) with options \code{method="ML", type="discrete"} and \code{marginal=FALSE}, but tends to be much faster than \code{rerootingMethod} and \code{ace} for large trees.
 }

@@ -47,7 +47,7 @@ If \code{tree$edge.length} is missing, each edge in the tree is assumed to have 
 
 Tips must be represented in \code{tip_states} in the same order as in \code{tree$tip.label}. None of the input vectors or matrixes need include row or column names; if they do, however, they are checked for consistency (if \code{check_input==TRUE}).
 
-This function is meant for reconstructing ancestral states in all nodes of a tree, when the state of each tip is known. If some of the tips have unknown state, consider either prunning the tree to keep only tips with known states, or using the function \code{\link{hsp_max_parsimony}}.
+This function is meant for reconstructing ancestral states in all nodes of a tree, when the state of each tip is known. If some of the tips have unknown state, consider either pruning the tree to keep only tips with known states, or using the function \code{\link{hsp_max_parsimony}}.
 }
 
 

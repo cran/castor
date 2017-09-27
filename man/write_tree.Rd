@@ -52,4 +52,4 @@ Newick_string = write_tree(tree)
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Prunning }
+%\keyword{ Pruning }

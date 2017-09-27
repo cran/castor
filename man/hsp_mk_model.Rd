@@ -7,11 +7,20 @@ Hidden state prediction with Mk models and rerooting
 Reconstruct ancestral states of a discrete trait and predict unknown (hidden) states of tips using a fixed-rates continuous-time Markov model (a.k.a. "Mk model"). This function can estimate the transition matrix using maximum likelihood, or take a specified transition matrix. The function can optionally calculate marginal ancestral state estimates for each node in the tree, using the rerooting method by Yang et al. (1995). A subset of the tips may have completely unknown state probabilities; in this case the fitted Markov model is used to predict their state probabilities based on their most recent reconstructed ancestor, as described by Zanefeld and Thurber (2014).
 }
 \usage{
-hsp_mk_model(tree, tip_states, Nstates=NULL, tip_priors=NULL, 
-             rate_model="ARD", transition_matrix=NULL, root_prior="empirical", 
-             Ntrials=1, optimization_algorithm="nlminb",
-             store_exponentials=TRUE,
-             check_input=TRUE, Nthreads=1)
+hsp_mk_model( tree, 
+              tip_states, 
+              Nstates = NULL, 
+              tip_priors = NULL, 
+              rate_model = "ER", 
+              transition_matrix = NULL, 
+              root_prior = "empirical", 
+              Ntrials = 1, 
+              optim_algorithm = "nlminb",
+              optim_max_iterations = 200,
+              optim_rel_tol = 1e-8,
+              store_exponentials = TRUE,
+              check_input = TRUE, 
+              Nthreads = 1)
 }
 \arguments{
 \item{tree}{
@@ -27,7 +36,7 @@ Either NULL, or an integer specifying the number of possible states of the trait
 A 2D numeric matrix of size Ntips x Nstates, where Nstates is the possible number of states for the character modelled. Can also be \code{NULL}. Each row of this matrix must be a probability vector, i.e. it must only contain non-negative entries and must sum up to 1. The [i,s]-th entry should be the prior probability of tip i being in state s. If you know for certain that tip i is in some state s, you can set the corresponding entry to 1 and all other entries in that row to 0. A row can include \code{NA} to indicate that neither the state nor the probability distribution of a state are known for that tip. If for all tips you either know the exact state or have no information at all, you can also use \code{tip_states} instead. If \code{tip_priors==NULL}, then \code{tip_states} must not be \code{NULL} (see above).
 }
 \item{rate_model}{
-Rate model to be used for fitting the transition rate matrix. Similar to the \code{rate_model} option in the function \code{\link{asr_mk_model}}.
+Rate model to be used for fitting the transition rate matrix. Similar to the \code{rate_model} option in the function \code{\link{asr_mk_model}}. See the details of \code{\link{asr_mk_model}} on the assumptions of each \code{rate_model}.
 }
 \item{transition_matrix}{
 Either a numeric quadratic matrix of size Nstates x Nstates containing fixed transition rates, or \code{NULL}. The [r,c]-th entry in this matrix should store the transition (probability) rate from the state r to state c. Each row in this matrix must have sum zero.
@@ -39,8 +48,14 @@ Prior probability distribution of the root's states. Similar to the \code{root_p
 \item{Ntrials}{
 Number of trials (starting points) for fitting the transition matrix. Only relevant if \code{transition_matrix=NULL}. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.
 }
-\item{optimization_algorithm}{
+\item{optim_algorithm}{
 Either "optim" or "nlminb", specifying which optimization algorithm to use for maximum-likelihood estimation of the transition matrix. Only relevant if \code{transition_matrix==NULL}.
+}
+\item{optim_max_iterations}{
+Maximum number of iterations (per fitting trial) allowed for optimizing the likelihood function.
+}
+\item{optim_rel_tol}{
+Relative tolerance (stop criterion) for optimizing the likelihood function.
 }
 \item{store_exponentials}{
 Logical, specifying whether to pre-calculate and store exponentials of the transition matrix during calculation of ancestral likelihoods. This may reduce computation time because each exponential is only calculated once, but will use up more memory since all exponentials are stored. Only relevant if \code{include_ancestral_likelihoods} is \code{TRUE}, otherwise exponentials are never stored.

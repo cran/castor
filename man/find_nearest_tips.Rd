@@ -84,4 +84,4 @@ hist(distances, breaks=10, xlab="nearest distance", ylab="number of tips", prob=
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Prunning }
+%\keyword{ Pruning }

@@ -65,5 +65,5 @@ cat(sprintf("Subtree at \%d-th node has \%d tips\n",node,length(subtree$tip.labe
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-\keyword{prunning}
+\keyword{pruning}
 \keyword{subtree}

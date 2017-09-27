@@ -82,5 +82,5 @@ cat(sprintf("Collapsed tree has \%d nodes\n",collapsed$Nnode))
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-\keyword{prunning}
+\keyword{pruning}
 \keyword{subtree}

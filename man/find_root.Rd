@@ -50,4 +50,4 @@ cat(sprintf("New root is \%d, expected at \%d\n",find_root(tree),new_root_node+N
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Prunning }
+%\keyword{ Pruning }

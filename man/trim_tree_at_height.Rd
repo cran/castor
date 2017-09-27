@@ -79,5 +79,5 @@ cat(sprintf("Trimmed tree has \%d tips\n",length(trimmed$tip.label)))
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-\keyword{prunning}
+\keyword{pruning}
 \keyword{subtree}

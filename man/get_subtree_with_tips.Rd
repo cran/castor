@@ -39,6 +39,8 @@ If both \code{only_tips} and \code{omit_tips} are \code{NULL}, then all tips are
 If the input tree does not include \code{edge.length}, each edge in the input tree is assumed to have length 1. The root of the tree (which is always kept) is assumed to be the unique node with no incoming edge. The input tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child).
 
 The asymptotic time complexity of this function is O(Nnodes+Ntips), where Ntips is the number of tips and Nnodes the number of nodes in the input tree.
+
+When \code{only_tips==NULL}, \code{omit_tips!=NULL}, \code{collapse_monofurcations==TRUE} and \code{force_keep_root==FALSE}, this function is analogous to the function \code{drop.tip} in the \code{ape} package with option \code{trim_internal=TRUE} (v. 0.5-64).
 }
 
 
@@ -86,5 +88,5 @@ cat(sprintf("Subtree has \%d tips and \%d nodes\n",length(subtree$tip.label),sub
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 % Only 1 keyword per line
-\keyword{prunning}
+\keyword{pruning}
 \keyword{subtree}
