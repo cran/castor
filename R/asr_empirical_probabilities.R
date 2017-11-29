@@ -26,5 +26,5 @@ asr_empirical_probabilities = function(tree, tip_states, Nstates=NULL, probabili
 																		tip_states	= tip_states-1);
 	ancestral_likelihoods = matrix(ancestral_likelihoods, ncol=Nstates, byrow=TRUE) # unflatten
 	if(probabilities) ancestral_likelihoods = ancestral_likelihoods/rowSums(ancestral_likelihoods); 
-	return(list(ancestral_likelihoods=ancestral_likelihoods));
+	return(list(success=TRUE, ancestral_likelihoods=ancestral_likelihoods));
 }

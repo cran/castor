@@ -85,7 +85,7 @@ Logical. If \code{TRUE}, then the bper-capita birth & death rates of all tips an
 \details{
 If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
 
-The per-capita birth and death rates of the root are chosen randomly, independently and uniformly from their respective allowed intervals.
+The per-capita birth and death rates of the root are chosen randomly, independently and uniformly within their allowed intervals.
 }
 
 

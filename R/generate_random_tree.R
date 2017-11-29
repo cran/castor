@@ -48,6 +48,10 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 										as_generations				= as_generations,
 										include_birth_times			= include_birth_times,
 										include_death_times			= include_death_times);
+	if(!results$success){
+		# something went wrong
+		return(list(success=FALSE, error=results$error));
+	}
 	Ntips	= results$Ntips
 	Nnodes 	= results$Nnodes
 	tree = list(Nnode 		= Nnodes,
@@ -67,6 +71,11 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 		tree 		= rarefaction$subtree
 		Nrarefied 	= Ntips - length(tree$tip.label)
 		results$root_time = results$root_time + rarefaction$root_shift; # update root time, in case root has changed
+	}
+	
+	if(coalescent){
+		# make sure tree is ultrametric, i.e. correct small numerical errors
+		tree = extend_tree_to_height(tree)$tree;	
 	}
 	
 	return(list(tree				= tree,

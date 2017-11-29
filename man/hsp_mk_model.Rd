@@ -4,7 +4,7 @@
 Hidden state prediction with Mk models and rerooting
 }
 \description{
-Reconstruct ancestral states of a discrete trait and predict unknown (hidden) states of tips using a fixed-rates continuous-time Markov model (a.k.a. "Mk model"). This function can estimate the transition matrix using maximum likelihood, or take a specified transition matrix. The function can optionally calculate marginal ancestral state estimates for each node in the tree, using the rerooting method by Yang et al. (1995). A subset of the tips may have completely unknown state probabilities; in this case the fitted Markov model is used to predict their state probabilities based on their most recent reconstructed ancestor, as described by Zanefeld and Thurber (2014).
+Reconstruct ancestral states of a discrete trait and predict unknown (hidden) states of tips using a fixed-rates continuous-time Markov model (a.k.a. "Mk model"). This function can estimate the transition matrix using maximum likelihood, or take a specified transition matrix. The function can optionally calculate marginal ancestral state estimates for each node in the tree, using the rerooting method by Yang et al. (1995). A subset of the tips may have completely unknown state probabilities; in this case the fitted Markov model is used to predict their state probabilities based on their most recent reconstructed ancestor, as described by Zaneveld and Thurber (2014).
 }
 \usage{
 hsp_mk_model( tree, 
@@ -76,7 +76,7 @@ This function allows the specification of the precise tip states (if these are k
 
 Tips must be represented in \code{tip_states} or \code{tip_priors} in the same order as in \code{tree$tip.label}. None of the input vectors or matrixes need include row or column names; if they do, however, they are checked for consistency (if \code{check_input==TRUE}).
 
-The rerooting method by Yang et al (2015) is used to reconstruct the marginal ancestral state probabilities for each node by treating the node as a root and calculating its conditional scaled likelihoods. The state probabilities of tips with hidden states are calculated from those of the most recent ancestor with reconstructed states, by multiplying with the exponentiated transition matrix along the connecting edges (Zanefeld and Thurber, 2014).
+The rerooting method by Yang et al (2015) is used to reconstruct the marginal ancestral state probabilities for each node by treating the node as a root and calculating its conditional scaled likelihoods. The state probabilities of tips with hidden states are calculated from those of the most recent ancestor with reconstructed states, by multiplying with the exponentiated transition matrix along the connecting edges (Zaneveld and Thurber, 2014).
 
 If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child).
 }
@@ -84,6 +84,9 @@ If \code{tree$edge.length} is missing, each edge in the tree is assumed to have 
 
 \value{
 A list with the following elements:
+\item{success}{
+Logical, indicating whether HSP was successful. If \code{FALSE}, all other return values may be \code{NULL}.
+}
 \item{transition_matrix}{
 A numeric quadratic matrix of size Nstates x Nstates, containing the transition rates of the Markov model. The [r,c]-th entry is the transition rate from state r to state c. Will be the same as the input \code{transition_matrix}, if the latter was not \code{NULL}.
 }
@@ -102,7 +105,7 @@ A 2D numeric matrix, listing the probability of each tip and node being in each 
 \references{
 Z. Yang, S. Kumar and M. Nei (1995). A new method for inference of ancestral nucleotide and amino acid sequences. Genetics. 141:1641-1650.
 
-J. R. Zanefeld and R. L. V. Thurber (2014). Hidden state prediction: A modification of classic ancestral state reconstruction algorithms helps unravel complex symbioses. Frontiers in Microbiology. 5:431.
+J. R. Zaneveld and R. L. V. Thurber (2014). Hidden state prediction: A modification of classic ancestral state reconstruction algorithms helps unravel complex symbioses. Frontiers in Microbiology. 5:431.
 }
 
 \seealso{

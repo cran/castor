@@ -1,29 +1,31 @@
-# root (or re-root) a tree based on a specified outgroup tip
+# adjust edge directions such that the new root is at the midpoint (node with smallest max_distance_to_a_tip)
 # Note that the number of tips & nodes remains the same
 # If update_indices==FALSE, then tip & node indices also remain the same
-root_via_outgroup = function(tree, outgroup, update_indices=TRUE){ 
+root_at_midpoint = function(tree, 
+							update_indices	= TRUE,
+							as_edge_counts 	= FALSE,	# calculate distances in terms of cumulative edge counts (as as if each edge had length 1)
+							is_rooted		= FALSE){ 	# if TRUE, the caller guarantees that the input tree is rooted
 	Ntips 	= length(tree$tip.label);
 	Nnodes	= tree$Nnode;
 	
-	# figure out outgroup tip index
-	if(is.character(outgroup)){
-		if(is.null(tree$tip.label)) stop("ERROR: Tree must have tip labels when specifying outgroup as character")
-		outgroup = match(outgroup, tree$tip.label)
-		if(is.na(outgroup)) stop(sprintf("ERROR: outgroup '%s' not found in tree tips",outgroup))
-	}else if(is.numeric(outgroup) && (as.integer(outgroup)==outgroup)){
-		outgroup = as.integer(outgroup)
-		if((outgroup<1) || (outgroup>Ntips)) stop(sprintf("ERROR: outgroup must be between 1 and %d (=Ntips), but instead is %d",Ntips,outgroup));
-	}else{
-		stop("ERROR: outgroup must be a character or integer")
+	# root arbitrarily if needed
+	if(!is_rooted){
+		tree = root_at_node(tree, 1, update_indices=FALSE)
 	}
 	
-	# determine parent of outgroup (note that edge directions may not make sense if the tree is unrooted)
-	# since the outgroup is a tip, there is exactly one edge connected to it, namely the edge connecting it to its parent
-	new_root_node = match(outgroup, tree$edge[,2]);
-	if(is.na(new_root_node)) match(outgroup, tree$edge[,1])
-	if(is.na(new_root_node)) stop("ERROR: Could not determine parent of outgroup; maybe the tree is a forest?") # something went wrong
+	# figure out midpoint root node
+	results = get_farthest_tip_per_clade_CPP(	Ntips					= Ntips,
+												Nnodes					= Nnodes,
+												Nedges					= nrow(tree$edge),
+												tree_edge				= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+												edge_length				= (if(as_edge_counts || is.null(tree$edge.length)) numeric() else tree$edge.length),
+												onlyToTips				= integer(),
+												only_descending_tips	= FALSE,
+												verbose					= FALSE,
+												verbose_prefix			= "");
+	new_root_node = which.min(results$farthest_distances[(Ntips+1):(Ntips+Nnodes)])
 	
-	
+	# place root at midpoint node
 	new_edges = root_tree_at_node_CPP(	Ntips			= Ntips,
 										Nnodes			= Nnodes,
 										Nedges			= nrow(tree$edge),

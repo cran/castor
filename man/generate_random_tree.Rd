@@ -107,6 +107,9 @@ Both the per-capita birth and death rates can be made into completely arbitrary 
 
 \value{
 A named list with the following elements:
+\item{success}{
+Logical, indicating whether the tree was successfully generated. If \code{FALSE}, the only other value returned is \code{error}.
+}
 \item{tree}{
 A rooted bifurcating (if \code{Nsplits==2}) or multifurcating (if \code{Nsplits>2}) tree of class "phylo", generated according to the specified birth/death model. If \code{coalescent==TRUE} or if all death rates are zero, and only if \code{as_generations==FALSE}, then the tree will be ultrametric. If \code{as_generations==TRUE} and \code{coalescent==FALSE}, all edges will have unit length.
 }
@@ -130,6 +133,9 @@ Numeric vector, listing the times of speciation events during tree growth, in or
 }
 \item{death_times}{
 Numeric vector, listing the times of extinction events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.
+}
+\item{error}{
+Character, containing an explanation of ther error that occurred. Only included if \code{success==FALSE}.
 }
 }
 

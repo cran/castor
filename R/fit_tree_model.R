@@ -10,35 +10,48 @@ fit_tree_model = function(	tree,
 							parameters				= list(),
 							first_guess				= list(),	# NULL, or a named list of initial guesses for a subset of parameters
 							min_age					= 0,		# min distance from the tree tips, for a node/tip to be considered in the fitting. Set to NULL or <=0 for no constraint. Must be <=max_age.
-							max_age	 				= 0, 		# max distance from the tree tips, for a node/tip to be considered in the fitting. Set to NULL or <=0 for no sonstraint.
+							max_age	 				= 0, 		# max distance from the tree tips, for a node/tip to be considered in the fitting. Set to NULL or <=0 or Inf for no constraint.
 							age_centile				= NULL,		# fraction of youngest nodes/tips to consider for the fitting. This can be used as an alternative to max_age. E.g. if set to 0.6, then the 60% youngest nodes/tips are considered.
 							Ntrials					= 1,
 							Nthreads				= 1,
 							coalescent				= FALSE,
-							Nsplits					= 2,		# number of splits to assume per diversification event. For bifurcating trees this should be set to 2. Mostly for experimental purposes.
+							discovery_fraction		= NULL,		# optional functional mapping age --> discovery fraction (=probability of a lineage at age tau, that has an extant descendant today, being discovered today). For example, discovery_fraction(0) equals the fraction of extant lineages represented in the tree. If this is provided, then parameters$rarefaction is fixed to 1, and the dscovery_fraction is applied after simulation. Only relevant for coalescent trees.
 							fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max, rel.tol and max.eval)
 							min_R2					= -Inf,
 							min_wR2					= -Inf,
 							grid_size				= 100,
 							max_model_runtime		= NULL,		# maximum time (in seconds) to allocate for each evaluation of a model. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 							objective				= 'LL'){ 	# either 'LL' (log-likelihood of waiting times) or 'R2' (R2 of diversity over time).
-	Ntips  = length(tree$tip.label)
-	Nnodes = tree$Nnode
-	Nedges = nrow(tree$edge)
-	max_model_runtime = (if(is.null(max_model_runtime)) 0 else max_model_runtime);
+	Ntips  				= length(tree$tip.label)
+	Nnodes 				= tree$Nnode
+	Nedges 				= nrow(tree$edge)
+	max_model_runtime 	= (if(is.null(max_model_runtime)) 0 else max_model_runtime);
 
 	if((Ntips<2) || (Nnodes<2)){
 		# tree is trivial (~empty)
 		return(list(success = FALSE, Nspeciations = 0, Nextinctions = 0, error="Tree is too small"))
 	}
+	if(is.null(min_age) || (min_age<0)) min_age = 0;
+	if(is.null(max_age) || (max_age<0) || (max_age==Inf)) max_age = NULL;
 	
 	# basic error checking
-	if(!(objective %in% c("LL","R2","wR2","lR2"))) stop(sprintf("ERROR: Unknown fitting objective '%s'",objective))
-	if((!is.null(age_centile)) && (!is.null(max_age))) stop("ERROR: Either max_age or age_centile must be non-NULL, but not both")
-	if(is.null(age_centile) && is.null(max_age)) stop("ERROR: Both max_age and age_centile are NULL; please specify one of the two")
+	if(!(objective %in% c("LL","R2","wR2","lR2",'MRD'))) stop(sprintf("ERROR: Unknown fitting objective '%s'",objective))
+	if((!is.null(age_centile)) && (!is.null(max_age))) stop("ERROR: Either a max_age or an age_centile must be specified, but not both")
+	if(is.null(age_centile) && is.null(max_age)) stop("ERROR: Both max_age and age_centile are unspecified; please specify one of the two")
 	if((!is.null(age_centile)) && (age_centile<0 || age_centile>1)) stop(sprintf("ERROR: age_centile must be between 0 and 1; was set to %g instead",age_centile))
 	if(is.null(min_R2)) min_R2   = -Inf
 	if(is.null(min_wR2)) min_wR2 = -Inf
+	if((!is.null(discovery_fraction)) && (!is.null(parameters$rarefaction)) && (!is.na(parameters$rarefaction)) && (parameters$rarefaction!=discovery_fraction(0))) stop(sprintf("Inconsistent provided rarefaction (%g) and discovery_fraction at age 0 (%g). You can just set parameters$rarefaction to NULL, to automatically adjust to the discovery_fraction at age 0",parameters$rarefaction, discovery_fraction(0)))
+	if((!is.null(discovery_fraction)) && (!coalescent)) stop("Provided non-null discovery_fraction for non-coalescent tree")
+	if(!is.null(discovery_fraction)){
+		# do not fit or consider rarefaction during simulations, so formally set to 1
+		# discovery_fraction to the entire time series will be applied after simulations
+		parameters$rarefaction  = 1
+		first_guess$rarefaction = 1
+		todays_discovery_fraction = discovery_fraction(0)
+	}else{
+		todays_discovery_fraction = NULL
+	}
 	
 	# determine age interval if needed
 	if(is.null(max_age)){
@@ -47,8 +60,8 @@ fit_tree_model = function(	tree,
 	}else{
 		age_centile = NA;
 	}
-	if(is.null(min_age) || (min_age<0)) min_age = 0;
-		
+	if(is.null(max_age)) max_age = 0;
+
 	# get waiting times between speciation and extinction events, as observed in the tree
 	events = get_speciation_extinction_events_CPP(	Ntips,
 													Nnodes,
@@ -78,6 +91,13 @@ fit_tree_model = function(	tree,
 															tree_edge	= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
 															edge_length	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
 															grid_times);
+	tree_diversity_slopes_on_grid = first_derivative(grid_times, tree_diversities_on_grid)
+	
+	# pre-calculate discovery fraction on time grid & events
+	if(!is.null(discovery_fraction)){
+		discovery_fraction_at_grid_times = discovery_fraction(max_age-grid_times)
+		if(objective=='LL') discovery_fraction_at_speciation_times = discovery_fraction(max_age-events$speciation_times)
+	}
 															
 															
 	#################################
@@ -90,6 +110,7 @@ fit_tree_model = function(	tree,
 	max_params = list();
 	fitted_parameter_names = c()
 	param_fixed = list()
+	param_constrained = list()
 	for(param_name in parameter_names){
 		value = parameters[[param_name]]
 		if(is.null(value) || (length(value)==2)){
@@ -99,9 +120,11 @@ fit_tree_model = function(	tree,
 			param_fixed[[param_name]] = TRUE
 		}
 		if((!is.null(value)) && (length(value)==2)){
+			param_constrained[[param_name]] = TRUE
 			min_params[[param_name]] = value[1]
 			max_params[[param_name]] = value[2]
 		}else{
+			param_constrained[[param_name]] = FALSE
 			min_params[[param_name]] = 0
 			max_params[[param_name]] = 1e+50
 		}
@@ -109,7 +132,6 @@ fit_tree_model = function(	tree,
 	max_params$rarefaction = max(0,min(1,max_params$rarefaction)) # special case, parameter must be within [0,1]
 	if(is.null(fitted_parameter_names) || (length(fitted_parameter_names)==0)) stop("ERROR: All model parameters are fixed")
 	NFP = length(fitted_parameter_names);
-	
 	include_speciations	= !((!is.null(parameters$birth_rate_intercept)) && (!is.null(parameters$birth_rate_factor)) && (parameters$birth_rate_intercept==0) && (parameters$birth_rate_factor==0))
 	include_extinctions	= !((!is.null(parameters$death_rate_intercept)) && (!is.null(parameters$death_rate_factor)) && (parameters$death_rate_intercept==0) && (parameters$death_rate_factor==0))
 	fit_birth_rates		= !(param_fixed$birth_rate_intercept && param_fixed$birth_rate_factor && param_fixed$birth_rate_exponent)
@@ -121,7 +143,7 @@ fit_tree_model = function(	tree,
 	# very rough first guess values
 	guessed_birth_rate_exponent = (if(param_fixed$birth_rate_exponent) parameters$birth_rate_exponent else 1)
 	guessed_rarefaction = (if(param_fixed$rarefaction) parameters$rarefaction else 1)
-	typical_params = list(	birth_rate_intercept 	= events$Nspeciations/speciation_time_range, # debug (if(guessed_birth_rate_exponent==0) events$Nspeciations/speciation_time_range else 0), 
+	typical_params = list(	birth_rate_intercept 	= events$Nspeciations/speciation_time_range,
 							birth_rate_factor 		= (tree_diversities_on_grid[grid_size]-tree_diversities_on_grid[grid_size-1])/(guessed_rarefaction*(tree_diversities_on_grid[grid_size]**guessed_birth_rate_exponent)*(grid_times[grid_size]-grid_times[grid_size-1])),
 							birth_rate_exponent 	= guessed_birth_rate_exponent, 
 							death_rate_intercept	= (if(coalescent) events$Nspeciations/speciation_time_range else events$Nextinctions/extinction_time_range),
@@ -147,7 +169,6 @@ fit_tree_model = function(	tree,
 		}
 	}
 
-
 	################################
 	# AUXILIARY FUNCTION DEFINITIONS
 	
@@ -162,9 +183,9 @@ fit_tree_model = function(	tree,
 	# objective function: negated log-likelihood of Poisson process with variable borth/death probability rates
 	objective_function = function(fitted_params){
 		params = expand_fitted_model_parameters(fitted_params);
-		if(any(is.nan(unlist(params)))) return(NaN); # catch weird cases where params become NaN
-		if(objective %in% c('R2','wR2','lR2')){
-			objective_value = get_R2_of_tree_model(params,objective)
+		if(any(is.nan(unlist(params)))) return(Inf); # catch weird cases where params become NaN
+		if(objective %in% c('R2','wR2','lR2','MRD')){
+			objective_value = get_objective_value_for_tree_model(params,objective)
 		}else if(objective=='LL'){	
 			objective_value = 0;
 			if(coalescent){
@@ -178,20 +199,22 @@ fit_tree_model = function(	tree,
 																				death_rate_factor 			= params$death_rate_factor,
 																				death_rate_exponent 		= params$death_rate_exponent,
 																				rarefaction					= params$rarefaction,
-																				Nsplits 					= Nsplits,
+																				Nsplits 					= 2,
 																				times 						= events$speciation_times,
 																				start_time					= events$max_distance_from_root,
-																				start_diversity				= Ntips,
+																				start_diversity				= Ntips/(if(is.null(todays_discovery_fraction) || (!coalescent)) 1 else todays_discovery_fraction),
 																				reverse						= coalescent,
 																				coalescent					= coalescent,
-																				include_survival_chances	= TRUE,
+																				include_probabilities		= TRUE,
 																				include_birth_rates			= TRUE,
-																				include_Nbirths				= FALSE,
+																				include_death_rates			= FALSE,
+																				include_Nevents				= FALSE,
 																				runtime_out_seconds			= max_model_runtime)
 				if(!model_predictions$success){
 					objective_value = -Inf; # simulation of deterministic model failed
 				}else{
-					apparent_birth_rates = model_predictions$birth_rates * pmax(1e-16,model_predictions$survival_chances);
+					if(!is.null(discovery_fraction)) model_predictions$Prepresentation = model_predictions$Prepresentation * discovery_fraction_at_speciation_times
+					apparent_birth_rates = model_predictions$birth_rates * pmax(1e-16,model_predictions$Prepresentation);
 					valids				 = which(apparent_birth_rates>0)
 					objective_value 	 = (sum(log(apparent_birth_rates[valids])) - sum(apparent_birth_rates[valids]*events$speciation_waiting_times[valids]))/length(valids);
 				}
@@ -208,10 +231,11 @@ fit_tree_model = function(	tree,
 				}
 			}
 		}
+		if(is.na(objective_value) || is.nan(objective_value)) objective_value = -Inf
 		return(-objective_value);
 	}
 		
-	get_R2_of_tree_model = function(params,objective){
+	get_objective_value_for_tree_model = function(params,objective){
 		simulation = simulate_deterministic_diversity_growth_CPP(	birth_rate_intercept 		= params$birth_rate_intercept,
 																	birth_rate_factor 			= params$birth_rate_factor,
 																	birth_rate_exponent 		= params$birth_rate_exponent,
@@ -219,57 +243,75 @@ fit_tree_model = function(	tree,
 																	death_rate_factor 			= params$death_rate_factor,
 																	death_rate_exponent 		= params$death_rate_exponent,
 																	rarefaction					= params$rarefaction,
-																	Nsplits 					= Nsplits,
+																	Nsplits 					= 2,
 																	times 						= grid_times,
 																	start_time					= (if(coalescent) events$max_distance_from_root else grid_times[1]),
-																	start_diversity				= (if(coalescent) Ntips else tree_diversities_on_grid[1]),
+																	start_diversity				= (if(coalescent) Ntips/(if(is.null(todays_discovery_fraction)) 1 else todays_discovery_fraction) else tree_diversities_on_grid[1]),
 																	reverse						= coalescent,
 																	coalescent					= coalescent,
-																	include_survival_chances	= FALSE,
+																	include_probabilities		= FALSE,
 																	include_birth_rates			= FALSE,
-																	include_Nbirths				= FALSE,
+																	include_death_rates			= FALSE,
+																	include_Nevents				= FALSE,
 																	runtime_out_seconds			= max_model_runtime);
 		if(!simulation$success) return(NaN);
 		predicted_diversities = simulation$diversities;
+		if(!is.null(discovery_fraction)) predicted_diversities = predicted_diversities * discovery_fraction_at_grid_times
 		if(objective=='wR2'){
-			#R2 = 1.0 - stats::weighted.mean((predicted_diversities-tree_diversities_on_grid)**2,(1.0/tree_diversities_on_grid))/variance(tree_diversities_on_grid);
-			R2 = 1.0 - mean((predicted_diversities/tree_diversities_on_grid - 1)**2)	
+			objective_value = 1.0 - mean((predicted_diversities/tree_diversities_on_grid - 1)**2)	
 		}else if(objective=='R2'){
-			R2 = 1.0 - mean((predicted_diversities-tree_diversities_on_grid)**2)/variance(tree_diversities_on_grid);
+			objective_value = 1.0 - mean((predicted_diversities-tree_diversities_on_grid)**2)/variance(tree_diversities_on_grid);
 		}else if(objective=='lR2'){
 			valids = which((predicted_diversities>0) & (tree_diversities_on_grid>0))
-			R2 = 1.0 - mean((log(predicted_diversities[valids])-log(tree_diversities_on_grid[valids]))**2)/variance(log(tree_diversities_on_grid[valids]));				
+			objective_value = 1.0 - mean((log(predicted_diversities[valids])-log(tree_diversities_on_grid[valids]))**2)/variance(log(tree_diversities_on_grid[valids]));				
+		}else if(objective=='MRD'){
+			valids = which(tree_diversities_on_grid>0)
+			objective_value = -mean(abs(predicted_diversities[valids]/tree_diversities_on_grid[valids] - 1))	
 		}
-		return(R2);
+		return(objective_value);
 	}
 
 	# fit with various starting points
 	fit_single_trial = function(trial){
 		lower_bounds = unlist(min_params[fitted_parameter_names])
 		upper_bounds = unlist(max_params[fitted_parameter_names])
-		initial_fitted_params = pmax(lower_bounds,pmin(upper_bounds,(if(trial==0) rep(1.0,times=NFP) else 10**runif(n=NFP, min=-3, max=3)) * unlist(typical_params[fitted_parameter_names])));
+		# randomly choose start values
+		initial_fitted_params = unlist(typical_params[fitted_parameter_names])
+		if(trial>1){
+			constrained  	= which(unlist(param_constrained[fitted_parameter_names]))
+			unconstrained  	= which(!unlist(param_constrained[fitted_parameter_names]))
+			if(length(constrained)>0) initial_fitted_params[constrained] 		= lower_bounds[constrained] + (upper_bounds[constrained]-lower_bounds[constrained]) * runif(n=length(constrained),min=0,max=1)
+			if(length(unconstrained)>0) initial_fitted_params[unconstrained]	= 10**runif(n=length(unconstrained), min=-2, max=2) * initial_fitted_params[unconstrained]
+		}
+		initial_fitted_params = pmax(lower_bounds,pmin(upper_bounds,initial_fitted_params))
+		# run fit
 		fit 	= stats::nlminb(initial_fitted_params, objective=objective_function, lower=lower_bounds, upper=upper_bounds, control=fit_control)
 		params 	= expand_fitted_model_parameters(fit$par);
 		if(objective=='R2'){
 			R2  = -fit$objective;
 		}else{
-			R2 = get_R2_of_tree_model(params,'R2')
+			R2 = get_objective_value_for_tree_model(params,'R2')
 		}
 		if(objective=='wR2'){
 			wR2  = -fit$objective;
 		}else{
-			wR2 = get_R2_of_tree_model(params,'wR2')
+			wR2 = get_objective_value_for_tree_model(params,'wR2')
 		}
 		if(objective=='lR2'){
 			lR2  = -fit$objective;
 		}else{
-			lR2 = get_R2_of_tree_model(params,'lR2')
+			lR2 = get_objective_value_for_tree_model(params,'lR2')
 		}
-		return(list(objective_value=-fit$objective, params = fit$par, R2=R2, wR2=wR2, lR2=lR2));
+		if(objective=='MRD'){
+			MRD  = fit$objective;
+		}else{
+			MRD = -get_objective_value_for_tree_model(params,'MRD')
+		}
+		return(list(objective_value=-fit$objective, params = fit$par, R2=R2, wR2=wR2, lR2=lR2, MRD=MRD));
 	}
 	
 	################################
-		
+
 	# run one or more independent fitting trials
     if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
 		# run trials in parallel using multiple forks
@@ -303,9 +345,6 @@ fit_tree_model = function(	tree,
 	if(length(valids)==0) return(returned_value_on_error); # fitting failed for all trials
 	best 				= valids[which.max(sapply(valids, function(i) objective_values[i]))]
 	objective_value		= fits[[best]]$objective_value;
-	R2					= fits[[best]]$R2;
-	wR2					= fits[[best]]$wR2;
-	lR2					= fits[[best]]$lR2;
 	fitted_params 		= fits[[best]]$params;
 	parameters		 	= expand_fitted_model_parameters(fitted_params);
 	if(is.null(objective_value) || any(is.na(fitted_params)) || any(is.nan(fitted_params))) return(returned_value_on_error); # fitting failed
@@ -319,23 +358,28 @@ fit_tree_model = function(	tree,
 																			death_rate_factor 			= parameters$death_rate_factor,
 																			death_rate_exponent 		= parameters$death_rate_exponent,
 																			rarefaction					= parameters$rarefaction,
-																			Nsplits 					= Nsplits,
+																			Nsplits 					= 2,
 																			times 						= grid_times,
 																			start_time					= (if(coalescent) events$max_distance_from_root else grid_times[1]),
-																			start_diversity				= (if(coalescent) Ntips else tree_diversities_on_grid[1]),
+																			start_diversity				= (if(coalescent) Ntips/(if(is.null(todays_discovery_fraction)) 1 else todays_discovery_fraction) else tree_diversities_on_grid[1]),
 																			reverse						= coalescent,
 																			coalescent					= coalescent,
-																			include_survival_chances	= FALSE,
+																			include_probabilities		= FALSE,
 																			include_birth_rates			= FALSE,
-																			include_Nbirths				= FALSE,
+																			include_death_rates			= FALSE,
+																			include_Nevents				= FALSE,
 																			runtime_out_seconds			= 0)$diversities;
+	if(!is.null(discovery_fraction)) model_diversities_on_grid = model_diversities_on_grid * discovery_fraction_at_grid_times
 	
+	# return results
+	if(!is.null(discovery_fraction)) parameters$rarefaction	= todays_discovery_fraction # indicate effective rarefaction (=discovery_fraction at age 0)
 	return(list(success						= TRUE,
-				objective_value				= objective_value, 
+				objective_value				= (if(objective=='MRD') -objective_value else objective_value), 
 				parameters					= parameters, 
-				R2							= R2,
-				wR2							= wR2,
-				lR2							= lR2,
+				R2							= fits[[best]]$R2,
+				wR2							= fits[[best]]$wR2,
+				lR2							= fits[[best]]$lR2,
+				MRD							= fits[[best]]$MRD,
 				Nspeciations				= events$Nspeciations, 
 				Nextinctions				= events$Nextinctions,
 				grid_times					= grid_times,
@@ -362,5 +406,12 @@ back = function(X){
 
 
 sprint_tree_parameters = function(parameters, separator){
-	return(sprintf("birth_rate_intercept = %g%sbirth_rate_factor = %g%sbirth_rate_exponent = %g%sdeath_rate_intercept = %g%sdeath_rate_factor = %g%sdeath_rate_exponent = %g%srarefaction = %g",parameters$birth_rate_intercept,separator,parameters$birth_rate_factor,separator,parameters$birth_rate_exponent,separator,parameters$death_rate_intercept,separator,parameters$death_rate_factor,separator,parameters$death_rate_exponent,parameters$rarefaction))
+	return(sprintf("birth_rate_intercept = %g%sbirth_rate_factor = %g%sbirth_rate_exponent = %g%sdeath_rate_intercept = %g%sdeath_rate_factor = %g%sdeath_rate_exponent = %g%srarefaction = %g",parameters$birth_rate_intercept,separator,parameters$birth_rate_factor,separator,parameters$birth_rate_exponent,separator,parameters$death_rate_intercept,separator,parameters$death_rate_factor,separator,parameters$death_rate_exponent,separator,parameters$rarefaction))
+}
+
+
+first_derivative = function(times, values){
+	slopes = diff(values)/diff(times);
+	slopes = c(slopes[1],slopes) # add one more identical point to the end to keep the same size as the original time series
+	return(slopes)
 }

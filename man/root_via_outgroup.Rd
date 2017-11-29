@@ -1,10 +1,10 @@
 \name{root_via_outgroup}
 \alias{root_via_outgroup}
 \title{
-Root or re-root a tree based on an outgroup.
+Root or re-root a tree based on an outgroup tip.
 }
 \description{
-Given a tree (rooted or unrooted) and a specific tip or node (``outgroup''), this function changes the direction of edges (\code{tree$edge}) such that the outgroup's parent node becomes the root. The number of tips and the number of nodes remain unchanged.
+Given a tree (rooted or unrooted) and a specific tip (``outgroup''), this function changes the direction of edges (\code{tree$edge}) such that the outgroup's parent node becomes the root. The number of tips and the number of nodes remain unchanged.
 }
 \usage{
 root_via_outgroup(tree, outgroup, update_indices=TRUE)
@@ -14,7 +14,7 @@ root_via_outgroup(tree, outgroup, update_indices=TRUE)
 A tree object of class "phylo". Can be unrooted or rooted.
 }
 \item{outgroup}{
-Character or integer specifying the name or index, respectively, of the outgroup tip/node. If an integer, it must be between 1 and Ntips+Nnodes. If a character, it must be a valid entry in \code{tree$tip.label}.
+Character or integer specifying the name or index, respectively, of the outgroup tip. If an integer, it must be between 1 and Ntips. If a character, it must be a valid entry in \code{tree$tip.label}.
 }
 \item{update_indices}{
 Logical, specifying whether to update the node indices such that the new root is the first node in the list (as is common convention). This will modify \code{tree$node.label} (if it exists) and also the node indices listed in \code{tree$edge}.
@@ -30,7 +30,7 @@ If \code{update_indices==TRUE} (default), then node indices are modified such th
 }
 
 \value{
-A tree object of class "phylo", with the \code{edge} element modified such that the outgroup's parent node is root. The elements \code{tip.label}, \code{edge.length} and \code{root.edge} (if they exist) are the same as for the input tree. If \code{update_indices==FALSE}, then the element \code{node.label} will also remain the same.
+A tree object of class "phylo", with the \code{edge} element modified such that the outgroup tip's parent node is root. The elements \code{tip.label}, \code{edge.length} and \code{root.edge} (if they exist) are the same as for the input tree. If \code{update_indices==FALSE}, then the element \code{node.label} will also remain the same.
 }
 
 \author{Stilianos Louca}
@@ -40,7 +40,8 @@ A tree object of class "phylo", with the \code{edge} element modified such that 
 
 \seealso{
 \code{\link{root_at_node}},
-\code{\link{find_root}}
+\code{\link{root_at_midpoint}},
+\code{\link{root_in_edge}}
 }
 
 \examples{

@@ -32,7 +32,7 @@ Tip labels and uncollapsed node labels of the collapsed tree are inheritted from
 \value{
 A list with the following elements:
 \item{tree}{
-A new rooted tree of class "phylo", containing the trimmed tree.
+A new rooted tree of class "phylo", representing the trimmed tree.
 }
 \item{Nedges_trimmed}{
 Integer. Number of edges trimmed (shortened).
@@ -80,4 +80,3 @@ cat(sprintf("Trimmed tree has \%d tips\n",length(trimmed$tip.label)))
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{pruning}
-\keyword{subtree}

@@ -23,7 +23,7 @@ asr_mk_model = function(tree,
     Nnodes 			= tree$Nnode;
     Nedges 			= nrow(tree$edge);
 	loglikelihood 	= NULL; # value will be calculated as we go
-	return_value_on_failure = list(loglikelihood=NULL,	transition_matrix=NULL, ancestral_likelihoods=NULL);
+	return_value_on_failure = list(success=FALSE, loglikelihood=NULL, transition_matrix=NULL, ancestral_likelihoods=NULL);
 	
 	# create tip priors if needed
 	if((!is.null(tip_states)) && (!is.null(tip_priors))) stop("ERROR: tip_states and tip_priors are both non-NULL, but exactly one of them should be NULL")
@@ -106,7 +106,6 @@ asr_mk_model = function(tree,
 		objective_function = function(dense_rates){
 			if(any(is.nan(dense_rates)) || any(is.infinite(dense_rates))) return(1e+50);
 			Q = get_transition_matrix_from_rate_vector(dense_rates, index_matrix, Nstates);
-			#eigendecomposition = get_eigendecomposition_if_available(Q);
 			results = ASR_with_fixed_rates_Markov_model_CPP(Ntips 							= Ntips,
 															Nnodes							= Nnodes,
 															Nedges							= Nedges,
@@ -123,7 +122,7 @@ asr_mk_model = function(tree,
 															exponentiation_accuracy			= 1e-3,
 															max_polynomials					= 1000,
 															store_exponentials				= store_exponentials);
-			loglikelihood = if(is.na(results$loglikelihood)) -Inf else results$loglikelihood;
+			loglikelihood = if(is.na(results$loglikelihood) || is.nan(results$loglikelihood)) -Inf else results$loglikelihood;
 			return(-loglikelihood);
 		}
 		# fit starting with various starting_rates, keep track of best fit
@@ -165,16 +164,24 @@ asr_mk_model = function(tree,
 				fits[[trial]] = fit_single_trial(trial)
 			}
     	}
+    	
 
 		# extract information from best fit (note that some fits may have LL=NaN or NA)
-		LLs 				= sapply(1:Ntrials, function(trial) fits[[trial]]$LL)
-		valids				= which((!is.na(LLs)) & (!is.nan(LLs)) & (!is.null(LLs)))
-		if(length(valids)==0) return(return_value_on_failure); # fitting failed for all trials
+		LLs 	= sapply(1:Ntrials, function(trial) fits[[trial]]$LL)
+		pars	= sapply(1:Ntrials, function(trial) fits[[trial]]$fit$par)
+		valids 	= which((!is.na(LLs)) & (!is.nan(LLs)) & (!is.null(LLs)) & (!is.na(pars)) & (!is.nan(pars)) & (!is.null(pars)))
+		if(length(valids)==0){
+			return_value_on_failure$error = "Fitting failed for all trials"
+			return(return_value_on_failure);
+		}
 		best 				= valids[which.max(sapply(valids, function(i) LLs[i]))]
 		loglikelihood		= fits[[best]]$LL;
 		fitted_rates 		= fits[[best]]$fit$par;
 		transition_matrix 	= get_transition_matrix_from_rate_vector(fitted_rates, index_matrix, Nstates);			
-		if(is.null(loglikelihood) || any(is.na(fitted_rates)) || any(is.nan(fitted_rates))) return(return_value_on_failure); # fitting failed
+		if(is.null(loglikelihood) || any(is.na(fitted_rates)) || any(is.nan(fitted_rates))){
+			return_value_on_failure$error = "Fitting yielded NaN loglikelihood and/or rates"
+			return(return_value_on_failure);
+		}
     }else{
 		if(check_input){
 			# make sure this is a valid transition matrix
@@ -218,9 +225,9 @@ asr_mk_model = function(tree,
 	
 	# return results
 	if(include_ancestral_likelihoods){
-		return(list(transition_matrix=transition_matrix, loglikelihood=loglikelihood, ancestral_likelihoods=ancestral_likelihoods));
+		return(list(success=TRUE, transition_matrix=transition_matrix, loglikelihood=loglikelihood, ancestral_likelihoods=ancestral_likelihoods));
 	}else{
-		return(list(transition_matrix=transition_matrix, loglikelihood=loglikelihood));
+		return(list(success=TRUE, transition_matrix=transition_matrix, loglikelihood=loglikelihood));
 	}
 }
 

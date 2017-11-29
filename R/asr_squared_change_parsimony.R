@@ -6,7 +6,7 @@
 # 	Tree can also include edges with length zero (will be adjusted internally to some small epsilon if weighted==TRUE).
 #	Tree must be rooted.
 asr_squared_change_parsimony = function(tree, 
-										tip_states, 	# numeric vector of size Ntips
+										tip_states, 		# numeric vector of size Ntips
 										weighted	= TRUE,
 										check_input	= TRUE){
 	Ntips  = length(tree$tip.label)
@@ -25,6 +25,7 @@ asr_squared_change_parsimony = function(tree,
 													edge_length	= (if((!weighted) || (is.null(tree$edge.length))) numeric() else tree$edge.length),
 													tip_states	= tip_states,
 													global		= TRUE);
-	return(list(total_sum_of_squared_changes=results$TSS,
-				ancestral_states=results$ancestral_states));
+	return(list(success							= TRUE,
+				total_sum_of_squared_changes 	= results$TSS,
+				ancestral_states				= results$ancestral_states));
 }

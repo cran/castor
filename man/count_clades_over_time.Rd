@@ -7,7 +7,12 @@ Count number of clades over time.
 Given a rooted phylogenetic tree whose edge lengths represent time intervals, calculate the number of clades at various time points (e.g., spanning from 0 to the maximum time of any tip). The root is interpreted as time 0, and the distance of any node or tip from the root is interpreted as time elapsed since the root. This function defines an equidistant sequence of time points, and counts how many edges "cross" each time point. Optionally, the slopes and relative slopes of the clade-counts-vs-time curve are also returned. The slopes and relative slopes are approximations for the species birth rate and the per-capita species birth rate (assuming no extinctions occurred).
 }
 \usage{
-count_clades_over_time(tree, Ntimes=NULL, times=NULL, include_slopes=FALSE)
+count_clades_over_time( tree, 
+                        Ntimes        = NULL, 
+                        min_time      = NULL,
+                        max_time      = NULL,
+                        times         = NULL, 
+                        include_slopes= FALSE)
 }
 \arguments{
 \item{tree}{
@@ -15,6 +20,12 @@ A rooted tree of class "phylo", where edge lengths represent time intervals (or 
 }
 \item{Ntimes}{
 Integer, number of equidistant time points for which to calculade clade counts. Can also be \code{NULL}, in which case \code{times} must be provided.
+}
+\item{min_time}{
+Minimum time (distance from root) to consider. If \code{NULL}, this will be set to the minimum possible (i.e. 0). Only relevant if \code{times==NULL}.
+}
+\item{max_time}{
+Maximum time (distance from root) to consider. If \code{NULL}, this will be set to the maximum possible. Only relevant if \code{times==NULL}.
 }
 \item{times}{
 Integer vector, listing time points (in ascending order) for which to calculate clade counts. Can also be \code{NULL}, in which case \code{Ntimes} must be provided.
@@ -28,7 +39,7 @@ Logical, specifying whether the slope and the relative slope of the returned cla
 \details{
 If \code{tree$edge.length} is missing, then every edge in the tree is assumed to be of length 1. The tree may include multi-furcations as well as mono-furcations (i.e. nodes with only one child). The tree need not be ultrametric, although in general this function only makes sense for dated trees (e.g., where edge lengths are time intervals or similar).
 
-Either \code{Ntimes} or \code{times} must be non-\code{NULL}, but not both.
+Either \code{Ntimes} or \code{times} must be non-\code{NULL}, but not both. If \code{times!=NULL}, then \code{min_time} and \code{max_time} must be \code{NULL}.
 }
 
 

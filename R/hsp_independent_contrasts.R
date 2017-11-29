@@ -27,7 +27,8 @@ hsp_independent_contrasts = function(	tree,
 											tip_states 	= known_tip_states, 
 											weighted 	= weighted,
 											check_input = FALSE);
-													
+	if(!asr_results$success) return(list(success=FALSE))
+
 	# forward-project reconstructions to tips with hidden state
 	states 									= rep(0, times=Ntips+Nnodes);
 	states[known2all_tips] 					= known_tip_states;
@@ -42,7 +43,8 @@ hsp_independent_contrasts = function(	tree,
 														states_known	= states_known,
 														states			= states);
 		
-	return(list(total_sum_of_squared_changes = asr_results$TSS,
+	return(list(success = TRUE,
+				total_sum_of_squared_changes = asr_results$TSS,
 				states = states))
 }
 

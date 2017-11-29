@@ -12,14 +12,14 @@ where \eqn{B} is the birth rate, \eqn{I} is the intercept, \eqn{F} is the power-
 }
 \usage{
 simulate_diversification_model( times,
-                                parameters      = list(),
-                                Nsplits         = 2,
-                                start_time      = NULL,
-                                start_diversity	= 1,
-                                coalescent      = FALSE,
-                                reverse         = FALSE,
-                                include_Nbirths = FALSE,
-                                max_runtime     = NULL)
+                                parameters          = list(),
+                                start_time          = NULL,
+                                start_diversity	    = 1,
+                                coalescent          = FALSE,
+                                reverse             = FALSE,
+                                include_event_rates = FALSE,
+                                include_Nevents     = FALSE,
+                                max_runtime         = NULL)
 }
 \arguments{
 \item{times}{
@@ -46,9 +46,6 @@ Non-negative number. The power-law factor of the Poissonian rate at which extant
 Numeric. The power-law exponent of the Poissonian rate at which extant species (tips) go extinct. Unitless.
 
 }
-\item{Nsplits}{
-Integer greater than 1. Nnumber of splits to assume per diversification event. For bifurcating trees this should be set to 2. Mostly for experimental purposes.
-}
 \item{start_time}{
 Numeric. If \code{reverse==FALSE} (see below), then this is the start time of the tree (<=\code{times[1]}). If \code{reverse==TRUE}, then this is the final time of the tree (>=\code{max(times)}). Can also be \code{NULL}, in which case it is set to the first or last value in \code{times} (depending on \code{reverse}).
 }
@@ -62,7 +59,10 @@ Logical, specifying whether the diversity corresponding to a coalescent tree (i.
 \item{reverse}{
 Logical. If \code{TRUE}, then the tree model is simulated in backward time direction. In that case, \code{start_diversity} is interpreted as the known diversity at the last time point, and all diversities at previous time points are calculated based on the model. If \code{FALSE}, then the model is simulated in forward-time.
 }
-\item{include_Nbirths}{
+\item{include_event_rates}{
+Logical. If \code{TRUE}, then the birth (speciation) and death (extinction) rates (for each time point) are included as returned values. This comes at a moderate computational overhead.
+}
+\item{include_Nevents}{
 Logical. If \code{TRUE}, then the cumulative birth (speciation) and death (extinction) events (for each time point) are included as returned values. This comes at a moderate computational overhead.
 }
 \item{max_runtime}{
@@ -71,8 +71,9 @@ Numeric. Maximum runtime (in seconds) allowed for the simulation. If this time i
 }
 
 
-%\details{
-%}
+\details{
+In the special case where per-capita birth and death rates are constant (i.e. \eqn{I=0} and \eqn{E=1} for birth and death rates), this function uses an explicit analytical solution to the underlying differential equations, and is thus much faster than in the general case.
+}
 
 
 \value{
@@ -83,11 +84,17 @@ Logical, indicating whether the simulation was successful. If the simulation abo
 \item{diversities}{
 Numeric vector of the same size as \code{times}, listing the diversity (if \code{coalescent==FALSE}) or the subset of diversity seen in the coalescent tree (if \code{coalescent==TRUE}), for each time point in \code{times}.
 }
+\item{birth_rates}{
+Numeric vector of the same size as \code{times}, listing the speciation (birth) rate at each time point. Only relevant if \code{include_event_rates==TRUE}.
+}
+\item{death_rates}{
+Numeric vector of the same size as \code{times}, listing the extinction (death) rate at each time point. Only relevant if \code{include_event_rates==TRUE}.
+}
 \item{Nbirths}{
-Numeric vector of the same size as \code{times}, listing the cumulative number of speciation (birth) events up to each time point. Only relevant if \code{include_Nspeciations==TRUE}.
+Numeric vector of the same size as \code{times}, listing the cumulative number of speciation (birth) events up to each time point. Only relevant if \code{include_Nevents==TRUE}.
 }
 \item{Ndeaths}{
-Numeric vector of the same size as \code{times}, listing the cumulative number of extinction (death) events up to each time point. Only relevant if \code{include_Nspeciations==TRUE}.
+Numeric vector of the same size as \code{times}, listing the cumulative number of extinction (death) events up to each time point. Only relevant if \code{include_Nevents==TRUE}.
 }
 }
 

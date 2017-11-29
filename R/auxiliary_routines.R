@@ -83,36 +83,6 @@ map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_inp
 
 
 
-collapse_monofurcations = function(tree, force_keep_root=TRUE, as_edge_counts=FALSE){
-	Ntips 	= length(tree$tip.label)
-	Nnodes	= tree$Nnode
-	Nedges	= nrow(tree$edge)
-	
-	results = get_tree_with_collapsed_monofurcations_CPP(	Ntips 			= length(tree$tip.label),
-															Nnodes			= tree$Nnode,
-															Nedges			= nrow(tree$edge),
-															tree_edge		= as.vector(t(tree$edge)) - 1,
-															edge_length		= (if(is.null(tree$edge.length) || as_edge_counts) numeric() else tree$edge.length),
-															force_keep_root = force_keep_root);
-	# reformat results into a valid "phylo" object
-	# note that some of the old nodes may have turned into new tips
-	Nnodes_new	 	= results$Nnodes_new
-	new2old_node	= results$new2old_node + 1; # switch to 1-based indices
-	collapsed_tree = list(	Nnode 		= Nnodes_new,
-							tip.label 	= tree$tip.label,
-							node.label 	= (if(is.null(tree$node.label)) NULL else tree$node.label[new2old_node]),
-							edge 		= matrix(results$new_tree_edge,ncol=2,byrow=TRUE) + 1,
-							edge.length = (if(is.null(tree$edge.length)) NULL else results$new_edge_length),
-							root 		= results$new_root+1)
-	class(collapsed_tree) = "phylo";
-	
-	return(list(tree			= collapsed_tree, 
-				new2old_node	= new2old_node, 
-				Nnodes_removed	= Nnodes-Nnodes_new));
-}
-
-
-
 
 # given a Markov transition rate matrix, calculate the transition probability matrix conditional upon a single transition occurring
 # input: Q[i,j] is probability rate of transition i-->j
@@ -127,20 +97,36 @@ get_conditional_transition_probabilities = function(Q){
 
 
 
-# extend the terminal edges (edges leading to tips) so that each tip has the same fixed distance (new_height) from the root
-# if a tip already extends beyond the specified new_height, its incoming edge remains unchanged
-# this is a quick-and-dirty way to make the tree ultrametric
-# if new_height<0 or new_height==NULL, then it is set to the max_distance_to_root of the input tree
-extend_tree_to_height = function(tree, new_height=NULL){
-	results = extend_tree_to_height_CPP(	Ntips 			= length(tree$tip.label),
-											Nnodes			= tree$Nnode,
-											Nedges			= nrow(tree$edge),
-											tree_edge		= as.vector(t(tree$edge)) - 1,
-											edge_length		= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
-											new_height 		= (if(is.null(new_height)) -1.0 else new_height));
-	tree$edge.length = results$new_edge_length;
-	return(list(tree=tree, max_extension=results$max_extension))
+find_edge_splitting_tree = function(tree, target_tips, is_rooted=FALSE){
+	Ntips 	= length(tree$tip.label)
+	Nnodes 	= tree$Nnode
+	if(is.character(target_tips)){
+		# target tips are given as names, not indices
+		indices	= match(target_tips, tree$tip.label)
+		if(any(is.na(indices))) stop(sprintf("ERROR: Some target_tips (e.g. '%s') were not found in the tree",target_tips[which(is.na(indices))[1]]))
+		target_tips = indices
+	}
+	
+	results = find_edge_splitting_tree_CPP(	Ntips				= Ntips,
+											Nnodes				= tree$Nnode,
+											Nedges				= nrow(tree$edge),
+											tree_edge			= as.vector(t(tree$edge)) - 1,	# flatten in row-major format and adjust clade indices to 0-based
+											is_rooted			= is_rooted,
+											target_tips			= target_tips - 1,
+											include_misplaced 	= TRUE)
+													
+	return(list(edge					= (if(results$edge<0) NA else as.integer(results$edge+1)),
+				Nmisplaced_targets		= results$Nmisplaced_targets,
+				Nmisplaced_nontargets	= results$Nmisplaced_nontargets,
+				Ntargets_upstream 		= results$Ntargets_upstream,
+				Ntargets_downstream 	= results$Ntargets_downstream,
+				misplaced_targets		= results$misplaced_targets,
+				misplaced_nontargets	= results$misplaced_nontargets));
+				
 }
+
+
+
 
 
 

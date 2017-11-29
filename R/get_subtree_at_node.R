@@ -10,7 +10,8 @@ get_subtree_at_node = function(tree, node){
 		node_i = match(node, tree$node.label)
 		if(is.na(node_i)) stop(sprintf("ERROR: node '%s' not found in tree nodes",node))
 		node = node_i
-	}else if(is.integer(node)){
+	}else if(is.numeric(node) && (as.integer(node)==node)){
+		node = as.integer(node)
 		if((node<1) || (node>Nnodes)) stop(sprintf("ERROR: node must be between 1 and %d (=Nnodes), but instead is %d",Nnodes,node));
 	}else{
 		stop("ERROR: node must be a character or integer")

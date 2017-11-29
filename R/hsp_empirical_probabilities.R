@@ -36,6 +36,7 @@ hsp_empirical_probabilities = function(	tree,
 												Nstates 		= Nstates, 
 												probabilities 	= TRUE, 
 												check_input 	= FALSE);
+	if(!asr_results$success) return(list(success=FALSE))
 	Nstates = ncol(asr_results$ancestral_likelihoods);
 													
 	# forward-project reconstructions to tips with hidden state
@@ -56,7 +57,7 @@ hsp_empirical_probabilities = function(	tree,
 	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
 		
-	return(list(likelihoods=likelihoods))
+	return(list(likelihoods=likelihoods, success=TRUE))
 }
 
 

@@ -13,12 +13,16 @@ smoothenTimeSeriesSavitzkyGolay_CPP <- function(times, data, windowTimeSpan, win
     .Call('castor_smoothenTimeSeriesSavitzkyGolay_CPP', PACKAGE = 'castor', times, data, windowTimeSpan, windowIndexSpan, order)
 }
 
-simulate_deterministic_diversity_growth_CPP <- function(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_survival_chances, include_birth_rates, include_Nbirths, runtime_out_seconds) {
-    .Call('castor_simulate_deterministic_diversity_growth_CPP', PACKAGE = 'castor', birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_survival_chances, include_birth_rates, include_Nbirths, runtime_out_seconds)
+simulate_deterministic_diversity_growth_CPP <- function(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds) {
+    .Call('castor_simulate_deterministic_diversity_growth_CPP', PACKAGE = 'castor', birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds)
 }
 
 reconstruct_past_diversity_from_coalescent_CPP <- function(times, raw_coalescent_diversities, birth_rates_pc, rarefaction, max_age, smoothing_span, smoothing_order) {
     .Call('castor_reconstruct_past_diversity_from_coalescent_CPP', PACKAGE = 'castor', times, raw_coalescent_diversities, birth_rates_pc, rarefaction, max_age, smoothing_span, smoothing_order)
+}
+
+reconstruct_past_diversity_from_biased_coalescent_CPP <- function(times, raw_coalescent_diversities, birth_rates_pc, discovery_fractions, discovery_fraction_slopes, max_age, smoothing_span, smoothing_order) {
+    .Call('castor_reconstruct_past_diversity_from_biased_coalescent_CPP', PACKAGE = 'castor', times, raw_coalescent_diversities, birth_rates_pc, discovery_fractions, discovery_fraction_slopes, max_age, smoothing_span, smoothing_order)
 }
 
 reconstruct_past_diversifications_CPP <- function(times, raw_diversities, birth_rates_pc, rarefaction, Nsplits, max_age, smoothing_span, smoothing_order) {
@@ -57,6 +61,10 @@ get_total_tip_count_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
     .Call('castor_get_total_tip_count_per_node_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge)
 }
 
+get_mean_depth_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
+    .Call('castor_get_mean_depth_per_node_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length)
+}
+
 get_min_max_tip_distance_from_root_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
     .Call('castor_get_min_max_tip_distance_from_root_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
@@ -69,6 +77,10 @@ get_closest_tip_per_clade_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge
     .Call('castor_get_closest_tip_per_clade_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips, only_descending_tips, verbose, verbose_prefix)
 }
 
+get_farthest_tip_per_clade_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips, only_descending_tips, verbose, verbose_prefix) {
+    .Call('castor_get_farthest_tip_per_clade_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips, only_descending_tips, verbose, verbose_prefix)
+}
+
 get_distance_matrix_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_clades, verbose, verbose_prefix) {
     .Call('castor_get_distance_matrix_between_clades_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_clades, verbose, verbose_prefix)
 }
@@ -77,8 +89,8 @@ get_distances_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, e
     .Call('castor_get_distances_between_clades_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, cladesA, cladesB, verbose, verbose_prefix)
 }
 
-count_clades_at_regular_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, include_slopes) {
-    .Call('castor_count_clades_at_regular_times_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, include_slopes)
+count_clades_at_regular_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, include_slopes) {
+    .Call('castor_count_clades_at_regular_times_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, include_slopes)
 }
 
 count_clades_at_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, times) {
@@ -111,6 +123,14 @@ get_subtree_at_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, new_root_n
 
 get_subtree_with_specific_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tips_to_keep, collapse_monofurcations, force_keep_root) {
     .Call('castor_get_subtree_with_specific_tips_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, tips_to_keep, collapse_monofurcations, force_keep_root)
+}
+
+find_root_for_monophyletic_clade_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, is_rooted, target_tips, as_MRCA) {
+    .Call('castor_find_root_for_monophyletic_clade_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, is_rooted, target_tips, as_MRCA)
+}
+
+find_edge_splitting_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, is_rooted, target_tips, include_misplaced) {
+    .Call('castor_find_edge_splitting_tree_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, is_rooted, target_tips, include_misplaced)
 }
 
 collapse_tree_at_resolution_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, resolution, shorten, criterion) {
@@ -223,6 +243,10 @@ apply_MPR_to_missing_clades_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree
 
 ASR_via_squared_change_parsimony_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, global) {
     .Call('castor_ASR_via_squared_change_parsimony_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, global)
+}
+
+ASR_via_independent_contrasts_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, include_standard_errors) {
+    .Call('castor_ASR_via_independent_contrasts_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, include_standard_errors)
 }
 
 apply_BM_parsimony_to_missing_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, states_known, states) {

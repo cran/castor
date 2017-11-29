@@ -12,18 +12,19 @@ find_root(tree)
 %- maybe also 'usage' for other objects documented here.
 \arguments{
 \item{tree}{
-A tree of class "phylo".
+A tree of class "phylo". If the tree is not rooted, the function will return \code{NA}.
 }
 }
 
 
 \details{
-By convention, the root of a "phylo" tree is typically the first node (i.e. with index \code{length(tree$tip.label)+1}), however this is not always guaranteed. This function finds the root of a tree by searching for the node with no parent. If no root exists, NA is returned. If multiple roots exist (this should generally not happen), only one of them will be returned.
+By convention, the root of a "phylo" tree is typically the first node (i.e. with index Ntips+1), however this is not always guaranteed. This function finds the root of a tree by searching for the node with no parent. If no such node exists, \code{NA} is returned. If multiple such nodes exist, \code{NA} is returned. If any node has more than 1 parent, \code{NA} is returned. Hence, this function can be used to test if a tree is rooted purely based on the edge structure, assuming that the tree is connected (i.e. not a forest).
+
 The asymptotic time complexity of this function is O(Nedges), where Nedges is the number of edges in the tree.
 }
 
 \value{
-Index of the tree's root, as listed in \code{tree$edge}. An integer ranging from Ntips+1 to Ntips+Nnodes, where Ntips and Nnodes is the number of tips and nodes in the tree, respectively. Typically (but not always), the root will be Ntips+1.
+Index of the tree's root, as listed in \code{tree$edge}. An integer ranging from Ntips+1 to Ntips+Nnodes, where Ntips and Nnodes is the number of tips and nodes in the tree, respectively. By convention, the root will typically be Ntips+1 but this is not guaranteed.
 }
 
 
@@ -33,7 +34,9 @@ Index of the tree's root, as listed in \code{tree$edge}. An integer ranging from
 %}
 
 \seealso{
-\code{\link{root_at_node}}
+\code{\link{find_root_of_monophyletic_tips}},
+\code{\link{root_at_node}},
+\code{\link{root_at_midpoint}}
 }
 
 \examples{

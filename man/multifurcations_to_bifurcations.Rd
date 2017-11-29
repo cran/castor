@@ -56,8 +56,9 @@ Integer. Number of nodes added to the new tree.
 %\references{
 %}
 
-%\seealso{
-%}
+\seealso{
+\code{\link{collapse_monofurcations}}
+}
 
 \examples{
 # generate a random multifurcating tree

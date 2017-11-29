@@ -4,12 +4,14 @@
 Find nearest tip to each tip & node of a tree.
 }
 \description{
-Given a phylogenetic tree and a subset of potential target tips, for each tip and node in the clade find the nearest target tip. The set of target tips can also be taken as the whole set of tips in the tree.
+Given a rooted phylogenetic tree and a subset of potential target tips, for each tip and node in the clade find the nearest target tip. The set of target tips can also be taken as the whole set of tips in the tree.
 }
 \usage{
-find_nearest_tips(tree, only_descending_tips=FALSE, 
-                  target_tips=NULL, as_edge_counts=FALSE, 
-                  check_input=TRUE)
+find_nearest_tips(tree, 
+                  only_descending_tips = FALSE, 
+                  target_tips          = NULL, 
+                  as_edge_counts       = FALSE, 
+                  check_input          = TRUE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -34,7 +36,7 @@ Logical, whether to perform basic validations of the input data. If you know for
 \details{
 Langille et al. (2013) introduced the Nearest Sequenced Taxon Index (NSTI) as a measure for how well a set of microbial operational taxonomic units (OTUs) is represented by a set of sequenced genomes of related organisms. Specifically, the NSTI of a microbial community is the average phylogenetic distance of any OTU in the community, to the closest relative with an available sequenced genome ("target tips"). In analogy to the NSTI, the function \code{find_nearest_tips} provides a means to find the nearest tip (from a subset of target tips) to each tip and node in a phylogenetic tree, together with the corresponding phylogenetic ("patristic") distance. 
 
-If \code{only_descending_tips} is \code{TRUE}, then only descending target tips are considered when searching for the closest target tip of a node/tip. In that case, if a node/tip has no descending target tip, its nearest target tip is set to NA. If \code{tree$edge.length} is missing or NULL, then each edge is assumed to have length 1. The tree may include multi-furcations as well as mono-furcations (i.e. nodes with only one child).
+If \code{only_descending_tips} is \code{TRUE}, then only descending target tips are considered when searching for the nearest target tip of a node/tip. In that case, if a node/tip has no descending target tip, its nearest target tip is set to NA. If \code{tree$edge.length} is missing or NULL, then each edge is assumed to have length 1. The tree may include multi-furcations as well as mono-furcations (i.e. nodes with only one child).
 
 The asymptotic time complexity of this function is O(Nedges), where Nedges is the number of edges in the tree.
 }
@@ -63,9 +65,9 @@ Integer vector of size Nnodes. Phylogenetic ("patristic") distance of each node 
 M. G. I. Langille, J. Zaneveld, J. G. Caporaso et al (2013). Predictive functional profiling of microbial communities using 16S rRNA marker gene sequences. Nature Biotechnology. 31:814-821.
 }
 
-%\seealso{
-%\code{\link{ps_ouss}}
-%}
+\seealso{
+\code{\link{find_farthest_tips}}
+}
 
 \examples{
 # generate a random tree

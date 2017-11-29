@@ -40,6 +40,7 @@ hsp_max_parsimony = function(	tree,
 									transition_costs = transition_costs, 
 									edge_exponent = edge_exponent, 
 									weight_by_scenarios = weight_by_scenarios);
+	if(!asr_results$success) return(list(success=FALSE, likelihoods=NULL))
 	Nstates = ncol(asr_results$ancestral_likelihoods);
 													
 	# forward-project reconstructions to tips with hidden state
@@ -60,7 +61,7 @@ hsp_max_parsimony = function(	tree,
 	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
 		
-	return(list(likelihoods=likelihoods))
+	return(list(likelihoods=likelihoods, success=TRUE))
 }
 
 

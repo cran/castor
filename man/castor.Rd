@@ -21,7 +21,7 @@ Stilianos Louca
 Maintainer: Stilianos Louca <louca@zoology.ubc.ca>
 }
 \references{
-S. Louca, L. W. Parfrey and M. Doebeli (in review). Efficient computations on large phylogenetic trees.
+S. Louca and M. Doebeli (2017). Efficient comparative phylogenetics on large trees. Bioinformatics. DOI:10.1093/bioinformatics/btx701
 }
 %\examples{
 %  \dontrun{

@@ -96,6 +96,9 @@ If \code{tree$edge.length} is missing, each edge in the tree is assumed to have 
 
 \value{
 A list with the following elements:
+\item{success}{
+Logical, indicating whether ASR was successful. If \code{FALSE}, all other return values may be \code{NULL}.
+}
 \item{transition_matrix}{
 A numeric quadratic matrix of size Nstates x Nstates, containing the transition rates of the Markov model. The [r,c]-th entry is the transition rate from state r to state c. Will be the same as the input \code{transition_matrix}, if the latter was not \code{NULL}.
 }

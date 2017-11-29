@@ -41,7 +41,8 @@ A tree object of class "phylo", with the \code{edge} element modified such that 
 
 \seealso{
 \code{\link{root_via_outgroup}},
-\code{\link{find_root}}
+\code{\link{root_at_midpoint}},
+\code{\link{root_in_edge}}
 }
 
 \examples{

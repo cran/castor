@@ -70,7 +70,10 @@ hsp_mk_model = function(tree,
 	Nstates 			= ncol(asr_results$ancestral_likelihoods);
 	loglikelihood 		= asr_results$loglikelihood
 	transition_matrix 	= asr_results$transition_matrix
-	if(is.null(loglikelihood) || is.nan(loglikelihood) || is.null(asr_results$ancestral_likelihoods)) return(list(loglikelihood=NULL, transition_matrix=NULL, likelihoods=NULL)); # ASR failed
+	if((!asr_results$success) || is.null(loglikelihood) || is.nan(loglikelihood) || is.null(asr_results$ancestral_likelihoods)){
+		# ASR failed
+		return(list(success=FALSE, loglikelihood=NULL, transition_matrix=NULL, likelihoods=NULL, error=sprintf("ASR failed: %s",asr_results$error)));
+	}
 	
 	# forward-project posteriors to tips with hidden state
 	likelihoods = matrix(0, nrow=(Ntips+Nnodes), ncol=Nstates);
@@ -100,7 +103,8 @@ hsp_mk_model = function(tree,
 	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
 		
-	return(list(transition_matrix=transition_matrix, 
-				loglikelihood=loglikelihood, 
-				likelihoods=likelihoods));
+	return(list(transition_matrix	= transition_matrix, 
+				loglikelihood 		= loglikelihood, 
+				likelihoods			= likelihoods,
+				success				= TRUE));
 }

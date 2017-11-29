@@ -87,5 +87,5 @@ asr_max_parsimony = function(	tree,
 											weight_posteriors_by_scenario_counts	= weight_by_scenarios,	# (INPUT) if true, then the posterior_probability of a state (in a specific node) is proportional to the number of scenarios in which the trait is at that state
 											verbose									= FALSE,
 											verbose_prefix							= "");
-	return(list(ancestral_likelihoods=ancestral_likelihoods));
+	return(list(ancestral_likelihoods=ancestral_likelihoods, success=TRUE));
 }

@@ -11,7 +11,7 @@
 #	Tree must be rooted.
 get_independent_contrasts = function(	tree, 							# a phylogenetic tree of class "phylo"
 										tip_states, 					# numeric vector of size Ntips
-										scaled			 	= TRUE,		# rescale PICs by their corresponding distances (typically done to standardize their variances)
+										scaled			 	= TRUE,		# rescale PICs by the square root of their corresponding distances (typically done to standardize their variances)
 										only_bifurcations 	= FALSE,	# if TRUE, then only existing bifurcating nodes are considered. Multifurcations will not be expanded.
 										check_input			= TRUE){
 	Ntips  	= length(tree$tip.label)
@@ -41,7 +41,10 @@ get_independent_contrasts = function(	tree, 							# a phylogenetic tree of clas
 	nodes = 1 + results$nodes; # shift indices C++ to R
 	if(!only_bifurcations) nodes[nodes<=0] = NA; # May include NA, indicating temporary nodes created during expansion of multifurcations
 		
-	return(list(PICs		= PICs,					# either a vector of size Npics, or a 2D matrix of size Npics x Ntraits
-				distances	= results$distances,	# phylogenetic distances corresponding to the PICs (in units of edge lengths), analogous to the edge length spanning each PIC
-				nodes		= nodes));				# indices of nodes for which PICs are returned
+	return(list(PICs				= PICs,					# either a vector of size Npics, or a 2D matrix of size Npics x Ntraits
+				distances			= results$distances,	# phylogenetic distances corresponding to the PICs (in units of edge lengths), analogous to the edge length spanning each PIC
+				nodes				= nodes,				# indices of nodes for which PICs are returned
+				root_state			= results$root_state,	# (1D array of size Ntraits) globally estimated state for the root
+				root_standard_error	= results$root_standard_error,	# (1D array of size Ntraits) standard error for the root (under a Brownian motion model)
+				root_CI95			= stats::qt(0.975, df=length(PICs))*results$root_standard_error));
 }

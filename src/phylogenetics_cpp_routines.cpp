@@ -337,26 +337,49 @@ Rcpp::List dense_binary_matrix_row2column_major_CPP(const long 			NR,
 }
 
 
+template<typename TYPE>
+inline void aux_qsortIndices_swap(std::vector<TYPE> &X, long A, long B, TYPE &temp){
+	temp = X[A];
+	X[A] = X[B];
+	X[B] = temp;
+}
+
 
 template<typename TYPE>
 long aux_qsortIndices_partition(const std::vector<TYPE> &values, std::vector<long> &indices, long start, long end){
-	const long pi = start+(end-start)/2; //middle
-	const TYPE &pv = values[indices[pi]];
 	long temp;
 	
-	// swap
-	temp = indices[pi]; indices[pi] = indices[end]; indices[end] = temp;
+	// choose pivot at middle
+	const long pi = start+(end-start)/2;
+	
+	// Alternative: choose pivot via median-of-three rule
+	/*
+	long pi = start+(end-start)/2;
+	if(values[indices[end]] < values[indices[start]]){
+		aux_qsortIndices_swap(indices, start, end, temp);
+	}
+	if(values[indices[pi]] < values[indices[start]]){
+		aux_qsortIndices_swap(indices, start, pi, temp);
+	}
+	if(values[indices[end]] < values[indices[pi]]){
+		aux_qsortIndices_swap(indices, end, pi, temp);
+	}
+	*/
+	const TYPE pv = values[indices[pi]];
+	
+	// swap (put pivot temporarily at end)
+	aux_qsortIndices_swap(indices, pi, end, temp);
 	
 	long si = start;
 	for(long i=start; i<end; ++i){
-		if(values[indices[i]] < pv){
+		if((values[indices[i]] < pv) || ((values[indices[i]]==pv) && (i%2==0))){ // modified condition of incrementing partition point, to avoid worst-case-scenarios when all (or many) values are equal
 			// swap
-			temp = indices[i]; indices[i] = indices[si]; indices[si] = temp;
+			aux_qsortIndices_swap(indices, i, si, temp);
 			++si;
 		}
 	}
-	// swap
-	temp = indices[si]; indices[si] = indices[end]; indices[end] = temp;
+	// swap (place pivot onto si)
+	aux_qsortIndices_swap(indices, si, end, temp);
 	
 	return si;
 }
@@ -443,6 +466,25 @@ double smallest_nonzero_time_step(const std::vector<double> &times){
 	return S;
 }
 
+
+// inverse cumulative distribution function of the Student's t distribution with n degrees of freedom
+// Returns t such that P(x<=t) = p
+// Approximation according to:
+//    Abramowitz and Stegun (1970). Handbook of mathematical functions. Page 949
+//    Voutier (2010). A New Approximation to the Normal Distribution Quantile Function. arXiv:1002.0567
+double quantile_Students_t(double p, long n){
+	if(p<0.5) return -quantile_Students_t(1-p,n); // the approximation formula below is only valid for p>0.5 (i.e. q<0.5)
+	double q = 1-p;
+	const double A = sqrt(-2*log(q));
+	//const double xq = A - (2.515517 + 0.802853*A + 0.010328*SQ(A))/(1 + 1.432788*A + 0.189269*SQ(A) + 0.001308*Qube(A));// [Abramowitz and Stegun (1970). Page 933, formula 26.2.23]
+	const double xq = A - (2.653962002601684482 + 1.561533700212080345*A + 0.061146735765196993*SQ(A))/(1 + 1.904875182836498708*A + 0.454055536444233510*SQ(A) + 0.009547745327068945*Qube(A));// [Voutier (2010). A New Approximation to the Normal Distribution Quantile Function. arXiv:1002.0567. Pages 5-6]
+	const double g1 = 0.25 * (Qube(xq) + xq);
+	const double g2 = (1.0/96) * (5*pow(xq,5) + 16*Qube(xq) + 3*xq);
+	const double g3 = (1.0/384) * (3*pow(xq,7) + 19*pow(xq,5) + 17*pow(xq,3) - 15*xq);
+	const double g4 = (1.0/92160) * (79*pow(xq,9) + 776*pow(xq,7) + 1482*pow(xq,5) - 1920*Qube(xq) - 945*xq);
+	double tq = xq + g1/n + g2/SQ(n) + g3/Qube(n) + g4/QTR(n); // [Abramowitz and Stegun (1970). Page 949]
+	return tq;
+}
 
 
 
@@ -1518,6 +1560,12 @@ MathError fitLinearRegression(double pointsX[], double pointsY[], long count, do
 }
 
 
+double get_average(double values[], long count){
+	double S = 0;
+	for(long i=0; i<count; ++i) S += values[i];
+	return S/count;
+}
+
 
 MathError fitLinearRegressionNANSensitive(double pointsX[], double pointsY[], long count, double &slope, double &offset){
 	double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
@@ -1985,7 +2033,8 @@ bool smoothenTimeSeriesSavitzkyGolay(	const TIME_ARRAY	&times,				// time points
 										const VALUE_ARRAY	&data, 	
 										double				windowTimeSpan,		// span of fitting window in time units. Ignored if <=0.
 										long				windowIndexSpan,	// span of fitting window in terms of the number of data points included (will be rounded up to nearest odd number). Can be used as an alternative to windowTimeSpan. Ignored if <=1.
-										int					order,			
+										int					order,
+										const bool			allow_less_data_at_edges, // only relevant if windowIndexSpan is used
 										vector<double> 		&smoothenedData){
 	if(times.size() != data.size()) return false;
 	if((order<0) || (order>4)) return false;
@@ -2005,8 +2054,10 @@ bool smoothenTimeSeriesSavitzkyGolay(	const TIME_ARRAY	&times,				// time points
 		if(windowIndexSpan>1){
 			nl = n-windowIndexSpan/2;
 			nr = n+windowIndexSpan/2;
-			if(nl<0) nr += (0-nl); // shift to the right since we're at the left edge
-			else if(nr>=N) nl -= (nr-N+1); // shift to the left since we're at the right edge
+			if(!allow_less_data_at_edges){
+				if(nl<0) nr += (0-nl); // shift to the right since we're at the left edge
+				else if(nr>=N) nl -= (nr-N+1); // shift to the left since we're at the right edge
+			}
 		}else{
 			const double tl = t-windowTimeSpan/2;
 			const double tr = t+windowTimeSpan/2;
@@ -2050,6 +2101,9 @@ bool smoothenTimeSeriesSavitzkyGolay(	const TIME_ARRAY	&times,				// time points
 			// fit polynomial using least squares and evaluate at centre point
 			localOrder = (int)min(distinctTimePoints-1,(long)order); // if too few data points available, use lower order
 			switch(localOrder){
+			case 0:
+				smoothenedData[n] = get_average(&localData[0], M);
+				break;
 			case 1: 
 				fitLinearRegressionNANSensitive(&localTimes[0], &localData[0], M, coeff_B, coeff_A); 
 				smoothenedData[n] = coeff_A + t*coeff_B;
@@ -2065,7 +2119,7 @@ bool smoothenTimeSeriesSavitzkyGolay(	const TIME_ARRAY	&times,				// time points
 			case 4:
 				fitLeastSquares_Quartic(localTimes, localData, coeff_A, coeff_B, coeff_C, coeff_D, coeff_E, 1e-6);	
 				smoothenedData[n] = coeff_A + t*coeff_B + SQ(t)*coeff_C + Qube(t)*coeff_D + QTR(t)*coeff_E;
-				break;	
+				break;
 			}
 		}
 	}
@@ -2081,7 +2135,7 @@ Rcpp::List smoothenTimeSeriesSavitzkyGolay_CPP(	const NumericVector	&times,				/
 												long				windowIndexSpan,	// span of fitting window in terms of the number of data points included (will be rounded up to nearest odd number). Can be used as an alternative to windowTimeSpan. Ignored if <=1.
 												int					order){
 	std::vector<double> smoothened_data;
-	const bool success = smoothenTimeSeriesSavitzkyGolay(times, data, windowTimeSpan, windowIndexSpan, order, smoothened_data);
+	const bool success = smoothenTimeSeriesSavitzkyGolay(times, data, windowTimeSpan, windowIndexSpan, order, true, smoothened_data);
 	return Rcpp::List::create(	Rcpp::Named("success") 			= success,
 								Rcpp::Named("smoothened_data") 	= smoothened_data);
 }
@@ -2367,7 +2421,7 @@ void LinearInterpolationFunctor<VALUE_TYPE>::set_to_regular_grid_values(long 			
 	referencePoints.clear(); 
 	referenceValues.clear();
 	if(referenceCount == 0) return;
-	
+		
 	referenceValues.resize(referenceCount);
 	for(long i=0; i<referenceCount; ++i){
 		referenceValues[i] = _referenceValues[i];
@@ -2384,7 +2438,7 @@ void LinearInterpolationFunctor<VALUE_TYPE>::set_to_regular_grid_values(long 			
 	if(periodic){
 		double boundaryValue 	= (referenceValues[0] + referenceValues[referenceCount-1])/2.0;
 		referenceValues[0] 		= referenceValues[referenceCount-1] = boundaryValue;
-	}															
+	}
 }
 
 
@@ -2411,7 +2465,7 @@ VALUE_TYPE LinearInterpolationFunctor<VALUE_TYPE>::operator()(double x) const{
 	const long referenceCount = referenceValues.size();
 	if(periodic){
 		x = moduloInterval(x, domain_min, domain_max);
-	}else if((x <= domain_min) || ( x >= domain_max)){
+	}else if((x < domain_min) || ( x > domain_max)){
 		// requested x is outside of the reference domain
 		return out_of_scope_value;
 	}
@@ -2494,9 +2548,10 @@ public:
 	double Nbirths;			// cumulative number of speciation events since the beginning of a simulation
 	double Ndeaths;			// cumulative number of extinction events since the beginning of a simulation
 	double Pextinction;		// extinction probability of a size-1 clade until max time. Only makes sense for simulations performed in reverse.
+	double Pmissing;		// probability of a size-1 clade missing at max time (either extinction or not discovered). Only makes sense for simulations performed in reverse.
 	TreeStateHistory(){ diversity = Nbirths = Ndeaths = Pextinction = 0; }
-	TreeStateHistory(const double start_diversity){ diversity = start_diversity; Nbirths = Ndeaths = 0; Pextinction = 0; }
-	bool isnan() const{ return (std::isnan(diversity) || std::isnan(Nbirths) || std::isnan(Ndeaths) || std::isnan(Pextinction)); }
+	TreeStateHistory(const double start_diversity){ diversity = start_diversity; Nbirths = Ndeaths = 0; Pextinction = 0; Pmissing = 0; }
+	bool isnan() const{ return (std::isnan(diversity) || std::isnan(Nbirths) || std::isnan(Ndeaths) || std::isnan(Pextinction) || std::isnan(Pmissing)); }
 };
 
 
@@ -2505,15 +2560,17 @@ inline TreeStateHistory operator*(TreeStateHistory x, double scalar){
 	x.Nbirths 		*= scalar;
 	x.Ndeaths 		*= scalar;
 	x.Pextinction 	*= scalar;
+	x.Pmissing	 	*= scalar;
 	return x;
 }
 
 
 TreeStateHistory& operator*=(TreeStateHistory &x, double scalar) {
 	x.diversity 	*= scalar;
-	x.Nbirths 	*= scalar;
-	x.Ndeaths 	*= scalar;
+	x.Nbirths 		*= scalar;
+	x.Ndeaths 		*= scalar;
 	x.Pextinction	*= scalar;
+	x.Pmissing		*= scalar;
 	return x;
 }
 
@@ -2523,15 +2580,17 @@ inline TreeStateHistory operator+(TreeStateHistory x, const TreeStateHistory &y)
 	x.Nbirths 		+= y.Nbirths;
 	x.Ndeaths 		+= y.Ndeaths;
 	x.Pextinction	+= y.Pextinction;
+	x.Pmissing		+= y.Pmissing;
 	return x;
 }
 
 
 inline TreeStateHistory &operator+=(TreeStateHistory &x, const TreeStateHistory &y){
 	x.diversity 	+= y.diversity;
-	x.Nbirths 	+= y.Nbirths;
-	x.Ndeaths 	+= y.Ndeaths;
+	x.Nbirths 		+= y.Nbirths;
+	x.Ndeaths 		+= y.Ndeaths;
 	x.Pextinction	+= y.Pextinction;
+	x.Pmissing		+= y.Pmissing;
 	return x;
 }
 
@@ -2541,6 +2600,7 @@ inline TreeStateHistory operator-(TreeStateHistory x, const TreeStateHistory &y)
 	x.Nbirths 		-= y.Nbirths;
 	x.Ndeaths 		-= y.Ndeaths;
 	x.Pextinction	-= y.Pextinction;
+	x.Pmissing		-= y.Pmissing;
 	return x;
 }
 
@@ -2550,6 +2610,7 @@ inline TreeStateHistory &operator-=(TreeStateHistory &x, const TreeStateHistory 
 	x.Nbirths 		-= y.Nbirths;
 	x.Ndeaths 		-= y.Ndeaths;
 	x.Pextinction	-= y.Pextinction;
+	x.Pmissing		-= y.Pmissing;
 	return x;
 }
 
@@ -2559,6 +2620,7 @@ inline TreeStateHistory operator/(TreeStateHistory x, const TreeStateHistory &y)
 	x.Nbirths 		/= y.Nbirths;
 	x.Ndeaths 		/= y.Ndeaths;
 	x.Pextinction	/= y.Pextinction;
+	x.Pmissing		/= y.Pmissing;
 	return x;
 }
 
@@ -2568,6 +2630,7 @@ inline TreeStateHistory operator/(TreeStateHistory x, double scalar){
 	x.Nbirths 		/= scalar;
 	x.Ndeaths 		/= scalar;
 	x.Pextinction	/= scalar;
+	x.Pmissing		/= scalar;
 	return x;
 }
 
@@ -2577,6 +2640,7 @@ inline TreeStateHistory &operator/=(TreeStateHistory &x, double scalar){
 	x.Nbirths 		/= scalar;
 	x.Ndeaths 		/= scalar;
 	x.Pextinction	/= scalar;
+	x.Pmissing		/= scalar;
 	return x;
 }
 
@@ -2585,7 +2649,8 @@ inline TreeStateHistory &operator/=(TreeStateHistory &x, double scalar){
 // class for species speciation-extinction model for tree generation
 // includes integration of cumulative birth & death events
 // can be integrated in reverse (time counted backwards) as well as in forward direction
-// When integrated in reverse, the extinction probability P(t,T) is also simulated
+// When integrated in reverse, the extinction probability Pextinction(t,T) and the probability of missing Pmissing are also simulated
+// In any case, the simulated diversity is the true (total) extant diversity at any time. To make the simulated time series coalescent, use make_coalescent() afterwards.
 class TreeSpeciationExtinctionModel{
 	double 	min_valid_diversity;
 	bool 	reverse;
@@ -2617,34 +2682,41 @@ public:
 	}
 	
 	
-	// calculate extinction probabilities, by integrating in reverse
+	// calculate probabilities fo extinction and missing, by integrating in reverse
 	// this should be done after the end of a simulation, since the ODE's has initial condition and rate of change depends on the final trajectory of diversity
 	// assumes that times[] are in ascending order
-	void calculate_extinction_probabilities(){
+	void calculate_probabilities(){
 		const long NMT = times.size();
-		trajectory[NMT-1].Pextinction = (1.0-rarefaction); // probability of extinction begins at (1-rarefacton_fraction)
+		trajectory[NMT-1].Pextinction = 0; 					// probability of extinction begins at 0
+		trajectory[NMT-1].Pmissing = (1.0-rarefaction); 	// probability of missing begins at (1-rarefacton_fraction)
 		for(long t=NMT-2; t>=0; --t){
 			const double birth_rate_pc = get_speciation_rate_at_state(times[t+1],trajectory[t+1].diversity)/trajectory[t+1].diversity;
 			const double death_rate_pc = get_extinction_rate_at_state(times[t+1],trajectory[t+1].diversity)/trajectory[t+1].diversity;
 			const double dt = times[t+1]-times[t];
 			trajectory[t].Pextinction = trajectory[t+1].Pextinction + dt*(death_rate_pc - trajectory[t+1].Pextinction*(birth_rate_pc+death_rate_pc) + pow(trajectory[t+1].Pextinction,Nsplits)*birth_rate_pc);
+			trajectory[t].Pmissing	  = trajectory[t+1].Pmissing + dt*(death_rate_pc - trajectory[t+1].Pmissing*(birth_rate_pc+death_rate_pc) + pow(trajectory[t+1].Pmissing,Nsplits)*birth_rate_pc);
 		}
 	}
 	
 	
-	// adjust (reduce) diversities time series to reflect a coalescent tree, based on the diversities & Pextinctions
+	// adjust (reduce) diversities time series to reflect a coalescent tree, based on the diversities & Pmissing
 	void make_coalescent(){
-		if(!reverse) calculate_extinction_probabilities();  // if not integrated in reverse, then Pextinctions still need to be calculated
+		if(!reverse) calculate_probabilities();  // if not integrated in reverse, then Pmissing still need to be calculated
 		for(long t=0; t<times.size(); ++t){
-			trajectory[t].diversity *= (1-trajectory[t].Pextinction);
+			trajectory[t].diversity *= (1-trajectory[t].Pmissing);
 		}
 	}
 
 	bool getInitialState(double time, TreeStateHistory &state) const{ 
 		state = TreeStateHistory(initial_diversity); 
-		state.Pextinction = rarefaction;
-		if(reverse) state.Pextinction = (1.0-rarefaction);
-		else state.Pextinction = 0; // not implemented for forward integration; Pextinction can be calculated afterwards (in reverse) using calculate_extinction_probabilities()
+		if(reverse){
+			state.Pextinction = 0;
+			state.Pmissing = (1.0-rarefaction);
+		}else{
+			// not implemented for forward integration; Pextinction & Pmissing can be calculated afterwards (in reverse) using calculate_probabilities()
+			state.Pextinction = 0;
+			state.Pmissing = 0;
+		}
 		return true; 
 	}
 
@@ -2652,7 +2724,10 @@ public:
 	void registerState(double time, const TreeStateHistory &state){
 		trajectory.push_back(state); 
 		times.push_back(time); 
-		if(reverse) trajectory.back().Pextinction = min(1.0,max(0.0,trajectory.back().Pextinction));
+		if(reverse){
+			trajectory.back().Pextinction = min(1.0,max(0.0,trajectory.back().Pextinction));
+			trajectory.back().Pmissing = min(1.0,max(0.0,trajectory.back().Pmissing));
+		}
 	}
 
 	double get_speciation_rate_at_state(double time, const double diversity) const{
@@ -2665,15 +2740,21 @@ public:
 
 	RequestedDynamics getRateOfChangeAtState(double time, const TreeStateHistory &current_state, TreeStateHistory &rate_of_change, TreeStateHistory &jump_state){
 		if(reverse) time = reflection_time-time;
-		const double N = current_state.diversity;
-		const double P = current_state.Pextinction;
-		const double B = get_speciation_rate_at_state(time,current_state.diversity);
-		const double D = get_extinction_rate_at_state(time,current_state.diversity);
-		rate_of_change.Nbirths = B;
-		rate_of_change.Ndeaths = D;
+		const double N 	= current_state.diversity;
+		const double Pe = current_state.Pextinction;
+		const double Pm = current_state.Pmissing;
+		const double B 	= get_speciation_rate_at_state(time,current_state.diversity);
+		const double D 	= get_extinction_rate_at_state(time,current_state.diversity);
+		rate_of_change.Nbirths 		= B;
+		rate_of_change.Ndeaths 		= D;
 		rate_of_change.diversity 	= (Nsplits-1)*B - D;
-		if(reverse) rate_of_change.Pextinction	= D/N - P*(B+D)/N + pow(P,Nsplits)*B/N;
-		else rate_of_change.Pextinction = 0; // not implemented for forward integration
+		if(reverse){
+			rate_of_change.Pextinction	= D/N - Pe*(B+D)/N + pow(Pe,Nsplits)*B/N;
+			rate_of_change.Pmissing		= D/N - Pm*(B+D)/N + pow(Pm,Nsplits)*B/N;
+		}else{
+			rate_of_change.Pextinction = 0; // not implemented for forward integration
+			rate_of_change.Pmissing = 0; // not implemented for forward integration			
+		}
 		if(reverse) rate_of_change.diversity = -rate_of_change.diversity;
 		return RequestedDynamicsRateOfChange; 
 	}
@@ -2681,7 +2762,7 @@ public:
 	// returns true if for some reason the time step should be refined, e.g. if the domain boundary is crossed
 	bool checkShouldRefineTimeStep(double time, const TreeStateHistory &current_state, double dt, const TreeStateHistory &candidate_state) const{ 
 		if(reverse){
-			return (candidate_state.diversity<min_valid_diversity) || (candidate_state.Pextinction<0) || (candidate_state.Pextinction>1); 
+			return (candidate_state.diversity<min_valid_diversity) || (candidate_state.Pextinction<0) || (candidate_state.Pextinction>1) || (candidate_state.Pmissing<0) || (candidate_state.Pmissing>1); 
 		}else{
 			return (candidate_state.diversity<min_valid_diversity);
 		}
@@ -2705,6 +2786,7 @@ public:
 		}else{
 			candidateState.diversity 	= max(min_valid_diversity,candidateState.diversity);
 			candidateState.Pextinction 	= min(1.0,max(0.0,candidateState.Pextinction));
+			candidateState.Pmissing 	= min(1.0,max(0.0,candidateState.Pmissing));
 			return CrossedBoundaryYesButFixedBruteForce;
 		}
 		/*
@@ -2944,101 +3026,133 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 														const double		start_diversity,		// (INPUT) diversity of extant clades at start_time. If reverse==true, this is the visible diversity after rarefaction.
 														const bool			reverse,				// (OUTPUT) if true, then the tree model is integrated in backward time direction. In that case, start_diversity is interpreted as the true diversity at times.back()
 														const bool			coalescent,				// (INPUT) if true, the diversities at any time are replaced by the diversities that would remain in a coalescent tree (i.e. only including ancestors of extant tips)
-														const bool			include_survival_chances,	// (INPUT) if true, the survival probabilities of clades (for each time point) will also be returned
+														const bool			include_probabilities,	// (INPUT) if true, then Prepresentation (for each time point) will also be returned. This only makes sense for reverse integrations
 														const bool			include_birth_rates,		// (INPUT) if true, the speciation rates corresponding to times[] will also be returned
-														const bool			include_Nbirths,			// (INPUT) if true, then the total predicted birth events (up to each time point) will also be calculated and returned
+														const bool			include_death_rates,		// (INPUT) if true, the extinction rates corresponding to times[] will also be returned
+														const bool			include_Nevents,			// (INPUT) if true, then the total predicted birth events (starting from times[0] and up to each time point) will also be calculated and returned
 														const double		runtime_out_seconds){		// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.
 	const long NT = times.size();
 	const double max_time = (reverse ? start_time : times[NT-1]);
-
-	// initialize model for tree growth
-	TreeSpeciationExtinctionModel model;
-	model.birth_rate_intercept 	= birth_rate_intercept;
-	model.birth_rate_factor 	= birth_rate_factor;
-	model.birth_rate_exponent 	= birth_rate_exponent;
-	model.death_rate_intercept 	= death_rate_intercept;
-	model.death_rate_factor 	= death_rate_factor;
-	model.death_rate_exponent 	= death_rate_exponent;
-	model.Nsplits				= Nsplits;
-	model.initial_diversity		= (reverse ? 1.0/rarefaction : 1.0) * start_diversity; // for curves simulated in reverse, apply the rarefaction to the initial condition (i.e. increase diversity from tau=0 to tau=epsilon)
-	model.rarefaction			= (coalescent ? rarefaction : 1.0); // if not coalescent, ignore effects of rarefaction (i.e. simulate true diversities)
-	if(reverse) model.set_reverse(max_time);
 	
-	// run simulation
-	string warningMessage;
-	const double default_dt = min((max_time-times[0])/NT, (reverse ? 1e-2*rarefaction*start_diversity/model.estimate_max_rate_of_change(max_time, start_diversity,false) : (max_time-times[0])/NT)); // guess appropriate simulation time step
-	const bool success = RungeKutta2<TreeStateHistory,TreeSpeciationExtinctionModel,ProgressReporter>
-								((reverse ? 0 : times[0]),
-								default_dt+(reverse ? max_time-times[0] : max_time),
-								default_dt,
-								model,
-								10*times.size(),
-								2l,
-								ProgressReporter(true),
-								runtime_out_seconds,
-								warningMessage);
-	const long NMT = model.times.size();
-	if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = warningMessage ); // simulation failed
+	// prepare returned data structures, fill later
+	std::vector<double> birth_rates, death_rates, Nbirths, Ndeaths;
+	std::vector<double> diversities, Psurvival, Prepresentation;
+	
+	if((birth_rate_intercept==0) && (birth_rate_exponent==1) && (death_rate_intercept==0) && (death_rate_exponent==1) && (Nsplits==2)){
+		// special case: constant per-capita speciation & extinction rates
+		// use known analytical solutions
+		diversities.resize(NT);
+		if(include_probabilities){
+			Psurvival.resize(NT);
+			Prepresentation.resize(NT);
+		}
+		if(include_birth_rates) birth_rates.resize(NT);
+		if(include_death_rates) death_rates.resize(NT);
+		if(include_Nevents){ 
+			Nbirths.resize(NT); 
+			Ndeaths.resize(NT); 
+		}
+		const double diversification_rate = birth_rate_factor-death_rate_factor;
+		double Pmissing;
+		for(long t=0; t<NT; ++t){
+			const double age = max_time - times[t];
+			if(birth_rate_factor==death_rate_factor){
+				Pmissing = 1 - rarefaction/(1+rarefaction*age*birth_rate_factor);
+			}else{
+				Pmissing = 1 - rarefaction*diversification_rate/(rarefaction*birth_rate_factor + ((1-rarefaction)*birth_rate_factor - death_rate_factor)*exp(-age*diversification_rate));
+			}
+			if(include_probabilities){
+				if(birth_rate_factor==death_rate_factor){
+					Psurvival[t] = 1/(1+age*birth_rate_factor);
+				}else{
+					Psurvival[t] = diversification_rate/(birth_rate_factor - death_rate_factor*exp(-age*diversification_rate));
+				}
+				Prepresentation[t] = 1-Pmissing;
+			}
+			if(reverse){
+				diversities[t] = (start_diversity/rarefaction) * exp(-age*diversification_rate);
+			}else{
+				diversities[t] = start_diversity * exp((times[t]-start_time)*diversification_rate);
+			}
+			if(include_birth_rates) birth_rates[t] = birth_rate_factor * diversities[t];
+			if(include_death_rates) death_rates[t] = death_rate_factor * diversities[t];
+			if(include_Nevents){
+				Nbirths[t] = diversities[0]*(birth_rate_factor/diversification_rate) * (exp(diversification_rate*(times[t]-times[0])) - 1);
+				Ndeaths[t] = diversities[0]*(death_rate_factor/diversification_rate) * (exp(diversification_rate*(times[t]-times[0])) - 1);
+			}
+			if(coalescent) diversities[t] *= (1-Pmissing); // make coalescent
+		}
 		
-	if(reverse){
-		// reverse time course of trajectory
-		TreeStateHistory state;
-		double time;
-		for(long t=0, s; t<NMT/2; ++t){
-			s = NMT-t-1;
-			state = model.trajectory[t];
-			model.trajectory[t] = model.trajectory[s];
-			model.trajectory[s] = state;
-			time = model.times[t];
-			model.times[t] = model.times[s];
-			model.times[s] = time;
+	}else{
+		// general case: integrate ODEs using Runge-Kutta
+
+		// initialize model for tree growth
+		TreeSpeciationExtinctionModel model;
+		model.birth_rate_intercept 	= birth_rate_intercept;
+		model.birth_rate_factor 	= birth_rate_factor;
+		model.birth_rate_exponent 	= birth_rate_exponent;
+		model.death_rate_intercept 	= death_rate_intercept;
+		model.death_rate_factor 	= death_rate_factor;
+		model.death_rate_exponent 	= death_rate_exponent;
+		model.Nsplits				= Nsplits;
+		model.initial_diversity		= (reverse ? 1.0/rarefaction : 1.0) * start_diversity; // for curves simulated in reverse, undo the rarefaction for the initial condition (i.e. increase diversity from tau=0 to tau=epsilon)
+		model.rarefaction			= rarefaction;
+		if(reverse) model.set_reverse(max_time);
+		
+		// run simulation
+		// note that simulation a priori calculates total extant diversities over time, we make the diversities coalescent afterwards
+		string warningMessage;
+		const double default_dt = min((max_time-times[0])/NT, (reverse ? 1e-1*rarefaction*start_diversity/model.estimate_max_rate_of_change(max_time, start_diversity,false) : (max_time-times[0])/NT)); // guess appropriate simulation time step
+		const bool success = RungeKutta2<TreeStateHistory,TreeSpeciationExtinctionModel,ProgressReporter>
+									((reverse ? 0 : times[0]),
+									default_dt+(reverse ? max_time-times[0] : max_time),
+									default_dt,
+									model,
+									10*times.size(),
+									2l,
+									ProgressReporter(true),
+									runtime_out_seconds,
+									warningMessage);
+		const long NMT = model.times.size();
+		if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = warningMessage ); // simulation failed
+		
+		if(reverse){
+			// reverse time course of trajectory
+			TreeStateHistory state;
+			double time;
+			for(long t=0, s; t<NMT/2; ++t){
+				s = NMT-t-1;
+				state = model.trajectory[t];
+				model.trajectory[t] = model.trajectory[s];
+				model.trajectory[s] = state;
+				time = model.times[t];
+				model.times[t] = model.times[s];
+				model.times[s] = time;
+			}
+			// correct direction of accumulation of time, Nbirths & Ndeaths
+			const double max_Nbirths = model.trajectory[0].Nbirths;
+			const double max_Ndeaths = model.trajectory[0].Ndeaths;
+			for(long t=0; t<NMT; ++t){
+				model.times[t] = max_time - model.times[t];
+				model.trajectory[t].Nbirths = max_Nbirths - model.trajectory[t].Nbirths;
+				model.trajectory[t].Ndeaths = max_Ndeaths - model.trajectory[t].Ndeaths;
+			}
 		}
-		// correct direction of accumulation of time, Nbirths & Ndeaths
-		const double max_Nbirths = model.trajectory[0].Nbirths;
-		const double max_Ndeaths = model.trajectory[0].Ndeaths;
-		for(long t=0; t<NMT; ++t){
-			model.times[t] = max_time - model.times[t];
-			model.trajectory[t].Nbirths = max_Nbirths - model.trajectory[t].Nbirths;
-			model.trajectory[t].Ndeaths = max_Ndeaths - model.trajectory[t].Ndeaths;
-		}
-	}
-					
-	// adjust (reduce) past diversities to reflect a coalescent tree
-	// note that the effects of rarefaction are taken into account here
-	if(coalescent) model.make_coalescent();
+
+		// adjust (reduce) past diversities to reflect a coalescent tree
+		// note that the effects of rarefaction are taken into account here
+		if(coalescent) model.make_coalescent();
 	
-	// extract diversities from simulated trajectory
-	std::vector<double> model_diversities(NMT);
-	for(long t=0; t<NMT; ++t){
-		model_diversities[t] = model.trajectory[t].diversity;
-	}
-				
-	// interpolate simulated trajectory on requested time points
-	long includedNewTimesStart, includedNewTimesEnd;
-	std::vector<double> diversities;
-	interpolateTimeSeriesAtTimes(	model.times,
-									model_diversities,
-									0,
-									NMT-1,
-									times,
-									0,
-									NT-1,
-									includedNewTimesStart,
-									includedNewTimesEnd,
-									diversities);
-									
-	// calculate clade survival chances for requested time points
-	// this only makes sense for reverse integrations
-	std::vector<double> survival_chances;
-	if(include_survival_chances){
- 		// extract from model trajectory
- 		std::vector<double> model_survival_chances(NMT);
+		// extract diversities from simulated trajectory
+		std::vector<double> model_diversities(NMT);
 		for(long t=0; t<NMT; ++t){
-			model_survival_chances[t] = 1-model.trajectory[t].Pextinction;
+			model_diversities[t] = model.trajectory[t].diversity;
 		}
-		// interpolate onto requested time points
+				
+		// interpolate simulated trajectory on requested time points
+		long includedNewTimesStart, includedNewTimesEnd;
 		interpolateTimeSeriesAtTimes(	model.times,
-										model_survival_chances,
+										model_diversities,
 										0,
 										NMT-1,
 										times,
@@ -3046,37 +3160,77 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 										NT-1,
 										includedNewTimesStart,
 										includedNewTimesEnd,
-										survival_chances);
-	}
+										diversities);
+									
+		// calculate probabilities of lineage survival & representation for requested time points
+		// this only makes sense for reverse integrations
+		if(include_probabilities){
+			// extract from model trajectory
+			std::vector<double> model_Prepresentation(NMT);
+			std::vector<double> model_Psurvival(NMT);
+			for(long t=0; t<NMT; ++t){
+				model_Psurvival[t] = 1-model.trajectory[t].Pextinction;
+				model_Prepresentation[t] = 1-model.trajectory[t].Pmissing;
+			}
+			// interpolate onto requested time points
+			interpolateTimeSeriesAtTimes(	model.times,
+											model_Prepresentation,
+											0,
+											NMT-1,
+											times,
+											0,
+											NT-1,
+											includedNewTimesStart,
+											includedNewTimesEnd,
+											Prepresentation);
+			interpolateTimeSeriesAtTimes(	model.times,
+											model_Psurvival,
+											0,
+											NMT-1,
+											times,
+											0,
+											NT-1,
+											includedNewTimesStart,
+											includedNewTimesEnd,
+											Psurvival);
+		}
 								
-	// calculate speciation rates on returned time series, if needed
-	std::vector<double> birth_rates;
-	if(include_birth_rates){
-		birth_rates.resize(NT);
-		for(long t=0; t<NT; ++t){
-			birth_rates[t] = model.get_speciation_rate_at_state(times[t],diversities[t]);
+		// calculate speciation rates on returned time series, if needed
+		if(include_birth_rates){
+			birth_rates.resize(NT);
+			for(long t=0; t<NT; ++t){
+				birth_rates[t] = model.get_speciation_rate_at_state(times[t],diversities[t]);
+			}
+		}
+		// calculate extinction rates on returned time series, if needed
+		if(include_death_rates){
+			death_rates.resize(NT);
+			for(long t=0; t<NT; ++t){
+				death_rates[t] = model.get_extinction_rate_at_state(times[t],diversities[t]);
+			}
+		}
+	
+		// extract cumulative speciation & extinction events, if needed
+		// double Nbirths = NAN_D;
+		if(include_Nevents){
+			// extract from model trajectory
+			std::vector<double> model_Nbirths(NMT), model_Ndeaths(NMT);
+			for(long t=0; t<NMT; ++t){
+				model_Nbirths[t] = model.trajectory[t].Nbirths;
+				model_Ndeaths[t] = model.trajectory[t].Ndeaths;
+			}
+			// interpolate onto requested time points
+			interpolateTimeSeriesAtTimes(model.times, model_Nbirths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Nbirths);
+			interpolateTimeSeriesAtTimes(model.times, model_Ndeaths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Ndeaths);
 		}
 	}
-	
-	// extract cumulative speciation & extinction events, if needed
-	// double Nbirths = NAN_D;
-	std::vector<double> Nbirths, Ndeaths;
- 	if(include_Nbirths){
- 		// extract from model trajectory
- 		std::vector<double> model_Nbirths(NMT), model_Ndeaths(NMT);
-		for(long t=0; t<NMT; ++t){
-			model_Nbirths[t] = model.trajectory[t].Nbirths;
-			model_Ndeaths[t] = model.trajectory[t].Ndeaths;
-		}
-		// interpolate onto requested time points
-		interpolateTimeSeriesAtTimes(model.times, model_Nbirths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Nbirths);
-		interpolateTimeSeriesAtTimes(model.times, model_Ndeaths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Ndeaths);
- 	}
  		
 	return Rcpp::List::create(	Rcpp::Named("success")			= true,
 								Rcpp::Named("diversities") 		= Rcpp::wrap(diversities),
-								Rcpp::Named("survival_chances")	= Rcpp::wrap(survival_chances),
+								Rcpp::Named("Psurvival")		= Rcpp::wrap(Psurvival),
+								Rcpp::Named("Prepresentation")	= Rcpp::wrap(Prepresentation),
 								Rcpp::Named("birth_rates")		= Rcpp::wrap(birth_rates),
+								Rcpp::Named("death_rates")		= Rcpp::wrap(death_rates),
 								Rcpp::Named("Nbirths")			= Nbirths,
 								Rcpp::Named("Ndeaths")			= Ndeaths);
 }
@@ -3114,7 +3268,7 @@ Rcpp::List reconstruct_past_diversity_from_coalescent_CPP(	const std::vector<dou
 	const bool smoothen = (smoothing_span>2);
 	std::vector<double> smooth_coalescent_diversities(NT);
 	if(smoothen){
-		if(!smoothenTimeSeriesSavitzkyGolay(times, raw_coalescent_diversities, 0.0, smoothing_span, min(smoothing_span-2,smoothing_order), smooth_coalescent_diversities)){
+		if(!smoothenTimeSeriesSavitzkyGolay(times, raw_coalescent_diversities, 0.0, smoothing_span, min(smoothing_span-2,smoothing_order), true, smooth_coalescent_diversities)){
 			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Smoothing of coalescent diversity time series failed");
 		}
 		smooth_coalescent_diversities[NT-1] = raw_coalescent_diversities[NT-1];
@@ -3152,13 +3306,153 @@ Rcpp::List reconstruct_past_diversity_from_coalescent_CPP(	const std::vector<dou
 	}
 			
 	// calculate survival chances & true diversities over time
+	std::vector<double> Prepresentation(NT), total_diversities(NT), nu(NT), pulled_total_diversities(NT);
+	for(long t=NT-1, tl, tr; t>=0; --t){
+		tl = (t==0 ? 0 : t-1);
+		tr = (t==0 ? 1 : t); // use left-sided derivative, to avoid the discontinuity at age=0
+		const double birth_rate_pc = (constant_birth_rate_pc ? last_birth_rate_pc : birth_rates_pc[t]);
+		nu[t] = -log(coalescent_diversities[tr]/coalescent_diversities[tl])/(times[tr]-times[tl]); // (1/Nc)*dNc/dtau = dlog(Nc)/dtau, where Nc: coalescent_diversity
+		Prepresentation[t] = -nu[t]/birth_rate_pc;
+		if((Prepresentation[t]<=1e-8) && (coalescent_diversities[t]>0)){
+			// diversity not defined (Prepresentation seems spuriously low)
+			total_diversities[t] = NAN_D;
+			Prepresentation[t] 	= max(0.0, Prepresentation[t]);
+		}else if(Prepresentation[t]>1){
+			// diversity not defined (Prepresentation > 1)
+			Prepresentation[t]  = 1;
+			total_diversities[t] = NAN_D;			
+		}else{
+			total_diversities[t] = coalescent_diversities[t]/Prepresentation[t];
+		}
+		pulled_total_diversities[t] = - last_birth_rate_pc*coalescent_diversities[t]/nu[t];
+	}
+	total_diversities[NT-1] = coalescent_diversities[NT-1]/rarefaction; // coalescent diversity last time point is assumed to be equal to true diversity multiplied by rarefaction fraction
+	
+	// calculate birth & death rates & pulled diversification rate
+	std::vector<double> death_rates(NT), death_rates_pc(NT), birth_rates(NT), pulled_diversification_rates(NT), pulled_extinction_rates(NT);
+	for(long t=NT-1, tl, tr; t>=0; --t){
+		tl = (t==0 ? 0 : t-1);
+		tr = (t==0 ? 1 : t); // use left-sided derivative, to avoid the discontinuity at age=0
+		const double birth_rate_pc = (constant_birth_rate_pc ? last_birth_rate_pc : birth_rates_pc[t]);
+		birth_rates[t] 		= birth_rate_pc*total_diversities[t];
+		death_rates[t] 		= -(total_diversities[tr] - total_diversities[tl])/(times[tr] - times[tl]) + birth_rates[t];
+		death_rates_pc[t] 	= death_rates[t]/(0.5*(total_diversities[tr] + total_diversities[tl]));
+		pulled_diversification_rates[t] = (log(-coalescent_diversities[tr]/nu[tr]) - log(-coalescent_diversities[tl]/nu[tl]))/(times[tr] - times[tl]);
+		pulled_extinction_rates[t]		= last_birth_rate_pc - pulled_diversification_rates[t];
+	}
+	
+	// calculate Psurvival (based on estimate per-capita birth & death rates)
+	std::vector<double> Psurvival(NT);
+	Psurvival[NT-1] = 1;
+	for(long t=NT-2; t>=0; --t){
+		const double dt = times[t+1]-times[t];
+		const double birth_rate_pc = (constant_birth_rate_pc ? last_birth_rate_pc : birth_rates_pc[t]);
+		// 2-step Runge-Kutta
+		double rate1 = - (death_rates_pc[t] - (1-Psurvival[t+1])*(birth_rate_pc+death_rates_pc[t]) + pow((1-Psurvival[t+1]),Nsplits)*birth_rate_pc);
+		double temp_Psurvival = Psurvival[t+1] + dt*rate1;
+		double rate2 = - (death_rates_pc[t] - (1-temp_Psurvival)*(birth_rate_pc+death_rates_pc[t]) + pow((1-temp_Psurvival),Nsplits)*birth_rate_pc);
+		Psurvival[t] = max(0.0, min(1.0, Psurvival[t+1] + dt*0.5*(rate1+rate2)));
+	}
+	
+	
+	// calculate total number of births & deaths
+	const double total_births = integrate1D(times,birth_rates,first_time_point,NT-1,true);
+	const double total_deaths = integrate1D(times,death_rates,first_time_point,NT-1,true);
+	
+	return Rcpp::List::create(	Rcpp::Named("success")						= true,
+								Rcpp::Named("total_diversities")			= Rcpp::wrap(total_diversities),
+								Rcpp::Named("birth_rates") 					= Rcpp::wrap(birth_rates),
+								Rcpp::Named("death_rates") 					= Rcpp::wrap(death_rates),
+								Rcpp::Named("Prepresentation")				= Rcpp::wrap(Prepresentation),
+								Rcpp::Named("Psurvival")					= Rcpp::wrap(Psurvival),
+								Rcpp::Named("total_births")					= total_births,
+								Rcpp::Named("total_deaths")					= total_deaths,
+								Rcpp::Named("last_birth_rate_pc")			= last_birth_rate_pc,
+								Rcpp::Named("last_death_rate_pc")			= death_rates[NT-1]/total_diversities[NT-1],
+								Rcpp::Named("pulled_diversification_rates")	= Rcpp::wrap(pulled_diversification_rates),
+								Rcpp::Named("pulled_extinction_rates")		= Rcpp::wrap(pulled_extinction_rates),
+								Rcpp::Named("pulled_total_diversities")		= Rcpp::wrap(pulled_total_diversities));
+}
+
+
+
+
+
+
+// Estimate past diversity, birth & death rates, based on a time series of coalescent diversities
+// This reconstruction is non-parametric, i.e. no particular model is assumed (except for knowledge or constancy of the per-capita birth rate)
+// Similar to reconstruct_past_diversity_from_biased_coalescent_CPP, but this one allows specification of an arbitrary discovery_fraction for each time, as opposed to assuming random unbiased sampling at the end
+// Note: This function is currently only implemented for bifurcating trees. 
+// Input:
+//	A time series of coalescent diversities, i.e. as would be visible in a coalescent phylogenetic tree.
+// 	Corresponding assumed per-capita birth rates. Alternatively, these can be assumed to be constant and be estimated directly from the coalescent_diversity time series.
+//  A time series of discovery_fractions, at each age specifying the fraction of lineages at that age, with extant discovered descendants
+// Output:
+//  The estimated true past diversities (N(t))
+//  The estimated corresponding death (extinction) rates (delta(t))
+//  The probability of a size-1 clade surviving from each time point to the present (P(t))
+//  The estimated total number of speciation & extinction events, over the considered age interval
+// [[Rcpp::export]]
+Rcpp::List reconstruct_past_diversity_from_biased_coalescent_CPP(	const std::vector<double>	&times,						// (INPUT) 1D numeric array of size NT, listing times in ascending order. The last time point corresponds to the "present" (age=0)
+																	const std::vector<double>	&raw_coalescent_diversities,// (INPUT) 1D numeric array of size NT, listing coalescent diversities as visible after rarefaction. Should be unsmoothened.
+																	const std::vector<double> 	&birth_rates_pc,			// (INPUT) 1D numeric array of size NT, listing known or assumed per-capita birth rates. Can also be of size 1, in which case the same per-capita birth rate is assumed throughout. Can also be empty, in which case a constant per-capita birth rate is assumed and estimated from the last slope of the coalescent_diversity curve.
+																	const std::vector<double> 	&discovery_fractions,		// (INPUT) 1D numeric array of size NT, listing discovery fractions for each age and synchronized with times[]. For example, discovery_fractions.back() corresponds to the fraction of discovered extant species.
+																	const std::vector<double> 	&discovery_fraction_slopes,	// (INPUT) 1D numeric array of size NT, listing the 1st derivative of the discovery_fractions (w.r.t. time) at times[]
+																	const double 				max_age,					// (INPUT) max age (distance from last time point) to consider for integrating total births & deaths. If <=0, all times are considered.
+																	const long					smoothing_span,				// (INPUT) Integer. Optional number of time points for smoothening the diversities time series via Savitzky-Golay-filter. If <=2, no smoothing is done. Smoothening the coalescent diversity can reduce the noise in the non-parametric reconstruction. 
+																	const long					smoothing_order){			// (INPUT) Integer. Optional polynomial order of the smoothing model.
+	const long NT 			= times.size();
+	const double max_time 	= times[NT-1];
+	
+	// smoothen time series if needed
+	// using a Savitzky-Golay-filter of 2nd-order (1st order if smoothen==3)
+	const bool smoothen = (smoothing_span>2);
+	std::vector<double> smooth_coalescent_diversities(NT);
+	if(smoothen){
+		if(!smoothenTimeSeriesSavitzkyGolay(times, raw_coalescent_diversities, 0.0, smoothing_span, min(smoothing_span-2,smoothing_order), true, smooth_coalescent_diversities)){
+			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Smoothing of coalescent diversity time series failed");
+		}
+		smooth_coalescent_diversities[NT-1] = raw_coalescent_diversities[NT-1];
+	}
+	const std::vector<double> &coalescent_diversities = (smoothen ? smooth_coalescent_diversities : raw_coalescent_diversities);
+	
+	// determine latest (most recent) per-capita birth rate if needed
+	double last_birth_rate_pc;
+	const bool constant_birth_rate_pc = (birth_rates_pc.size()<=1);
+	if(birth_rates_pc.size()==0){
+		// estimate from slope of raw_coalescent_diversities
+		// the raw (unsmoothened) data is preferred for estimation of birth_rate_pc, so as to preserve the underlying (by assumption) exponential structure
+		last_birth_rate_pc = log(raw_coalescent_diversities[NT-1]/raw_coalescent_diversities[NT-2])/(times[NT-1] - times[NT-2]);
+		// correct for the effects of incomplete discovery
+		last_birth_rate_pc = max(0.0, last_birth_rate_pc*discovery_fractions[NT-1] - discovery_fraction_slopes[NT-1]);
+	}else{
+		// either birth_rates_oc are provided for all time points, or as a single constant number
+		last_birth_rate_pc = birth_rates_pc[birth_rates_pc.size()-1];
+	}
+	if(last_birth_rate_pc<0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Latest per-capita birth rate is negative or zero");
+	
+	// determine first considered time point
+	long first_time_point;
+	if(max_age>0){
+		first_time_point = NT-1;
+		for(long t=0; t<NT; ++t){
+			if((max_time-times[t])<=max_age){
+				first_time_point = t;
+				break;
+			}
+		}
+	}else{
+		first_time_point = 0;
+	}
+			
+	// calculate survival chances & true diversities over time
 	std::vector<double> survival_chances(NT), true_diversities(NT), nu(NT);
 	for(long t=NT-1, tl, tr; t>=0; --t){
 		tl = (t==0 ? 0 : t-1);
 		tr = (t==0 ? 1 : t); // use left-sided derivative, to avoid the discontinuity at age=0
 		const double birth_rate_pc = (constant_birth_rate_pc ? last_birth_rate_pc : birth_rates_pc[t]);
 		nu[t] = -log(coalescent_diversities[tr]/coalescent_diversities[tl])/(times[tr]-times[tl]); // (1/Nc)*dNc/dtau = dlog(Nc)/dtau, where Nc: coalescent_diversity
-		survival_chances[t] = -nu[t]/birth_rate_pc;
+		survival_chances[t] = -(discovery_fractions[t]*nu[t] + discovery_fraction_slopes[t])/birth_rate_pc;
 		if((survival_chances[t]<=1e-2/coalescent_diversities[NT-1]) && (coalescent_diversities[t]>0)){
 			// diversity not defined (survival seems spuriously low)
 			true_diversities[t] = NAN_D;
@@ -3166,10 +3460,10 @@ Rcpp::List reconstruct_past_diversity_from_coalescent_CPP(	const std::vector<dou
 			// diversity not defined (survival chance > 1)
 			true_diversities[t] = NAN_D;			
 		}else{
-			true_diversities[t] = coalescent_diversities[t]/survival_chances[t];
+			true_diversities[t] = coalescent_diversities[t]/(survival_chances[t] * discovery_fractions[t]);
 		}
 	}
-	true_diversities[NT-1] = coalescent_diversities[NT-1]/rarefaction; // coalescent diversity last time point is assumed to be equal to true diversity multiplied by rarefaction fraction
+	true_diversities[NT-1] = coalescent_diversities[NT-1]/discovery_fractions[NT-1]; // coalescent diversity last time point is assumed to be equal to true diversity multiplied by discovery fraction (since survival_chance = 1)
 	
 	// calculate birth & death rates & per-capita (exponential) pulled growth rate
 	std::vector<double> death_rates(NT), birth_rates(NT), pulled_diversification_rates(NT);
@@ -3179,10 +3473,8 @@ Rcpp::List reconstruct_past_diversity_from_coalescent_CPP(	const std::vector<dou
 		const double birth_rate_pc = (constant_birth_rate_pc ? last_birth_rate_pc : birth_rates_pc[t]);
 		birth_rates[t] = birth_rate_pc*true_diversities[t];
 		death_rates[t] = max(0.0, -(true_diversities[tr] - true_diversities[tl])/(times[tr] - times[tl]) + birth_rates[t]); // death rate must be non-negative
-		pulled_diversification_rates[t] = (log(-coalescent_diversities[tr]/nu[tr]) - log(-coalescent_diversities[tl]/nu[tl]))/(times[tr] - times[tl]);
+		pulled_diversification_rates[t] = (log(-coalescent_diversities[tr]/(nu[tr]*SQ(discovery_fractions[tr]) - discovery_fractions[tr]*discovery_fraction_slopes[tr])) - log(-coalescent_diversities[tl]/(nu[tl]*SQ(discovery_fractions[tl]) - discovery_fractions[tl]*discovery_fraction_slopes[tl])))/(times[tr] - times[tl]);
 	}
-	
-	
 	
 	// calculate total number of births & deaths
 	const double total_births = integrate1D(times,birth_rates,first_time_point,NT-1,true);
@@ -3192,7 +3484,7 @@ Rcpp::List reconstruct_past_diversity_from_coalescent_CPP(	const std::vector<dou
 								Rcpp::Named("true_diversities")				= Rcpp::wrap(true_diversities),
 								Rcpp::Named("birth_rates") 					= Rcpp::wrap(birth_rates),
 								Rcpp::Named("death_rates") 					= Rcpp::wrap(death_rates),
-								Rcpp::Named("survival_chances")				= Rcpp::wrap(survival_chances),
+								Rcpp::Named("Psurvival")					= Rcpp::wrap(survival_chances),
 								Rcpp::Named("total_births")					= total_births,
 								Rcpp::Named("total_deaths")					= total_deaths,
 								Rcpp::Named("last_birth_rate_pc")			= last_birth_rate_pc,
@@ -3228,7 +3520,7 @@ Rcpp::List reconstruct_past_diversifications_CPP(	const std::vector<double>	&tim
 	const bool smoothen = (smoothing_span>2);
 	std::vector<double> smooth_diversities(NT);
 	if(smoothen){
-		if(!smoothenTimeSeriesSavitzkyGolay(times, raw_diversities, 0.0, smoothing_span, min(smoothing_span-2,smoothing_order), smooth_diversities)){
+		if(!smoothenTimeSeriesSavitzkyGolay(times, raw_diversities, 0.0, smoothing_span, min(smoothing_span-2,smoothing_order), true, smooth_diversities)){
 			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Smoothing of coalescent diversity time series failed");
 		}
 		smooth_diversities[NT-1] = raw_diversities[NT-1];
@@ -3260,20 +3552,25 @@ Rcpp::List reconstruct_past_diversifications_CPP(	const std::vector<double>	&tim
 		diversification_rates[t] = (log(true_diversities[tr])-log(true_diversities[tl]))/(times[tr] - times[tl]);
 	}
 	
-	// integrate backwards to calculate probability of extinction (and thus survival chances)
-	// probability of extinction at age=0 begins at (1-rarefaction)
-	std::vector<double> survival_chances(NT);
-	std::vector<double> coalescent_diversities(NT);
-	survival_chances[NT-1] = rarefaction;
-	coalescent_diversities[NT-1] = true_diversities[NT-1]*survival_chances[NT-1];
-	double Pextinction = (1-rarefaction); 
+	// integrate backwards to calculate probability of survival & representation
+	// probability of representation at age=0 begins at (1-rarefaction), probability of survival at age=0 begins at 1
+	std::vector<double> Psurvival(NT), Prepresentation(NT);
+	Prepresentation[NT-1] = rarefaction;
+	Psurvival[NT-1] = 1;
 	for(long t=NT-2; t>=0; --t){
 		const double dt = times[t+1]-times[t];
 		const double birth_rate_pc = (const_birth_rate_pc ? birth_rates_pc[0] : birth_rates_pc[t]);
 		const double death_rate_pc = 0.5*(death_rates[t+1]/true_diversities[t+1] + death_rates[t]/true_diversities[t]);
-		Pextinction += dt*(death_rate_pc - Pextinction*(birth_rate_pc+death_rate_pc) + pow(Pextinction,Nsplits)*birth_rate_pc);
-		survival_chances[t] = 1 - Pextinction;
-		coalescent_diversities[t] = true_diversities[t]*survival_chances[t];
+		Psurvival[t] = Psurvival[t+1] - dt*(death_rate_pc - (1-Psurvival[t+1])*(birth_rate_pc+death_rate_pc) + pow((1-Psurvival[t+1]),Nsplits)*birth_rate_pc);
+		Prepresentation[t] = Prepresentation[t+1] - dt*(death_rate_pc - (1-Prepresentation[t+1])*(birth_rate_pc+death_rate_pc) + pow((1-Prepresentation[t+1]),Nsplits)*birth_rate_pc);
+	}
+	
+	// use Prepresentation & Psurvival to calculate coalescent diversity and Pdiscovery
+	std::vector<double> coalescent_diversities(NT);
+	std::vector<double> Pdiscovery(NT);
+	for(long t=0; t<NT; ++t){
+		coalescent_diversities[t] = true_diversities[t]*Prepresentation[t];	
+		Pdiscovery[t] = Prepresentation[t]/Psurvival[t];
 	}
 
 	
@@ -3284,7 +3581,9 @@ Rcpp::List reconstruct_past_diversifications_CPP(	const std::vector<double>	&tim
 	return Rcpp::List::create(	Rcpp::Named("success")					= true,
 								Rcpp::Named("birth_rates") 				= Rcpp::wrap(birth_rates),
 								Rcpp::Named("death_rates") 				= Rcpp::wrap(death_rates),
-								Rcpp::Named("survival_chances")			= Rcpp::wrap(survival_chances),
+								Rcpp::Named("Psurvival")				= Rcpp::wrap(Psurvival),		// probability of a lineage surviving until today
+								Rcpp::Named("Pdiscovery")				= Rcpp::wrap(Pdiscovery),		// probability of an extant lineage being discovered
+								Rcpp::Named("Prepresentation")			= Rcpp::wrap(Prepresentation),	// probability of a lineage surviving and being discovered (=Psurvival*Pdiscovery)
 								Rcpp::Named("coalescent_diversities")	= Rcpp::wrap(coalescent_diversities),
 								Rcpp::Named("total_births")				= total_births,
 								Rcpp::Named("total_deaths")				= total_deaths,
@@ -3509,21 +3808,29 @@ void determine_basal_nodes(	const long			Ntips,
 
 
 
-// determine root of a tree (as the node with no incoming edge)
+// determine root of a tree
+// Assuming that the tree is connected (when edge directions are ignored), this function will return -1 if the tree is not properly rooted
+// Hence, this function can also be used to check if the tree is properly rooted (provided that it is connected)
 template<class ARRAY_TYPE>
 long get_root_clade(const long			Ntips,
 					const long 			Nnodes,
 					const long			Nedges,
 					const ARRAY_TYPE	&tree_edge){			// (INPUT) 2D array (in row-major format) of size Nedges x 2
 	const long Nclades = Ntips+Nnodes;
-	std::vector<bool> clade_has_parent(Nclades,false);
+	std::vector<long> Nparents_per_clade(Nclades,0);
 	for(long edge=0; edge<Nedges; ++edge){
-		clade_has_parent[tree_edge[edge*2+1]] = true;
+		Nparents_per_clade[tree_edge[edge*2+1]] += 1;
 	}
+	long root = -1;
 	for(long c=0; c<Nclades; ++c){
-		if(!clade_has_parent[c]) return c;
+		if(Nparents_per_clade[c]>1) return -1; // found a clade with multiple parents, which cannot be in a rooted tree
+		if(Nparents_per_clade[c]==0){
+			// found clade with no parents, so this may be root
+			if(root>=0) return -1; // multiple roots found, which cannot be
+			root = c;
+		}
 	}
-	return -1;
+	return root;
 }
 
 
@@ -4053,6 +4360,65 @@ IntegerVector get_total_tip_count_per_node_CPP(	const long			Ntips,
 
 
 
+
+// For each node, calculate the mean phylogenetic distance to its descending tips
+// Requirements:
+//   The tree must be rooted; the root should be the unique node with no parent
+//   The tree can include multifurcations as well as monofurcations
+// [[Rcpp::export]]
+NumericVector get_mean_depth_per_node_CPP(	const long			Ntips,
+											const long 			Nnodes,
+											const long			Nedges,
+											const IntegerVector &tree_edge, 	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+											const NumericVector &edge_length){ 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// get incoming edge for each clade
+	std::vector<long> incoming_edge_per_clade;
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (tips --> root)
+	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true, 	// include tips
+										false, 	// no precalculated edge mappings
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+
+	// calculate number of descending tips per node & mean distance to tips, traversing tips-->root (excluding the root)
+	std::vector<long> node2tip_count(Nnodes,0);
+	std::vector<double> node2tip_depth(Nnodes,0);
+	for(long q=traversal_queue.size()-1, clade, parent, cnode; q>=1; --q){
+		clade	= traversal_queue[q];
+		cnode	= clade-Ntips;
+		parent 	= clade2parent[clade];
+		node2tip_count[parent-Ntips] += (clade<Ntips ? 1 : node2tip_count[cnode]);
+		node2tip_depth[parent-Ntips] += (clade<Ntips ? 0 : node2tip_depth[cnode]) + (clade<Ntips ? 1 : node2tip_count[cnode]) * (edge_length.size()==0 ? 1 : edge_length[incoming_edge_per_clade[clade]]);
+	}
+	for(long node=0; node<Nnodes; ++node){
+		node2tip_depth[node] /= node2tip_count[node];
+	}
+	return Rcpp::wrap(node2tip_depth);
+}
+
+
+
+
 // Calculate sum of all branch lengths, for each subtree in a tree
 // This is equivalent to the 'phylogenetic diversity' measure introduced by Faith (1992).
 // References: 
@@ -4362,6 +4728,144 @@ Rcpp::List get_closest_tip_per_clade_CPP(	const long 			Ntips,
 
 
 
+
+// For each clade (tip & node) in a tree, find the most distant tip (in terms of cumulative branch length).
+// Optionally, the search can be restricted to descending tips.
+// Optionally, the search can also be restricted to a subset of target tips.
+// If you want distances in terms of branch counts (instead of cumulative branch lengths), simply provide an empty edge_length[].
+// Requirements:
+//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
+//   The input tree can be multifurcating and/or monofurcating
+// [[Rcpp::export]]
+Rcpp::List get_farthest_tip_per_clade_CPP(	const long 			Ntips,
+											const long 			Nnodes,
+											const long 			Nedges,
+											const IntegerVector &tree_edge,				// 2D array of size Nedges x 2 in row-major format
+											const NumericVector &edge_length, 			// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+											const IntegerVector	&onlyToTips,			// 1D array listing target tips to restrict search to, or an empty std::vector (consider all tips as targets)
+											bool				only_descending_tips,	// if true, then for each clade only descending tips are considered for farthest-distance. If false, some clades may have non-descending tips assigned as farthest tips.
+											bool 				verbose,
+											const std::string	&verbose_prefix){
+	const long Nclades = Ntips + Nnodes;
+	long parent, clade, tip, incoming_edge;
+	double candidate_distance;
+	const bool unit_edge_lengths = (edge_length.size()==0);
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue_root2tips, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue_root2tips,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										verbose,
+										verbose_prefix);
+
+	// Step 1: calculate farthest descending tip per clade (traverse tips --> root)
+	std::vector<long> farthest_descending_tip_per_clade(Nclades,-1);
+	std::vector<double> distance_to_farthest_descending_tip_per_clade(Nclades,0);
+	if(onlyToTips.size()==0){
+		// consider all tips as potential targets
+		for(long tip=0; tip<Ntips; ++tip){
+			farthest_descending_tip_per_clade[tip] = tip;
+		}
+	}else{
+		// only consider provided tips as targets
+		for(long t=0; t<onlyToTips.size(); ++t){
+			tip = onlyToTips[t];
+			farthest_descending_tip_per_clade[tip] = tip;
+		}
+	}
+	for(long q=traversal_queue_root2tips.size()-1; q>=0; --q){
+		clade = traversal_queue_root2tips[q];
+		if(clade==root) continue;
+		if(farthest_descending_tip_per_clade[clade]<0) continue; // no descending tip available from this clade
+		parent			= clade2parent[clade];
+		incoming_edge	= incoming_edge_per_clade[clade];
+		// propagate information about farthest descending tip, to parent (if more distant than already saved for the parent)
+		candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_descending_tip_per_clade[clade];
+		if((candidate_distance>distance_to_farthest_descending_tip_per_clade[parent]) || (farthest_descending_tip_per_clade[parent]<0)){
+			distance_to_farthest_descending_tip_per_clade[parent] = candidate_distance;
+			farthest_descending_tip_per_clade[parent] = farthest_descending_tip_per_clade[clade];
+		}
+	}
+	
+	if(only_descending_tips){
+		// only descending tips allowed, so we're finished
+		return Rcpp::List::create(	Rcpp::Named("farthest_tips") 		= Rcpp::wrap(farthest_descending_tip_per_clade),
+									Rcpp::Named("farthest_distances") 	= Rcpp::wrap(distance_to_farthest_descending_tip_per_clade));
+	}
+	
+
+	// Step 2: calculate farthest upstream tip per clade
+	std::vector<long> farthest_upstream_tip_per_clade(Nclades,-1);
+	std::vector<double> distance_to_farthest_upstream_tip_per_clade(Nclades,0);
+	for(long q=1; q<traversal_queue_root2tips.size(); ++q){
+		clade	= traversal_queue_root2tips[q];
+		parent	= clade2parent[clade];
+		incoming_edge = incoming_edge_per_clade[clade];
+		for(long e=traversal_node2first_edge[parent-Ntips], edge, child; e<=traversal_node2last_edge[parent-Ntips]; ++e){
+			edge = traversal_edges[e];
+			if(edge==incoming_edge) continue;
+			child = tree_edge[2*edge+1];
+			if(farthest_descending_tip_per_clade[child]<0) continue;
+			candidate_distance = (unit_edge_lengths ? 1.0+1.0 : edge_length[edge]+edge_length[incoming_edge]) + distance_to_farthest_descending_tip_per_clade[child];
+			if((candidate_distance>distance_to_farthest_upstream_tip_per_clade[clade]) || (farthest_upstream_tip_per_clade[clade]<0)){
+				farthest_upstream_tip_per_clade[clade] = farthest_descending_tip_per_clade[child];
+				distance_to_farthest_upstream_tip_per_clade[clade] = candidate_distance;
+			}
+		}
+		// check if going further up than the parrent leads to an even farther target tip
+		if(farthest_upstream_tip_per_clade[parent]>=0){
+			candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_upstream_tip_per_clade[parent];
+			if((candidate_distance>distance_to_farthest_upstream_tip_per_clade[clade]) || (farthest_upstream_tip_per_clade[clade]<0)){
+				farthest_upstream_tip_per_clade[clade] = farthest_upstream_tip_per_clade[parent];
+				distance_to_farthest_upstream_tip_per_clade[clade] = candidate_distance;
+			}
+		}
+	}
+
+	// Step 3: calculate farthest tip per clade, regardless of whether descending or not (traverse root --> tips)
+	std::vector<long> farthest_tip_per_clade(Nclades,-1);
+	std::vector<double> distance_to_farthest_tip_per_clade(Nclades,0);
+	for(long q=0; q<traversal_queue_root2tips.size(); ++q){
+		clade = traversal_queue_root2tips[q];
+		if((farthest_upstream_tip_per_clade[clade]<0) || (distance_to_farthest_descending_tip_per_clade[clade]>distance_to_farthest_upstream_tip_per_clade[clade])){
+			// farthest tip for this clade is downstream
+			farthest_tip_per_clade[clade] = farthest_descending_tip_per_clade[clade];
+			distance_to_farthest_tip_per_clade[clade] = distance_to_farthest_descending_tip_per_clade[clade];
+		}else if((farthest_descending_tip_per_clade[clade]<0) || (distance_to_farthest_descending_tip_per_clade[clade]<distance_to_farthest_upstream_tip_per_clade[clade])){
+			// farthest tip for this clade is upstream
+			farthest_tip_per_clade[clade] = farthest_upstream_tip_per_clade[clade];
+			distance_to_farthest_tip_per_clade[clade] = distance_to_farthest_upstream_tip_per_clade[clade];
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("farthest_tips") 		= Rcpp::wrap(farthest_tip_per_clade),
+								Rcpp::Named("farthest_distances") 	= Rcpp::wrap(distance_to_farthest_tip_per_clade));
+}
+
+
+
 // Calculate phylogenetic distance matrix between all pairs of focal_clades
 // Distance = cumulative branch length of both clades back to their most recent common ancestor (aka "patristic distance")
 // This function is slightly different from get_distances_between_clades_CPP(), in that here the distances between all possible clade pairs are returned.
@@ -4625,9 +5129,11 @@ NumericVector get_distances_between_clades_CPP(	const long 			Ntips,
 Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 												const long 			Nnodes,
 												const long 			Nedges,
-												const IntegerVector	&tree_edge,		// (INPUT) 2D array of size Nedges x 2, flattened in row-major format
-												const NumericVector	&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-												const long			Ntimes,			// (INPUT) number of time points
+												const IntegerVector	&tree_edge,			// (INPUT) 2D array of size Nedges x 2, flattened in row-major format
+												const NumericVector	&edge_length, 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+												const long			Ntimes,				// (INPUT) number of time points
+												double				min_time,			// (INPUT) minimum time (distance from root) to consider. If negative, will be set to the minimum possible.
+												double				max_time,			// (INPUT) maximum time (distance from root) to consider. If Infinite, will be set to the maximum possible.
 												const bool			include_slopes){	// (INPUT) if true, slopes of the clades_per_time_point curve are also returned	
 	// calculate clade distances from root
 	const NumericVector clade_times = get_distances_from_root_CPP(	Ntips,
@@ -4635,8 +5141,8 @@ Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 																	Nedges,
 																	tree_edge,
 																	edge_length);
-	const double max_time = get_array_max(clade_times);
-	const double min_time = 0;
+	max_time = min(max_time, get_array_max(clade_times));
+	min_time = max(0.0, min_time);
 	
 	// determine distance bins
 	const double time_step = (1.0-1e-7)*(max_time-min_time)/(Ntimes-1);
@@ -4650,8 +5156,10 @@ Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 	for(long edge=0, child, parent; edge<Nedges; ++edge){
 		parent = tree_edge[edge*2+0];
 		child  = tree_edge[edge*2+1];
-		const long last_time_point 	= max(0L,min(Ntimes-1,long(floor((clade_times[child]-min_time)/time_step))));
-		const long first_time_point = (parent<0 ? last_time_point : max(0L,min(Ntimes-1,long(ceil((clade_times[parent]-min_time)/time_step)))));
+		const long last_time_point 	= min(Ntimes-1,long(floor((clade_times[child]-min_time)/time_step)));
+		if(last_time_point<0) continue; // edge is outside of considered time span
+		const long first_time_point = (parent<0 ? last_time_point : max(0L,long(ceil((clade_times[parent]-min_time)/time_step))));
+		if(first_time_point>Ntimes-1) continue; // edge is outside of considered time span
 		if(first_time_point==last_time_point){ ++diversities[first_time_point]; }
 		else{ for(long t=first_time_point; t<=last_time_point; ++t) ++diversities[t]; }
 	}
@@ -4708,6 +5216,10 @@ IntegerVector count_clades_at_times_CPP(const long			Ntips,
 	const long Ntimes = times.size();
 	std::vector<long> diversities(Ntimes,0);
 	for(long t=0; t<Ntimes; ++t){
+		if(times[t]==0){
+			diversities[t] = 1; // by convention, only one clade at root
+			continue;
+		}
 		for(long clade=0; clade<Nclades; ++clade){
 			if(clade==root) continue;
 			if((distances_from_root[clade]>=times[t]) && (distances_from_root[clade2parent[clade]]<=times[t])){
@@ -4764,7 +5276,7 @@ void count_monofurcations_and_multifurcations(	const long			Ntips,
 Rcpp::List get_speciation_extinction_events_CPP(const long				Ntips,
 												const long 				Nnodes,
 												const long				Nedges,
-												IntegerVector 			tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+												const IntegerVector		&tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
 												const NumericVector		&edge_length,		// (INPUT) 1D array of size Nedges, or empty
 												const double			min_age,			// (INPUT) min phylogenetic distance from the tree crown, to be considered. If <=0, this constraint is ignored.
 												const double			max_age,			// (INPUT) max phylogenetic distance from the tree crown, to be considered. If <=0, this constraint is ignored.
@@ -4772,7 +5284,7 @@ Rcpp::List get_speciation_extinction_events_CPP(const long				Ntips,
 												const IntegerVector		&omit_clades){		// (INPUT) optional list of clade indices to omit. Can also be empty.
 	const long Nclades = Ntips + Nnodes;
 	long clade, parent;
-										
+	
 	// determine parent clade for each clade
 	std::vector<long> clade2parent;
 	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
@@ -4811,7 +5323,7 @@ Rcpp::List get_speciation_extinction_events_CPP(const long				Ntips,
 	}
 	
 	// sort clades in chronological order (increasing distance from root)
-	std::vector<long> chronological_clade_order;
+	std::vector<long> chronological_clade_order(Nclades);
 	qsortIndices(distances_from_root, chronological_clade_order);
 	const double max_distance_from_root = distances_from_root[chronological_clade_order.back()];
 	
@@ -4931,6 +5443,7 @@ Rcpp::List get_speciation_extinction_events_CPP(const long				Ntips,
 								Rcpp::Named("clades")					= Rcpp::wrap(clades),					// clade associated with each time point
 								Rcpp::Named("diversities")				= Rcpp::wrap(diversities));				// number of clades just prior to the splitting or extinction of each clade, in chronological order (root is first)
 }
+
 
 
 
@@ -6012,6 +6525,265 @@ void reroot_tree_at_node(	const long 			Ntips,
 
 
 
+
+// Given a set of target tips in an unrooted tree, find the node (or node) in the tree such that when that node is made root, the target tips form a monophyletic group whose MRCA is a child of that node (if as_MRCA==false) or whose MRCA is that node (if as_MRCA==true).
+// This node can also be defined as follows (if as_MRCA==false): It is the single node, for which exactly one connected edge satisfies "all tips on the other side are targets", and all other connected edges satisfy "all tips on the other side are non-targets".
+// Returns -1 on failure, otherwise it will return a clade index
+// [[Rcpp::export]]
+long find_root_for_monophyletic_clade_CPP(	const long				Ntips,
+											const long 				Nnodes,
+											const long				Nedges,
+											IntegerVector 			tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+											const bool				is_rooted,		// (INPUT) if true, the input tree is guaranteed to already be rooted. Otherwise, it will be temporarily rooted internally at some arbitrary node.
+											const std::vector<long>	&target_tips,	// (INPUT) 1D array of tip indices, listing target tips to be made monophyletic
+											const bool				as_MRCA){		// (INPUT) if true, the MRCA of the target tips is returned, otherwise the parent of the MRCA is returned
+	const long Nclades = Ntips+Nnodes;
+	long clade, node, parent;
+	if(target_tips.empty()) return -1;
+			
+	// temporarily root tree if needed (for purposes of traversal)
+	// all tip/node/edge indices remain the same
+	if(!is_rooted){
+		root_tree_at_node(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,	// will be modified in-situ
+							1);
+	}
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+		
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (root --> tips)		
+	std::vector<long> traversal_queue_root2tips, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true, 	// include tips
+										false, 	// no precalcuated edge mapping
+										traversal_queue_root2tips,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+	
+	// Step 1: for each clade, determine the number of children with descending (or being) targets and descending (or being) non-targets (traverse tips --> root)
+	std::vector<long> Nchildren_with_descending_targets(Nnodes, 0), Nchildren_with_descending_nontargets(Nnodes, 0), Nchildren_per_node(Nnodes,0), Nnonmonofurcating_children_with_descending_targets(Nnodes,0);
+	std::vector<bool> tip_is_target(Ntips,false);
+	for(long t=0; t<target_tips.size(); ++t){
+		tip_is_target[target_tips[t]] = true;
+	}
+	for(long q=traversal_queue_root2tips.size()-1, cnode, pnode; q>=1; --q){
+		clade 	= traversal_queue_root2tips[q];
+		parent 	= clade2parent[clade];
+		cnode 	= clade-Ntips;
+		pnode 	= parent-Ntips;
+		Nchildren_per_node[pnode] += 1;
+		// propagate information about descending targets & non-targets to parent
+		if(clade<Ntips){
+			Nchildren_with_descending_targets[pnode] 	+= (tip_is_target[clade] ? 1 : 0);
+			Nchildren_with_descending_nontargets[pnode] += (tip_is_target[clade] ? 0 : 1);
+			Nnonmonofurcating_children_with_descending_targets[pnode] += (tip_is_target[clade] ? 1 : 0);
+		}else{
+			Nchildren_with_descending_targets[pnode] 	+= (Nchildren_with_descending_targets[cnode]>0 ? 1 : 0);
+			Nchildren_with_descending_nontargets[pnode] += (Nchildren_with_descending_nontargets[cnode]>0 ? 1 : 0);
+			if(traversal_node2last_edge[cnode]-traversal_node2first_edge[cnode]>0) Nnonmonofurcating_children_with_descending_targets[pnode] += (Nchildren_with_descending_targets[cnode]>0 ? 1 : 0);
+		}
+	}	
+	
+	// Step 2: determine which clades have upstream targets (traverse root --> tips)
+	std::vector<bool> clade_has_upstream_targets(Nclades, false), clade_has_upstream_nontargets(Nclades, false);
+	for(long q=1, cnode, pnode; q<traversal_queue_root2tips.size(); ++q){
+		clade  	= traversal_queue_root2tips[q];
+		parent 	= clade2parent[clade];
+		cnode 	= clade-Ntips;
+		pnode 	= parent-Ntips;
+		if(clade_has_upstream_targets[parent]) clade_has_upstream_targets[clade] = true;
+		else if((clade<Ntips ? (tip_is_target[clade] ? 1 : 0) : (Nchildren_with_descending_targets[cnode]>0 ? 1 : 0)) < Nchildren_with_descending_targets[pnode]) clade_has_upstream_targets[clade] = true;
+		if(clade_has_upstream_nontargets[parent]) clade_has_upstream_nontargets[clade] = true;
+		else if((clade<Ntips ? (tip_is_target[clade] ? 0 : 1) : (Nchildren_with_descending_nontargets[cnode]>0 ? 1 : 0)) < Nchildren_with_descending_nontargets[pnode]) clade_has_upstream_nontargets[clade] = true;
+	}
+	
+	if(as_MRCA){
+		// Step 3: Find clade for which at most one inout edge has non-targets on the other side, and such that that edge has only non-targets
+		// Monofurcations need to be accounted for in special ways, i.e. make sure the new root is the MRCA of the target tips and not further upstream connected via monofurcations
+		for(clade=0; clade<Nclades; ++clade){
+			node = clade-Ntips;
+			const long Nedges_with_targets = (clade_has_upstream_targets[clade] ? 1 : 0) + (clade<Ntips ? 0 : Nchildren_with_descending_targets[node]);
+			const long Nedges_with_nontargets = (clade_has_upstream_nontargets[clade] ? 1 : 0) + (clade<Ntips ? 0 : Nchildren_with_descending_nontargets[node]);
+			const long Nedges_total = (clade<Ntips ? 0 : Nchildren_per_node[node])+(clade==root ? 0 : 1);
+			if(Nedges_with_nontargets>1) continue; // clade has more than one inout edges with non-targets on the other side
+			if(Nedges_with_nontargets==0) return clade;
+			if((Nedges_with_nontargets==1) && (Nedges_with_targets==Nedges_total-1) && (Nedges_total>2)) return clade; // if clade only has 2 edges, then if it were made root it would be a monofurcation, in which case the proper MRCA would actually be further downstream
+		}
+	}else{
+		// Step 3: Find clade that has exactly one inout edge, on the other side of which are all targets and only targets
+		// Monofurcations need to be accounted for in special ways, i.e. make sure the MRCA of the target tips is a direct (not indirect) descendant of the new root
+		for(clade=0; clade<Nclades; ++clade){
+			node 	= clade-Ntips;
+			parent 	= clade2parent[clade];
+			if((clade<Ntips) && (tip_is_target[clade])) continue;
+			if(clade_has_upstream_targets[clade] && clade_has_upstream_nontargets[clade]) continue; // there's targets as well as non-targets upstream
+			if((clade>=Ntips) && ((Nchildren_with_descending_targets[node]+Nchildren_with_descending_nontargets[node])>Nchildren_per_node[node])) continue; // some children include targets as well as non-targets
+			const bool monofurcating_parent = (parent<0 ? false : (parent==root ? (traversal_node2last_edge[parent-Ntips]-traversal_node2first_edge[parent-Ntips]==1) : (traversal_node2last_edge[parent-Ntips]-traversal_node2first_edge[parent-Ntips]==0))); // would the parent node become a monofurcation if clade was made root?
+			if(clade<Ntips){
+				if(clade_has_upstream_targets[clade] && (!monofurcating_parent)) return clade; // all targets are upstream, but make sure that immediately upstream node is not a monofurcation
+			}else{
+				if(clade_has_upstream_targets[clade] && (Nchildren_with_descending_targets[node]==0) && (!monofurcating_parent)) return clade; // all targets are upstream, but make sure that immediately upstream node is not a monofurcation
+				if((!clade_has_upstream_targets[clade]) && (Nchildren_with_descending_targets[node]==1) && (Nnonmonofurcating_children_with_descending_targets[node]==1)) return clade; // targets are on the other side of exactly one descending edge that does not lead to a monofurcation
+			}
+		}
+	}
+	return -1;
+}
+
+
+
+
+
+
+
+
+// Given a set of target tips in an unrooted tree, find the "separator" edge in the tree such that all (or most) target tips are on the one side of the edge, and all (or most) non-target tips are on the other side.
+// Specifically, for any edge e (with some arbitrary direction) let N_e^u & N_e^d be the number of targets upstream & downstream, respectively, and let M_e^u & M_e^d be the number of non-targets upstream and downstream, respectively.
+// Define E(e) := (N_e^u>N_e^d ? M_e^u+N_e^d : M_e^d+N_e^u). Then the "separator" edge is the edge e that minimizes E(e).
+// This function can be used to determine the root of an unrooted tree that would make a set of target tips monophyletic or at least "almost monophyletic" (i.e. with minimal deviation from monophyly).
+// This function returns an edge index (in 0,..,Nedges-1), or -1 in the case of failure.
+// [[Rcpp::export]]
+Rcpp::List find_edge_splitting_tree_CPP(const long				Ntips,
+										const long 				Nnodes,
+										const long				Nedges,
+										IntegerVector 			tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+										const bool				is_rooted,			// (INPUT) if true, the input tree is guaranteed to already be rooted. Otherwise, it will be temporarily rooted internally at some arbitrary node.
+										const std::vector<long>	&target_tips,		// (INPUT) 1D array of tip indices, listing target tips by which to separate the tree. Can contain duplicates (will be ignored)
+										const bool				include_misplaced){	// (INPUT) if true, then the misplaced tips (corresponding to the "optimal" splitting) are also returned as lists. This requires some extra computation.
+	const long Nclades = Ntips+Nnodes;
+	long clade, child, parent;
+	if(target_tips.empty()) return Rcpp::List::create(Rcpp::Named("edge") = -1);
+			
+	// temporarily root tree if needed (for purposes of traversal)
+	// all tip/node/edge indices remain the same
+	if(!is_rooted){
+		root_tree_at_node(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,	// will be modified in-situ
+							1);
+	}
+	
+	// prepare auxiliary lookup tables
+	std::vector<long> clade2parent, incoming_edge_per_clade;;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
+		
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (root --> tips)		
+	std::vector<long> traversal_queue_root2tips, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true, 	// include tips
+										false, 	// no precalculated edge mapping
+										traversal_queue_root2tips,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+	
+	// Step 1: for each clade, determine the number of downstream targets and non-targets (traverse tips-->root)
+	std::vector<long> Ntargets_downstream_per_clade(Nclades,0), Nnontargets_downstream_per_clade(Nclades,0);
+	for(long tip=0; tip<Ntips; ++tip){
+		Nnontargets_downstream_per_clade[tip] = 1;
+	}
+	for(long t=0, tip; t<target_tips.size(); ++t){
+		tip = target_tips[t];
+		Ntargets_downstream_per_clade[tip] 		= 1;
+		Nnontargets_downstream_per_clade[tip] 	= 0;
+	}
+	for(long q=traversal_queue_root2tips.size()-1; q>=1; --q){
+		clade 	= traversal_queue_root2tips[q];
+		parent	= clade2parent[clade];
+		Ntargets_downstream_per_clade[parent] 	 += Ntargets_downstream_per_clade[clade];
+		Nnontargets_downstream_per_clade[parent] += Nnontargets_downstream_per_clade[clade];
+	}
+	
+	// Step 2: for each clade, determine the number of upstream targets and non-targets (traverse root-->tips)
+	std::vector<long> Ntargets_upstream_per_clade(Nclades,0), Nnontargets_upstream_per_clade(Nclades,0);
+	for(long q=1; q<traversal_queue_root2tips.size(); ++q){
+		clade  	= traversal_queue_root2tips[q];
+		parent 	= clade2parent[clade];
+		Ntargets_upstream_per_clade[clade] 		= Ntargets_upstream_per_clade[parent] + (Ntargets_downstream_per_clade[parent]-Ntargets_downstream_per_clade[clade]);
+		Nnontargets_upstream_per_clade[clade] 	= Nnontargets_upstream_per_clade[parent] + (Nnontargets_downstream_per_clade[parent]-Nnontargets_downstream_per_clade[clade]);
+	}
+	
+	// Step 3: find edge with minimal error in target monophyly (i.e. most targets on one side and most non-targets on the other side)
+	long best_edge = -1, best_Ntargets_upstream, best_Ntargets_downstream, best_Nmisplaced_targets, best_Nmisplaced_nontargets;
+	for(long edge=0; edge<Nedges; ++edge){
+		child 	= tree_edge[edge*2+1];
+		const long Ntargets_upstream 		= Ntargets_upstream_per_clade[child];
+		const long Ntargets_downstream 		= Ntargets_downstream_per_clade[child];
+		const long Nnontargets_upstream 	= Nnontargets_upstream_per_clade[child];
+		const long Nnontargets_downstream 	= Nnontargets_downstream_per_clade[child];
+		const long Nmisplaced_targets		= (Ntargets_upstream>Ntargets_downstream ? Ntargets_downstream : Ntargets_upstream);
+		const long Nmisplaced_nontargets	= (Ntargets_upstream>Ntargets_downstream ? Nnontargets_upstream : Nnontargets_downstream);
+		if((best_edge<0) || (Nmisplaced_targets+Nmisplaced_nontargets<best_Nmisplaced_targets+best_Nmisplaced_nontargets)){
+			best_edge 	= edge;
+			best_Nmisplaced_targets		= Nmisplaced_targets;
+			best_Nmisplaced_nontargets	= Nmisplaced_nontargets;
+			best_Ntargets_upstream 		= Ntargets_upstream;
+			best_Ntargets_downstream 	= Ntargets_downstream;
+		}
+	}
+	
+	// determine misplaced tips if requested
+	std::vector<long> misplaced_targets, misplaced_nontargets;
+	if(include_misplaced){
+		misplaced_targets.reserve(best_Nmisplaced_targets);
+		misplaced_nontargets.reserve(best_Nmisplaced_nontargets);
+		
+		// determine which clades (especially tips) descend from best_edge (traverse root-->tips)
+		std::vector<bool> descends_from_best_edge(Nclades,false);
+		descends_from_best_edge[tree_edge[2*best_edge+1]] = true;
+		for(long q=1; q<traversal_queue_root2tips.size(); ++q){
+			clade 	= traversal_queue_root2tips[q];
+			parent 	= clade2parent[clade];
+			if(!descends_from_best_edge[clade]) descends_from_best_edge[clade] = descends_from_best_edge[parent];
+		}
+		
+		// collect misplaced target & non-target tips
+		const bool targets_should_be_upstream = (best_Ntargets_upstream>best_Ntargets_downstream);
+		for(long tip=0; tip<Ntips; ++tip){
+			if(descends_from_best_edge[tip] && (Ntargets_downstream_per_clade[tip]==1) && targets_should_be_upstream) misplaced_targets.push_back(tip);					// misplaced downstream target
+			else if(descends_from_best_edge[tip] && (Nnontargets_downstream_per_clade[tip]==1) && (!targets_should_be_upstream)) misplaced_nontargets.push_back(tip);	// misplaced downstream non-target
+			else if((!descends_from_best_edge[tip]) && (Ntargets_downstream_per_clade[tip]==1) && (!targets_should_be_upstream)) misplaced_targets.push_back(tip);		// misplaced upstream target
+			else if((!descends_from_best_edge[tip]) && (Nnontargets_downstream_per_clade[tip]==1) && targets_should_be_upstream) misplaced_nontargets.push_back(tip); 	// misplaced upstream non-target
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("edge") 					= best_edge,
+								Rcpp::Named("Nmisplaced_targets")		= best_Nmisplaced_targets,
+								Rcpp::Named("Nmisplaced_nontargets")	= best_Nmisplaced_nontargets,
+								Rcpp::Named("Ntargets_upstream") 		= best_Ntargets_upstream,
+								Rcpp::Named("Ntargets_downstream") 		= best_Ntargets_downstream,
+								Rcpp::Named("misplaced_targets") 		= misplaced_targets,
+								Rcpp::Named("misplaced_nontargets") 	= misplaced_nontargets);
+}
+
+
+
+
 // Collapse tree nodes (and their descending subtrees) into tips, whenever all descending tips have a distance from a node below a certain threshold (or whenever the sum of edges descending from the node is below the threshold, see option criterion)
 // If shorten==true:
 //   Collapsed nodes will be turned into tips, while retaining the length of their incoming edge (thus the tree is shortened)
@@ -6350,9 +7122,10 @@ Rcpp::List extend_tree_to_height_CPP(	const long			Ntips,
 }
 
 
-// Eliminate multifurcations in a tree by replacing them with multiple bifurcations
+// Eliminate multifurcations in a tree by replacing them with multiple descending bifurcations
 // Tips indices remain the same, but edge indices and the total number of nodes/edges may increase (if the tree includes multifurcations)
 // Old nodes retain their index, and new nodes will have indices Nnodes,...,(Nnew_nodes-1)
+// New nodes will always descend from the old multifurcating nodes, that is, for every multifurcating old node that is split into bifurcations, the newly added nodes will descend from the old node (that kept its original index)
 // The tree need not be rooted
 template<class INTEGER_ARRAY, class NUMERIC_ARRAY>
 void multifurcations_to_bifurcations(	const long			Ntips,
@@ -6703,8 +7476,8 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		// determine time of next speciation or extinction event
 		// prevent deaths if only one tip is left
 		const double NEtips 	= extant_tips.size();
-		const double birth_rate = birth_rate_intercept + birth_rate_factor * pow(NEtips, birth_rate_exponent) + (has_added_birth_rates ? max(0.0,added_birth_rates_pc(time))*NEtips : 0.0);		
-		const double death_rate = (NEtips<=1 ? 0 : (death_rate_intercept + death_rate_factor * pow(NEtips, death_rate_exponent)) + (has_added_death_rates ? max(0.0,added_death_rates_pc(time))*NEtips : 0.0));
+		const double birth_rate = max(0.0, birth_rate_intercept + birth_rate_factor * pow(NEtips, birth_rate_exponent) + (has_added_birth_rates ? added_birth_rates_pc(time)*NEtips : 0.0));
+		const double death_rate = (NEtips<=1 ? 0 : max(0.0, (death_rate_intercept + death_rate_factor * pow(NEtips, death_rate_exponent)) + (has_added_death_rates ? added_death_rates_pc(time)*NEtips : 0.0)));
 		if(std::isnan(initial_growth_rate)) initial_growth_rate = birth_rate-death_rate;
 		if(((birth_rate-death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
 		total_rate = birth_rate+death_rate;
@@ -6747,6 +7520,7 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		Rcpp::checkUserInterrupt();
 	}
 	
+	
 	// add a small dt at the end to make all edges non-zero length
 	time += random_exponential_distribution(total_rate);
 	if(max_time>0) time = min(time, max_time); // prevent going past max_time
@@ -6771,7 +7545,7 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 	for(long edge=0; edge<Nedges; ++edge){
 		clade_is_tip[tree_edge[edge*2+0]] = false;
 	}
-	
+
 	// re-number tip & node indices to conform with the phylo format, where tips are indexed first (0,..,Ntips-1) and nodes last (Ntips,..,Ntips+Nnodes-1).
 	long Nnodes = Nclades - Ntips;
 	std::vector<long> old2new_clade(Nclades,-1);
@@ -6789,9 +7563,15 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		extant_tips[tip] = old2new_clade[extant_tips[tip]];
 	}
 	root = old2new_clade[root];
+	
+	if(Ntips<=1){
+		// something went wrong (e.g. zero birth & death rates)
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
+	}
+
 		
 	// remove extinct tips if needed (make coalescent)
-	if(coalescent && ((death_rate_intercept!=0) || (death_rate_factor!=0))){
+	if(coalescent && ((death_rate_intercept!=0) || (death_rate_factor!=0) || has_added_death_rates)){
 		std::vector<long> pruning_new_tree_edge, pruning_new2old_clade;
 		std::vector<double> pruning_new_edge_length;
 		long pruning_new_root, pruning_Ntips_kept, pruning_Nnodes_kept, pruning_Nedges_kept;
@@ -6822,7 +7602,8 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		root_time 	+= root_shift; // alternative: = clade2end_time[new2old_clade[pruning_new2old_clade[pruning_new_root]]];
 	}
 	
-	return Rcpp::List::create(	Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
+	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
+								Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
 								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
 								Rcpp::Named("Nnodes") 			= Nnodes,
 								Rcpp::Named("Ntips") 			= Ntips,
@@ -8084,14 +8865,16 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 											const long 			Nnodes,
 											const long			Nedges,
 											const long			Ntraits,
-											const IntegerVector &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-											const NumericVector &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
-											const NumericVector	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
-											const bool			only_bifurcations,	// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
-											const bool			scaled,				// (INPUT) if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
-											std::vector<double>	&PICs,				// (OUTPUT) 2D array of size Npics x Ntraits, in row-major format, listing PICs for each trait and for each considered node
-											std::vector<double>	&distances,			// (OUTPUT) 1D array of size Npics, listing phylogenetic distances corresponding to the PICs. Under a Brownian motion mode, these are proportional to the variance of each PIC
-											std::vector<long>	&PIC_nodes){		// (OUTPUT) 1D array of size Npics, listing node indices for which PICs were calculated. Negative values indicate nodes that were not actually in the original tree, but were created temporarily during expansion of multifurcations
+											const IntegerVector &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+											const NumericVector &edge_length,			// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+											const NumericVector	&tip_states,			// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
+											const bool			only_bifurcations,		// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
+											const bool			scaled,					// (INPUT) if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
+											std::vector<double>	&PICs,					// (OUTPUT) 2D array of size Npics x Ntraits, in row-major format, listing PICs for each trait and for each considered node
+											std::vector<double>	&distances,				// (OUTPUT) 1D array of size Npics, listing phylogenetic distances corresponding to the PICs. Under a Brownian motion mode, these are proportional to the variance of each PIC
+											std::vector<long>	&PIC_nodes,				// (OUTPUT) 1D array of size Npics, listing node indices for which PICs were calculated. Negative values indicate nodes that were not actually in the original tree, but were created temporarily during expansion of multifurcations
+											std::vector<double>	&root_state,			// (OUTPUT) 1D array of size Ntraits, holding the root's globally reconstructed state (X_k sensu Felsenstein)
+											std::vector<double>	&root_standard_error){	// (OUTPUT) 1D array of size Ntraits, listing the standard errors for the root's state (under a Brownian motion model) [Garland et al. (1999). An introduction to phylogenetically based statistical methods, with a new method for confidence intervals on ancestral values]
 	// check if tree has monofurcations & multifurcations
 	long Nmonofurcations, Nbifurcations, Nmultifurcations;
 	count_monofurcations_and_multifurcations(	Ntips,
@@ -8134,14 +8917,14 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 	get_incoming_edge_per_clade(Ntips, Nlocal_nodes, Nlocal_edges, local_tree_edge, incoming_edge_per_clade);
 	
 	// get root
-	const long root = get_root_from_incoming_edge_per_clade(Ntips, local_tree_edge, incoming_edge_per_clade);
+	const long local_root = get_root_from_incoming_edge_per_clade(Ntips, local_tree_edge, incoming_edge_per_clade);
 
 	// prepare tree traversal route (root-->tips) and edge mappings
 	std::vector<long> traversal_queue, node2first_edge, node2last_edge, edge_mapping;
 	get_tree_traversal_root_to_tips(Ntips,
 									Nlocal_nodes,
 									Nlocal_edges,
-									root,
+									local_root,
 									local_tree_edge,
 									false,	// don't include tips
 									false,	// edge mappings are not pre-calculated
@@ -8156,11 +8939,11 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 	std::vector<double> incoming_length_per_clade(Nlocal_clades);
 	if(local_edge_length.size()>0){
 		for(long clade=0; clade<Nlocal_clades; ++clade){
-			if(clade!=root) incoming_length_per_clade[clade] = local_edge_length[incoming_edge_per_clade[clade]];
+			if(clade!=local_root) incoming_length_per_clade[clade] = local_edge_length[incoming_edge_per_clade[clade]];
 		}
 	}else{
 		incoming_length_per_clade.assign(incoming_length_per_clade.size(),1);
-		incoming_length_per_clade[root] = 0;
+		incoming_length_per_clade[local_root] = 0;
 	}
 	
 									
@@ -8190,6 +8973,7 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 		incoming_length_per_clade[clade] += 1.0/total_weight;
 		
 		// calculate PICs using Felsenstein's X_i & nu_i (skip over monofurcating nodes)
+		// note that monofurcating nodes acquire the same state as their child, and their modified incoming_length is the same as their child plus the length of their incoming edge
 		if(1+node2last_edge[node]-node2first_edge[node] != 2) continue; // node is not bifurcating
 		edge1		= edge_mapping[node2first_edge[node]];
 		edge2		= edge_mapping[node2first_edge[node]+1];
@@ -8204,7 +8988,21 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 		PIC_nodes.push_back(node<Nnodes ? node : -1); // keep track which node this PIC corresponds to. -1 means this temporary node did not exist in the original tree
 	}
 	
-	// rescale if needed
+	// extract estimated root state & calculate standard error
+	// this should come before the scaling further below
+	// Standard error formula according to: [Garland et al. (1999). Page 377]
+	root_state.resize(Ntraits);
+	root_standard_error.assign(Ntraits,0);
+	for(trait=0; trait<Ntraits; ++trait){
+		root_state[trait] = node_states[(local_root - Ntips)*Ntraits+trait];
+		for(long p=0; p<Npics; ++p){
+			root_standard_error[trait] += SQ(PICs[p*Ntraits+trait])/distances[p];
+		}
+		root_standard_error[trait] *= incoming_length_per_clade[local_root] / Npics;
+		root_standard_error[trait] = sqrt(root_standard_error[trait]);
+	}
+	
+	// rescale returned PICs if needed
 	if(scaled){
 		for(long p=0; p<Npics; ++p){
 			for(trait=0; trait<Ntraits; ++trait){
@@ -8229,7 +9027,7 @@ Rcpp::List get_phylogenetic_independent_contrasts_CPP(	const long			Ntips,
 														const NumericVector	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
 														const bool			only_bifurcations,	// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
 														const bool			scaled){			// (INPUT)if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
-		std::vector<double> PICs, distances;
+		std::vector<double> PICs, distances, root_state, root_standard_error;
 		std::vector<long> PIC_nodes;
 		get_phylogenetic_independent_contrasts(	Ntips,
 												Nnodes,
@@ -8242,10 +9040,14 @@ Rcpp::List get_phylogenetic_independent_contrasts_CPP(	const long			Ntips,
 												scaled,
 												PICs,
 												distances,
-												PIC_nodes);
-		return Rcpp::List::create(	Rcpp::Named("PICs")  		= Rcpp::wrap(PICs),
-									Rcpp::Named("distances") 	= Rcpp::wrap(distances),
-									Rcpp::Named("nodes") 		= Rcpp::wrap(PIC_nodes));
+												PIC_nodes,
+												root_state,
+												root_standard_error);
+		return Rcpp::List::create(	Rcpp::Named("PICs")  				= Rcpp::wrap(PICs),
+									Rcpp::Named("distances") 			= Rcpp::wrap(distances),
+									Rcpp::Named("nodes") 				= Rcpp::wrap(PIC_nodes),
+									Rcpp::Named("root_state") 			= Rcpp::wrap(root_state),
+									Rcpp::Named("root_standard_error") 	= Rcpp::wrap(root_standard_error));
 }
 
 
@@ -8265,7 +9067,7 @@ void fit_Brownian_motion_model(	const long			Ntips,
 											
 	// calculate phylogenetic independent contrasts (PIC)
 	// PICs correspond to independent increments of a multivariate Brownian motion process
-	std::vector<double> PICs, distances;
+	std::vector<double> PICs, distances, root_state, root_standard_error;
 	std::vector<long> PIC_nodes;
 	get_phylogenetic_independent_contrasts(	Ntips,
 											Nnodes,
@@ -8278,7 +9080,9 @@ void fit_Brownian_motion_model(	const long			Ntips,
 											true,	// rescale PICs by phylogenetic distances
 											PICs,
 											distances,
-											PIC_nodes);
+											PIC_nodes,
+											root_state,
+											root_standard_error);
 											
 	// estimate diffusivity matrix based on independent contrasts
 	// maximum-likelihood estimator on the intrinsic geometry of positive-definite matrices
@@ -9634,7 +10438,6 @@ NumericVector apply_MPR_to_missing_clades_CPP(	const long			Ntips,
 												const IntegerVector &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
 												LogicalVector		likelihoods_known,		// (INPUT) 1D array of size Nclades, indicating whether the likelihoods for a particular clade are known (1) or unknown/to be determined (0).
 												NumericVector 		likelihoods){			// (INPUT) 2D matrix of size Nclades x Nstates, in row-major format. Likelihoods of each state in each clade (tip & node) of the tree.
-
 	// determine root
 	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
 
@@ -9784,13 +10587,13 @@ Rcpp::List ASR_via_squared_change_parsimony_CPP(const long			Ntips,
 																	quadratic_parameters_per_node);
 	}
 	const double TSS = quadratic_parameters_per_node[(root-Ntips)*3+2] - SQR(quadratic_parameters_per_node[(root-Ntips)*3+1])/(4*quadratic_parameters_per_node[(root-Ntips)*3+0]); // minimized total sum of squared changes over the tree [Maddison 1991, Formula 7]
-	
+		
 	if(!global){
 		// return the local state estimate for each node, i.e. only taking into account its descending subtree
-		// this is equivalent to phylogenetic independent contrasts
+		// this is equivalent to the X_k from Felsenstein's phylogenetic independent contrasts
 		// however we used Maddison's quadratic parameters because it's convenient and has been generalized to multifurcations [Maddison 1991]
 		for(node=0; node<Nnodes; ++node){
-			ancestral_states[node] = -quadratic_parameters_per_node[node*3+1]/(2*quadratic_parameters_per_node[node*3+0]);
+			ancestral_states[node] = -quadratic_parameters_per_node[node*3+1]/(2*quadratic_parameters_per_node[node*3+0]); // [Maddison 1991, page 312]
 		}
 		
 	}else{
@@ -9865,6 +10668,182 @@ Rcpp::List ASR_via_squared_change_parsimony_CPP(const long			Ntips,
 	return Rcpp::List::create(	Rcpp::Named("TSS")				= TSS,	// total sum of squared changes
 								Rcpp::Named("ancestral_states") = Rcpp::wrap(ancestral_states));
 }
+
+
+
+
+
+
+// ASR via Phylogenetic Independent Contrasts (PIC) for a scalar continuous trait on a tree [Felsenstein 1985, page 10]
+// Confidence intervals can be calculated as described by [Garland et al. (1999), page 377]
+// Literature:
+//    Felsenstein (1985). Phylogenies and the Comparative Method. The American Naturalist. 125:1-15.
+//    Garland et al. (1999). An introduction to phylogenetically based statistical methods, with a new method for confidence intervals on ancestral values. American Zoologist. 39:374-388.
+// Requirements:
+//   Tree can include multi- and mono-furcations (multifurcations are automatically expanded into descending bifurcations).
+//   Tree must be rooted. Root will be determined automatically as the node with no parent.
+// [[Rcpp::export]]
+Rcpp::List ASR_via_independent_contrasts_CPP(	const long					Ntips,
+												const long 					Nnodes,
+												const long					Nedges,
+												const IntegerVector 		&tree_edge,					// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+												const NumericVector			&edge_length,				// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+												const std::vector<double>	&tip_states,				// (INPUT) 1D array of size Ntips, listing the numeric state at each tip
+												const bool					include_standard_errors){	// (INPUT) if true, then standard errors of the local estimates are also calculated according to [Garland et al (1999)]
+	long child, node, clade;
+	double length, total_weight;
+
+	// check if tree has monofurcations & multifurcations
+	long Nmonofurcations, Nbifurcations, Nmultifurcations;
+	count_monofurcations_and_multifurcations(	Ntips,
+												Nnodes,
+												Nedges,
+												tree_edge,
+												Nmonofurcations,
+												Nbifurcations,
+												Nmultifurcations);
+	
+	std::vector<long> local_tree_edge;
+	std::vector<double> local_edge_length;
+	long Nlocal_edges, Nlocal_nodes;
+	if(Nmultifurcations>0){
+		// Tree has multifurcations, so expand them first to bifurcations
+		// Note that the number of monofurcations will remain unchanged, but the number of bifurcations/nodes/edges will increase
+		// dummy nodes will always descend from the original nodes, and will be indexed Nnodes, Nnodes+1, ...
+		std::vector<long> dummy;
+		multifurcations_to_bifurcations(Ntips,
+										Nnodes,
+										Nedges,
+										tree_edge,
+										edge_length,
+										0,
+										Nlocal_nodes,
+										Nlocal_edges,
+										local_tree_edge,
+										local_edge_length,
+										dummy);
+	}else{
+		local_tree_edge 	=  Rcpp::as<vector<long> >(tree_edge);
+		local_edge_length 	=  Rcpp::as<vector<double> >(edge_length);
+		Nlocal_nodes 		= Nnodes;
+		Nlocal_edges 		= Nedges;
+	}
+	const long Nlocal_clades = Ntips + Nlocal_nodes;
+	
+	// get incoming edge for each clade
+	std::vector<long> incoming_edge_per_clade;
+	get_incoming_edge_per_clade(Ntips, Nlocal_nodes, Nlocal_edges, local_tree_edge, incoming_edge_per_clade);
+	
+	// get root
+	const long local_root = get_root_from_incoming_edge_per_clade(Ntips, local_tree_edge, incoming_edge_per_clade);
+
+	// prepare tree traversal route (root-->tips) and edge mappings
+	std::vector<long> traversal_queue, node2first_edge, node2last_edge, edge_mapping;
+	get_tree_traversal_root_to_tips(Ntips,
+									Nlocal_nodes,
+									Nlocal_edges,
+									local_root,
+									local_tree_edge,
+									false,	// don't include tips
+									false,	// edge mappings are not pre-calculated
+									traversal_queue,
+									node2first_edge,
+									node2last_edge,	
+									edge_mapping,
+									false,
+									"");
+									
+	// prepare incoming edge length per clade (will be modified later on as part of Felsenstein's algorithm)
+	const double edge_length_epsilon = RELATIVE_EPSILON * get_array_nonzero_min(local_edge_length); // substitute to be used for zero edge lengths
+	std::vector<double> incoming_length_per_clade(Nlocal_clades);
+	if(local_edge_length.size()>0){
+		for(long clade=0; clade<Nlocal_clades; ++clade){
+			if(clade!=local_root){
+				length = local_edge_length[incoming_edge_per_clade[clade]];
+				incoming_length_per_clade[clade] = (length==0 ? edge_length_epsilon : length);
+			}
+		}
+	}else{
+		incoming_length_per_clade.assign(incoming_length_per_clade.size(),1);
+		incoming_length_per_clade[local_root] = 0;
+	}
+									
+	// calculate Felsenstein's X_k and PICs in a postorder traversal (tips-->root)
+	std::vector<double> node_states(Nlocal_nodes,0);
+	for(long q=traversal_queue.size()-1; q>=0; --q){
+		clade	= traversal_queue[q];
+		node	= clade - Ntips;
+		// calculate Felsenstein's X_k (node_states) and nu_k (incoming_length_per_clade)
+		total_weight = 0;
+		for(long e=node2first_edge[node]; e<=node2last_edge[node]; ++e){
+			child 	= local_tree_edge[2*edge_mapping[e]+1];
+			length 	= incoming_length_per_clade[child];
+			node_states[node] 	+= (1.0/length) * (child<Ntips ? tip_states[child] : node_states[child-Ntips]);
+			total_weight 		+= (1.0/length);
+		}
+		node_states[node] /= total_weight;
+		incoming_length_per_clade[clade] += 1.0/total_weight;
+	}
+	
+	// calculate standard errors as described by [Garland et al. (1999). Page 377]
+	// traverse tips-->root in order to calculate cumulative sum of squared standardized PICs descending from each node
+	std::vector<double> node_standard_errors;
+	std::vector<double> sum_squared_standardized_PICs; // cumulative sum of squared standardized PICs descending from each node
+	std::vector<long> NPICs_per_node;
+	std::vector<double> node_CI95s;
+	if(include_standard_errors){
+		node_standard_errors.resize(Nnodes);
+		sum_squared_standardized_PICs.assign(Nnodes,0);
+		NPICs_per_node.assign(Nnodes,0);
+		node_CI95s.resize(Nnodes);
+		double X1, X2, distance;
+		long child1, child2;
+		for(long q=traversal_queue.size()-1; q>=0; --q){
+			clade	= traversal_queue[q];
+			node	= clade - Ntips;
+			if(node2last_edge[node]==node2first_edge[node]){
+				// Treat monofurcating nodes in a special way. 
+				// Note that monofurcating nodes acquire the same state as their child,
+				// while their modified incoming_length is the same as their child plus the length of their incoming edge
+				child1 = local_tree_edge[2*edge_mapping[node2first_edge[node]]+1];
+				if(child1>=Ntips){
+					sum_squared_standardized_PICs[node] = sum_squared_standardized_PICs[child1-Ntips];
+					NPICs_per_node[node] = NPICs_per_node[child1-Ntips];
+				}
+				node_standard_errors[node] = (NPICs_per_node[node]==0 ? NAN_D : sqrt((sum_squared_standardized_PICs[node]/NPICs_per_node[node]) * incoming_length_per_clade[child1]));
+			}else{
+				child1		= local_tree_edge[2*edge_mapping[node2first_edge[node]]+1];
+				child2		= local_tree_edge[2*edge_mapping[node2first_edge[node]+1]+1];
+				X1 			= (child1<Ntips ? tip_states[child1] : node_states[child1-Ntips]);
+				X2 			= (child2<Ntips ? tip_states[child2] : node_states[child2-Ntips]);
+				distance	= incoming_length_per_clade[child1] + incoming_length_per_clade[child2];
+				sum_squared_standardized_PICs[node] = SQ(X2 - X1)/distance;
+				NPICs_per_node[node] = 1;
+				if(child1>=Ntips){
+					sum_squared_standardized_PICs[node] += sum_squared_standardized_PICs[child1-Ntips];
+					NPICs_per_node[node] += NPICs_per_node[child1-Ntips];
+				}
+				if(child2>=Ntips){
+					sum_squared_standardized_PICs[node] += sum_squared_standardized_PICs[child2-Ntips];
+					NPICs_per_node[node] += NPICs_per_node[child2-Ntips];
+				}
+				node_standard_errors[node] = (NPICs_per_node[node]==0 ? NAN_D : sqrt((sum_squared_standardized_PICs[node]/NPICs_per_node[node]) * (incoming_length_per_clade[child1]*incoming_length_per_clade[child2]/(incoming_length_per_clade[child1]+incoming_length_per_clade[child2]))));
+			}
+			node_CI95s[node] = quantile_Students_t(0.975, NPICs_per_node[node]) * node_standard_errors[node];
+		}
+	}
+	
+	// omit reconstructed states for dummy nodes, i.e. only keep original (multifurcating) nodes
+	if(node_states.size()>Nnodes) node_states.resize(Nnodes);
+	if(node_standard_errors.size()>Nnodes) node_standard_errors.resize(Nnodes);
+	if(node_CI95s.size()>Nnodes) node_CI95s.resize(Nnodes);
+
+	return	Rcpp::List::create(	Rcpp::Named("node_states")  		= Rcpp::wrap(node_states),
+								Rcpp::Named("node_standard_errors") = Rcpp::wrap(node_standard_errors),
+								Rcpp::Named("node_CI95s")			= Rcpp::wrap(node_CI95s));
+}
+
+
 
 
 
