@@ -17,14 +17,14 @@ asr_empirical_probabilities = function(tree, tip_states, Nstates=NULL, probabili
 		if((min_tip_state<1) || (max_tip_state>Nstates)) stop(sprintf("ERROR: tip_states must be integers between 1 and %d, but found values between %d and %d",Nstates,min_tip_state,max_tip_state))
 		if((!is.null(names(tip_states))) && any(names(tip_states)!=tree$tip.label)) stop("ERROR: Names in tip_states and tip labels in tree don't match (must be in the same order).")
 	}
-	
-	ancestral_likelihoods = get_empirical_state_frequencies_per_node(	Ntips 		= Ntips,
-																		Nnodes		= Nnodes,
-																		Nedges		= nrow(tree$edge),
-																		Nstates		= Nstates,
-																		tree_edge 	= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
-																		tip_states	= tip_states-1);
-	ancestral_likelihoods = matrix(ancestral_likelihoods, ncol=Nstates, byrow=TRUE) # unflatten
+			
+	results = get_empirical_state_frequencies_per_node_CPP(	Ntips 		= Ntips,
+															Nnodes		= Nnodes,
+															Nedges		= nrow(tree$edge),
+															Nstates		= Nstates,
+															tree_edge 	= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+															tip_states	= tip_states-1);
+	ancestral_likelihoods = matrix(results$frequencies_per_node, ncol=Nstates, byrow=TRUE) # unflatten
 	if(probabilities) ancestral_likelihoods = ancestral_likelihoods/rowSums(ancestral_likelihoods); 
 	return(list(success=TRUE, ancestral_likelihoods=ancestral_likelihoods));
 }

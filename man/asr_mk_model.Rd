@@ -137,15 +137,18 @@ Q = get_random_mk_transition_matrix(Nstates, rate_model="ER", max_rate=0.01)
 cat(sprintf("Simulated ER transition rate=\%g\n",Q[1,2]))
 
 # simulate the trait's evolution
-tip_states = simulate_mk_model(tree, Q)$tip_states
+simulation = simulate_mk_model(tree, Q)
+tip_states = simulation$tip_states
+cat(sprintf("Simulated states for last 20 nodes:\n"))
+print(tail(simulation$node_states,20))
 
 # reconstruct node states from simulated tip states
-results = asr_mk_model(tree, tip_states, Nstates, rate_model="ER", Ntrials=2, Nthreads=2)
+results = asr_mk_model(tree, tip_states, Nstates, rate_model="ER", Ntrials=2)
 node_states = max.col(results$ancestral_likelihoods)
 
 # print Mk model fitting summary
 cat(sprintf("Mk model: log-likelihood=\%g\n",results$loglikelihood))
-cat(sprintf("Universal (ER) transition rate=\%g\n",results$transition_matrix[1,2]))
+cat(sprintf("Fitted ER transition rate=\%g\n",results$transition_matrix[1,2]))
 
 # print reconstructed node states for last 20 nodes
 print(tail(node_states,20))

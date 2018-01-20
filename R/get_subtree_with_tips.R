@@ -50,9 +50,9 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 		subtree = list(	Nnode 		= Nnodes_kept,
 						tip.label 	= (if(is.null(tree$tip.label)) NULL else tree$tip.label[new2old_clade[1:Ntips_kept]]),
 						node.label 	= (if(is.null(tree$node.label)) NULL else tree$node.label[new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips]),
-						edge 		= matrix(results$new_tree_edge,ncol=2,byrow=TRUE) + 1,
+						edge 		= matrix(as.integer(results$new_tree_edge),ncol=2,byrow=TRUE) + 1L,
 						edge.length = results$new_edge_length,
-						root 		= results$new_root+1,
+						root 		= results$new_root+1L,
 						root.edge	= (if(force_keep_root && (!is.null(tree$root.edge))) tree$root.edge else NULL));
 		class(subtree) = "phylo";
 		return(list(subtree			= subtree, 

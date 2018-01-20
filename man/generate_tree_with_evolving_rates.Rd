@@ -1,18 +1,20 @@
 \name{generate_tree_with_evolving_rates}
 \alias{generate_tree_with_evolving_rates}
 \title{
-Generate a random tree with birth/death rates evolving under Brownian motion.
+Generate a random tree with evolving speciation/extinction rates.
 }
 \description{
-Generate a random phylogenetic tree via simulation of a Poissonian speciation/extinction (birth/death) process. New species are added (born) by splitting of a randomly chosen extant tip. Per-capita birth and death rates evolve under a Brownian motion model constrained to a finite interval (via reflection). Thus, the probability rate of a tip splitting or going extinct depends on the tip, with closely related tips having more similar per-capita birth and death rates.
+Generate a random phylogenetic tree via simulation of a Poissonian speciation/extinction (birth/death) process. New species are added (born) by splitting of a randomly chosen extant tip. Per-capita birth and death rates (aka. speciation and extinction rates) evolve under some stochastic process (e.g. Brownian motion) along each edge. Thus, the probability rate of a tip splitting or going extinct depends on the tip, with closely related tips having more similar per-capita birth and death rates.
 }
 \usage{
 generate_tree_with_evolving_rates(parameters           = list(),
+                                  rate_model           = 'BM',
                                   max_tips             = NULL, 
                                   max_time             = NULL,
                                   max_time_eq          = NULL,
                                   coalescent           = TRUE,
                                   as_generations       = FALSE,
+                                  all_Mk_transitions   = TRUE,
                                   Nsplits              = 2, 
                                   tip_basename         = "", 
                                   node_basename        = NULL,
@@ -24,28 +26,13 @@ generate_tree_with_evolving_rates(parameters           = list(),
 %- maybe also 'usage' for other objects documented here.
 \arguments{
 \item{parameters}{
-A named list specifying the birth-death model parameters, with one or more of the following entries:
-
-\code{birth_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita birth rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
-
-\code{min_birth_rate_pc}:
-Non-negative number. The minimum allowed per-capita birth rate of a clade. In units 1/time. By default this is 0.
-
-\code{max_birth_rate_pc}:
-Non-negative number. The maximum allowed per-capita birth rate of a clade. In units 1/time. By default this is 1.
-
-\code{death_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita death rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
-
-\code{min_death_rate_pc}:
-Non-negative number. The minimum allowed per-capita death rate of a clade. In units 1/time. By default this is 0.
-
-\code{max_death_rate_pc}:
-Non-negative number. The maximum allowed per-capita death rate of a clade. In units 1/time. By default this is 1.
-
-\code{rarefaction}:
-Numeric between 0 and 1. Rarefaction to be applied at the end of the simulation (fraction of random tips kept in the tree). 
-Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction.
+A named list specifying the model parameters for the evolving birth/death rates. The precise entries expected depend on the chosen \code{rate_model} (see details below).
 }
+
+\item{rate_model}{
+Character, specifying the model for the evolving per-capita birth/death rates. Must be one of the following: 'BM' (Brownian motion constrained to a finite interval via reflection), 'Mk' (discrete-state continuous-time Markov chain with fixed transition rates).
+}
+
 \item{max_tips}{
 Maximum number of tips of the tree to be generated. If \code{coalescent=TRUE}, this refers to the number of extant tips. Otherwise, it refers to the number of extinct + extant tips. If \code{NULL} or <=0, the number of tips is unlimited (so be careful).
 }
@@ -60,6 +47,9 @@ Logical, specifying whether only the coalescent tree (i.e. the tree spanning the
 }
 \item{as_generations}{
 Logical, specifying whether edge lengths should correspond to generations. If FALSE, then edge lengths correspond to time.
+}
+\item{all_Mk_transitions}{
+Logical, specifying whether to simulate all state transitions along edges. Only relevant if \code{rate_model=='Mk'}. If \code{FALSE}, then state transitions are only simulated (i.e. states are only updated) during speciation events. This should typically be \code{TRUE}, however it may increase computation time if transition rates are comparable to or greater than speciation rates.
 }
 \item{Nsplits}{
 Integer greater than 1. Number of child-tips to generate at each diversification event. If set to 2, the generated tree will be bifurcating. If >2, the tree will be multifurcating.
@@ -85,7 +75,41 @@ Logical. If \code{TRUE}, then the bper-capita birth & death rates of all tips an
 \details{
 If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
 
-The per-capita birth and death rates of the root are chosen randomly, independently and uniformly within their allowed intervals.
+If \code{rate_model=='BM'}, then per-capita birth rates (speciation rates) and per-capita death rates (extinction rates) evolve according to Brownian Motion, constrained to a finite interval via reflection. Note that speciation and extinction rates are only updated at branching points, i.e. during speciation events, while waiting times until speciation/extinction are based on rates at the previous branching point. The argument \code{parameters} should be a named list including one or more of the following elements:
+
+\code{birth_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita birth rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
+
+\code{min_birth_rate_pc}:
+Non-negative number. The minimum allowed per-capita birth rate of a clade. In units 1/time. By default this is 0.
+
+\code{max_birth_rate_pc}:
+Non-negative number. The maximum allowed per-capita birth rate of a clade. In units 1/time. By default this is 1.
+
+\code{death_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita death rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
+
+\code{min_death_rate_pc}:
+Non-negative number. The minimum allowed per-capita death rate of a clade. In units 1/time. By default this is 0.
+
+\code{max_death_rate_pc}:
+Non-negative number. The maximum allowed per-capita death rate of a clade. In units 1/time. By default this is 1.
+
+\code{rarefaction}:
+Numeric between 0 and 1. Rarefaction to be applied at the end of the simulation (fraction of random tips kept in the tree). 
+Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction.
+
+If \code{rate_model=='Mk'}, then speciation/extinction rates are determined by a tip's current "state", which evolves according to a continuous-time discrete-state Markov chain (Mk model) with constant transition rates. The argument \code{parameters} should be a named list including one or more of the following elements:
+
+\code{Nstates}: Number of possible discrete states a tip can have. For example, if \code{Nstates} then this corresponds to the common Binary State Speciation and Extinction (BiSSE) model (Maddison et al., 2007).
+
+\code{state_birth_rates}: Numeric vector of size Nstates, listing the per-capita birth rate (speciation rate) at each state. Can also be a single number (all states have the same birth rate).
+
+\code{state_death_rates}: Numeric vector of size Nstates, listing the per-capita death rate (extinction rate) at each state. Can also be a single number (all states have the same death rate).
+
+\code{transition_matrix}: 2D numeric matrix of size Nstates x Nstates. Transition rate matrix for the Markov chain model of birth/death rate evolution.
+
+\code{rarefaction}: Same as when \code{rate_model=='BM'}.
+
+If \code{rate_model=='BM'}, then the per-capita birth and death rates of the root are chosen randomly, independently and uniformly within their allowed intervals. If \code{rate_model=='Mk'}, then the root's discrete state is chosen randomly among all possible states.
 }
 
 
@@ -127,28 +151,37 @@ Numeric vector, listing the per-capita birth rate of each tip and node in the tr
 \item{death_rates_pc}{
 Numeric vector, listing the per-capita death rate of each tip and node in the tree.
 }
+\item{states}{
+Integer vector of size Ntips+Nnodes, listing the discrete state of each tip and node in the tree. Only included if \code{rate_model=="Mk"}.
+}
 }
 
 \author{Stilianos Louca}
 
 \references{
 D. J. Aldous (2001). Stochastic models and descriptive statistics for phylogenetic trees, from Yule to today. Statistical Science. 16:23-34.
+
+W. P. Maddison, P. E. Midford, S. P. Otto (2007). Estimating a binary character's effect on speciation and extinction. Systematic Biology. 56:701-710.
 }
 
 %\seealso{
 %}
 
 \examples{
-# Generate tree
+# Example 1
+# Generate tree, with rates evolving under Brownian motion
 parameters = list(birth_rate_diffusivity  = 1,
                   min_birth_rate_pc       = 1,
                   max_birth_rate_pc       = 2,
                   death_rate_diffusivity  = 0.5,
                   min_death_rate_pc       = 0,
                   max_death_rate_pc       = 1)
-simulation = generate_tree_with_evolving_rates(parameters,max_tips=1000,include_rates=TRUE)
-tree       = simulation$tree
-Ntips      = length(tree$tip.label)
+simulation = generate_tree_with_evolving_rates(parameters,
+                                               rate_model='BM',
+                                               max_tips=1000,
+                                               include_rates=TRUE)
+tree  = simulation$tree
+Ntips = length(tree$tip.label)
 
 # plot per-capita birth & death rates of tips
 plot( x=simulation$birth_rates_pc[1:Ntips], 
@@ -156,9 +189,30 @@ plot( x=simulation$birth_rates_pc[1:Ntips],
       type='p', 
       xlab="pc birth rate", 
       ylab="pc death rate", 
-      main="Per-capita birth & death rates across tips",
+      main="Per-capita birth & death rates across tips (BM model)",
       las=1)
 
+      
+######################
+# Example 2
+# Generate tree, with rates evolving under a binary-state model
+Q = get_random_mk_transition_matrix(Nstates=2, rate_model="ER", max_rate=0.1)
+parameters = list(Nstates = 2,
+                  state_birth_rates = c(1,1.5),
+                  state_death_rates = 0.5,
+                  transition_matrix = Q)
+simulation = generate_tree_with_evolving_rates(parameters,
+                                               rate_model='Mk',
+                                               max_tips=1000,
+                                               include_rates=TRUE)
+tree  = simulation$tree
+Ntips = length(tree$tip.label)
+
+# plot distribution of per-capita birth rates of tips
+rates = simulation$birth_rates_pc[1:Ntips]
+barplot(table(rates)/length(rates), 
+        xlab="rate", 
+        main="Distribution of pc birth rates across tips (Mk model)")
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
@@ -166,3 +220,5 @@ plot( x=simulation$birth_rates_pc[1:Ntips],
 \keyword{random}
 \keyword{speciation}
 \keyword{tree model}
+\keyword{BM model}
+\keyword{Mk model}

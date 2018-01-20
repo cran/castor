@@ -47,11 +47,8 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 										Nsplits						= Nsplits,
 										as_generations				= as_generations,
 										include_birth_times			= include_birth_times,
-										include_death_times			= include_death_times);
-	if(!results$success){
-		# something went wrong
-		return(list(success=FALSE, error=results$error));
-	}
+										include_death_times			= include_death_times)
+	if(!results$success) return(list(success=FALSE, error=results$error)); # something went wrong
 	Ntips	= results$Ntips
 	Nnodes 	= results$Nnodes
 	tree = list(Nnode 		= Nnodes,

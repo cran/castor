@@ -547,144 +547,6 @@ void print_as_matrix(const long NR, const long NC, const TYPE A[]){
 
 
 
-#pragma mark -
-#pragma mark Random numbers
-#pragma mark 
-
-
-inline double uniformWithinInclusiveRight(double minimum, double maximum){
-	return minimum + STRANDOM_EPSILON + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
-}
-
-inline double uniformWithinInclusiveLeft(double minimum, double maximum){
-	return minimum + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
-}
-
-
-inline long uniformIntWithin(long minimum, long maximum){
-	//return min(maximum, (long) floor(minimum + (maximum-minimum+1)*(double(rand())/RAND_MAX))); // rand() is discouraged by R package builders
-	return min(maximum, (long) floor(minimum + (maximum-minimum+1) * R::runif(0.0,1.0)));
-}
-
-
-// draw a standard-normal random variable
-double random_standard_normal(){
-	return sqrt(-2.0*log(uniformWithinInclusiveRight(0, 1)))*cos(2.0*PI*uniformWithinInclusiveRight(0,1));
-}
-
-
-
-// generate a sample from an OU process, conditional upon a previous sample
-inline double get_next_OU_sample(	double mean,
-									double decay_rate,
-									double stationary_std,
-									double dt,
-									double previous){
-	// use transition probability density (Gaussian, known analytically)
-	const double std 		 = stationary_std * sqrt(1-exp(-2*dt*decay_rate));
-	const double expectation = mean + (previous-mean) * exp(-dt*decay_rate);
-	return expectation + std*random_standard_normal();
-	// Alternative: Use correlation structure, and the fact that OU is Gaussian
-	//const double rho = ((1.0/decay_rate)<dt*STRANDOM_EPSILON ? 0 : exp(-dt*decay_rate));
-	//return mean*(1-rho) + rho*previous + sqrt(1-rho*rho)*random_standard_normal()*stationary_std;								
-}
-
-
-// generate a sample from a Brownian motion process, conditional upon a previous sample
-inline double get_next_BM_sample(	double	diffusivity,
-									double	dt,
-									double 	previous){
-	return previous + sqrt(2 * diffusivity * dt) * random_standard_normal();									
-}
-
-
-// generate a sample from a bounded Brownian motion process (constrained in an interval via reflection), conditional upon a previous sample
-// in practice, this is done by first simulating an unbounded BM, and then reflecting at the boundaries as much as needed
-double get_next_bounded_BM_sample(	double	diffusivity,
-									double	min_state,
-									double	max_state,
-									double	dt,
-									double 	previous){
-	// first perform calculations assuming min_state=0, then add it at the end
-	double step  = max_state - min_state;
-	if(step<=0) return min_state;
-	double state = (previous-min_state) + sqrt(2 * diffusivity * dt) * random_standard_normal();
-	state = abs(state); // reflection at the origin
-	long wrap_count = floor(state/step);
-	if(wrap_count%2==0){
-		state = state - (wrap_count*step);
-	}else if(wrap_count%2==1){
-		state = step - (state - (wrap_count*step));
-	}
-	state += min_state;
-	return state;
-}
-
-
-
-
-template<class TYPE>
-long random_int_from_distribution(const TYPE probabilities[], const long N){
-	double p = R::runif(0.0,1.0);
-	for(long i=0; i<N; ++i){
-		if(p<=probabilities[i]) return i;
-		p -= probabilities[i];
-	}
-	return N-1;
-}
-
-
-// pick an index within 0:(N-1) at probability proportional to weights[index_pool[i]]
-// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
-long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const double total_weight){
-	const long N = index_pool.size();
-	double p = R::runif(0.0,1.0);
-	for(long i=0; i<N; ++i){
-		if(p<=weights[index_pool[i]]/total_weight) return i;
-		p -= weights[index_pool[i]]/total_weight;
-	}
-	return N-1;
-}
-
-
-
-// generate exponentially distributed random variable, with PDF f(x) = lambda*exp(-lambda*x)
-double random_exponential_distribution(double lambda){
-	return -log(R::runif(0.0,1.0))/lambda;
-}
-
-
-inline bool random_bernoulli(double p){
-	//return ((double(rand())/RAND_MAX) <= p); // rand() is discouraged by R package builders
-	return (R::runif(0.0,1.0)<=p);
-}
-
-
-
-// returns the number of seconds since an arbitrary (but consistent) point in the past
-// The timer is monotonic (i.e. not affected by manual changes in the system time), and is specific to the calling thread
-// Note that for Windows this function is not thread-specific 
-double get_thread_monotonic_walltime_seconds(){
-	#if __MACH__ 
-		mach_timebase_info_data_t info;
-		int error_code = mach_timebase_info(&info);
-		if (error_code != KERN_SUCCESS) return 0.0;
-		return 1e-9 * mach_absolute_time() * double(info.numer)/double(info.denom);
-	#elif defined(unix) || defined(__unix) || defined(__unix__) || defined(__linux__)
-		// POSIX code
-		// For details on clock_gettime() see: http://www.tin.org/bin/man.cgi?section=3&topic=clock_gettime
-		struct timespec T;
-		clock_gettime(CLOCK_MONOTONIC, &T); // Note that CLOCK_MONOTONIC_RAW is not available on all Linux distros
-		return double(T.tv_sec) + 1e-9*T.tv_nsec;
-	#elif defined(IS_WINDOWS)
-		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows. Update: It requires the windows.h library, which causes problems with Rcpp on CRAN.
-		return clock()/double(CLOCKS_PER_SEC);
-	#else
-		return 0; // not implemented for other systems
-	#endif
-}
-
-
 
 // ##########################################################
 // MATRIX ALGEBRA
@@ -944,6 +806,29 @@ double get_row_norm_L2(	const long 					NR,		// (INPUT) number of rows & columns
 	double S = 0;
 	for(long c=0; c<NR; ++c) S += SQR(A[r*NR + c]);
 	return sqrt(S);
+}
+
+
+double sum_of_column(	const long 					NR,			// (INPUT) number of rows in the matrix A
+						const long 					NC,			// (INPUT) number of columns in the matrix A
+						const std::vector<double>	&A,			// (INPUT) matrix of size NR x NC, in row-major format
+						const long 					column){	// (INPUT) focal column, the entries of which are to be summed
+	double sum = 0;
+	for(long r=0; r<NR; ++r){
+		sum += A[r*NC+column];
+	}
+	return sum;
+}
+
+double sum_of_row(	const long 					NR,			// (INPUT) number of rows in the matrix A
+					const long 					NC,			// (INPUT) number of columns in the matrix A
+					const std::vector<double>	&A,			// (INPUT) matrix of size NR x NC, in row-major format
+					const long 					row){	// (INPUT) focal row, the entries of which are to be summed
+	double sum = 0;
+	for(long c=0; c<NC; ++c){
+		sum += A[row*NC+c];
+	}
+	return sum;
 }
 
 
@@ -1288,8 +1173,6 @@ void get_matrix_exponential_using_polynomials(	const long 					NR,					// (INPUT
 
 
 
-
-
 // Calculate matrix polynomials similarly to above, but after applying a "balancing transformation" A-->D^{-1}*A*D with some appropriately chosen diagonal matrix D ("balances matrix")
 // The matrix D is chosen so that the column L2-norms in D^{-1}*A*D are roughly equal to its row L2-norms
 // The returned polynomials are then actually the polynomials of D^{-1}*(T*A)*D
@@ -1383,6 +1266,7 @@ void get_matrix_exponential_using_balanced_polynomials(	const long 					NR,					
 	// reverse balancing in-situ
 	diagonally_transform_matrix(NR, balances, true,	&exponential[0]);
 }
+
 
 
 
@@ -1524,6 +1408,281 @@ NumericVector exponentiate_matrix_for_multiple_scalings_CPP(const long	 			NR,		
 		}
 	}
 	return exponentials;
+}
+
+
+
+// wrapper class for preparing exponentation of a matrix A and exponentiating A using various scalar factors
+class matrix_exponentiator{
+private:
+	long 				NP;					// number of polynomials available for calculating the exponential of the input matrix
+	std::vector<double> polynomials;		// array of size NP x NR x NR, containing the pre-computed polynomials of matrix: Cp:=A^p/p! for p=0,..,NP-1. Polynomials are stored in layer-row-major format, polynomials[p*NR*NR + r*NR + c] is (r,c)-th-element of A^p/p!
+	std::vector<double>	polynomial_norms;	// array of size NP, containing the Hilbert-Schmidt L2 norm of each polynomial Cp, ||Cp||_2. Used to reduce the number of incorporated polynomials to the only the necessary number (for optimization reasons).
+	long				NPmin;
+	double				epsilon;
+
+	bool				balanced;			// whether the input matrix was balanced prior to calculating the polynomials
+	std::vector<double>	balances;			// 1D array of size NR, storing the diagonal elements of a diagonal matrix D that was applied for balancing A prior to polynomial calculation. This transformation will be reversed after exponentiation. Only relevant if balanced==true.
+	long				scaling_power;		// base-2 scaling power that was applied to the matrix prior to calculating the polynomials. This scaling will be reversed after exponentiation, via repeated squaring. Only relevant if balanced==true.
+public:
+	bool				initialized;
+	long 				NR;					// number of rows & columns in the input matrix
+	
+	// Constructors
+	matrix_exponentiator(){ initialized = false; }
+	matrix_exponentiator(	const long 			_NR,
+							std::vector<double>	A,					// (INPUT) 2D array of size NR x NR, in row-major format
+							const double		rescaling,			// (INPUT) scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
+							double				_epsilon,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
+							const long			_NPmin,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
+							const long			NPmax,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
+							bool				_balanced){
+		initialize(_NR, A, rescaling, _epsilon, _NPmin, NPmax, _balanced);
+	}
+	
+	// prepare exponentiation of matrix A, by pre-calculating polynomials of A
+	// if balanced==true then preps include balancing the matrix. This may be needed for some weird matrixes
+	void initialize(const long 			_NR,
+					std::vector<double>	A,					// (INPUT) 2D array of size NR x NR, in row-major format
+					const double		rescaling,			// (INPUT) scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
+					double				_epsilon,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
+					const long			_NPmin,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
+					const long			NPmax,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
+					bool				_balanced){
+		balanced 	= _balanced;
+		NR 			= _NR;
+		NPmin 		= _NPmin;
+		epsilon 	= _epsilon;
+		initialized	= true;
+		if(balanced){
+			calculate_balanced_matrix_polynomials(	NR,
+													A,
+													rescaling,
+													epsilon,
+													NPmin,
+													NPmax,
+													polynomials,
+													polynomial_norms,
+													NP,
+													balances,
+													scaling_power);
+		}else{
+			calculate_matrix_polynomials(	NR,
+											A,
+											rescaling,
+											epsilon,
+											NPmin,
+											NPmax,
+											polynomials,
+											polynomial_norms,
+											NP);
+		}
+	}
+	
+	
+	// calculate exp(tau*A)
+	void get_exponential(	double				tau,					// (INPUT) scaling factor in exponent
+							std::vector<double>	&exponential) const{	// (OUTPUT) array of size NR x NR, containing the exponentiated matrix exp(tau*A), in row-major format.
+		if(balanced){
+			get_matrix_exponential_using_balanced_polynomials(NR, NP, polynomials, polynomial_norms, tau, epsilon, NPmin, balances, scaling_power, exponential);
+		}else{
+			get_matrix_exponential_using_polynomials(NR, NP, polynomials, polynomial_norms, tau, epsilon, NPmin, exponential);
+		}
+	}
+
+};
+
+
+
+#pragma mark -
+#pragma mark Random numbers
+#pragma mark 
+
+
+inline double uniformWithinInclusiveRight(double minimum, double maximum){
+	return minimum + STRANDOM_EPSILON + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
+}
+
+inline double uniformWithinInclusiveLeft(double minimum, double maximum){
+	return minimum + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
+}
+
+
+inline long uniformIntWithin(long minimum, long maximum){
+	//return min(maximum, (long) floor(minimum + (maximum-minimum+1)*(double(rand())/RAND_MAX))); // rand() is discouraged by R package builders
+	return min(maximum, (long) floor(minimum + (maximum-minimum+1) * R::runif(0.0,1.0)));
+}
+
+
+// draw a standard-normal random variable
+double random_standard_normal(){
+	return sqrt(-2.0*log(uniformWithinInclusiveRight(0, 1)))*cos(2.0*PI*uniformWithinInclusiveRight(0,1));
+}
+
+
+
+// generate a sample from an OU process, conditional upon a previous sample
+inline double get_next_OU_sample(	double mean,
+									double decay_rate,
+									double stationary_std,
+									double dt,
+									double previous){
+	// use transition probability density (Gaussian, known analytically)
+	const double std 		 = stationary_std * sqrt(1-exp(-2*dt*decay_rate));
+	const double expectation = mean + (previous-mean) * exp(-dt*decay_rate);
+	return expectation + std*random_standard_normal();
+	// Alternative: Use correlation structure, and the fact that OU is Gaussian
+	//const double rho = ((1.0/decay_rate)<dt*STRANDOM_EPSILON ? 0 : exp(-dt*decay_rate));
+	//return mean*(1-rho) + rho*previous + sqrt(1-rho*rho)*random_standard_normal()*stationary_std;								
+}
+
+
+// generate a sample from a Brownian motion process, conditional upon a previous sample
+inline double get_next_BM_sample(	double	diffusivity,
+									double	dt,
+									double 	previous){
+	return previous + sqrt(2 * diffusivity * dt) * random_standard_normal();									
+}
+
+
+// generate a sample from a bounded Brownian motion process (constrained in an interval via reflection), conditional upon a previous sample
+// in practice, this is done by first simulating an unbounded BM, and then reflecting at the boundaries as much as needed
+double get_next_bounded_BM_sample(	double	diffusivity,
+									double	min_state,
+									double	max_state,
+									double	dt,
+									double 	previous){
+	// first perform calculations assuming min_state=0, then add it at the end
+	double step  = max_state - min_state;
+	if(step<=0) return min_state;
+	double state = (previous-min_state) + sqrt(2 * diffusivity * dt) * random_standard_normal();
+	state = abs(state); // reflection at the origin
+	long wrap_count = floor(state/step);
+	if(wrap_count%2==0){
+		state = state - (wrap_count*step);
+	}else if(wrap_count%2==1){
+		state = step - (state - (wrap_count*step));
+	}
+	state += min_state;
+	return state;
+}
+
+
+template<class TYPE>
+long random_int_from_distribution(const TYPE probabilities[], const long N){
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=probabilities[i]) return i;
+		p -= probabilities[i];
+	}
+	return N-1;
+}
+
+
+// pick an index within 0:(N-1) at probability proportional to weights[i]
+// for efficiency, the caller guarantees that total_weight = sum_i weights[i]
+long random_int_from_distribution(const std::vector<double> &weights, const double total_weight){
+	const long N = weights.size();
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=weights[i]/total_weight) return i;
+		p -= weights[i]/total_weight;
+	}
+	return N-1;
+}
+
+
+
+
+// pick an index within 0:(N-1) at probability proportional to weights[index_pool[i]]
+// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
+long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const double total_weight){
+	const long N = index_pool.size();
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=weights[index_pool[i]]/total_weight) return i;
+		p -= weights[index_pool[i]]/total_weight;
+	}
+	return N-1;
+}
+
+
+// pick an index within 0:(N-1) at probability proportional to weights[weight_indices[index_pool[i]]]
+// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
+long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const std::vector<long> &weight_indices, const double total_weight){
+	const long N = index_pool.size();
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=weights[weight_indices[index_pool[i]]]/total_weight) return i;
+		p -= weights[weight_indices[index_pool[i]]]/total_weight;
+	}
+	return N-1;
+}
+
+
+
+long get_next_Mk_state(	const matrix_exponentiator 	&transition_matrix_exponentiator,
+						std::vector<double>			&scratch_exp,					// (SCRATCH) scratch space used to store the temporary exponential
+						const double 				dt,
+						const long 					previous_state){
+	const long Nstates = transition_matrix_exponentiator.NR;
+	transition_matrix_exponentiator.get_exponential(dt, scratch_exp);
+	// use row of exponentiated transition matrix corresponding to the previous state, as probability vector for the next state
+	const long next_state = random_int_from_distribution<double>(&scratch_exp[previous_state*Nstates+0], Nstates);
+	return next_state;
+}
+
+
+
+// get next discrete state of a Markov chain, based on the transition rate matrix, and conditionally upon a single transition having occurred
+// for efficiency, the caller guarantees that total_transition_rate equals the sum of transition rates from old_state
+long get_next_Mk_state(	const long 					Nstates,					// (INPUT) number of discrete states
+						const std::vector<double>	&transition_matrix,			// (INPUT) transition rate matrix. 2D array of size Nstates x Nstates, in row-major format, such that transition_matrix[r*Nstates+c] is the transition rate r-->c
+						const double				total_transition_rate,		// (INPUT) equal to sum_{c != old_state} transition_matrix[old_state*Nstates+c]
+						const long					old_state){					// (INPUT) old state, from which a single transition is to be simulated
+	double p = R::runif(0.0,1.0);
+	for(long c=0; c<Nstates; ++c){
+		if(p<=transition_matrix[old_state*Nstates+c]/total_transition_rate) return c;
+		p -= transition_matrix[old_state*Nstates+c]/total_transition_rate;
+	}
+	return Nstates-1;
+}
+
+
+// generate exponentially distributed random variable, with PDF f(x) = lambda*exp(-lambda*x)
+double random_exponential_distribution(double lambda){
+	return -log(R::runif(0.0,1.0))/lambda;
+}
+
+
+inline bool random_bernoulli(double p){
+	//return ((double(rand())/RAND_MAX) <= p); // rand() is discouraged by R package builders
+	return (R::runif(0.0,1.0)<=p);
+}
+
+
+
+// returns the number of seconds since an arbitrary (but consistent) point in the past
+// The timer is monotonic (i.e. not affected by manual changes in the system time), and is specific to the calling thread
+// Note that for Windows this function is not thread-specific 
+double get_thread_monotonic_walltime_seconds(){
+	#if __MACH__ 
+		mach_timebase_info_data_t info;
+		int error_code = mach_timebase_info(&info);
+		if (error_code != KERN_SUCCESS) return 0.0;
+		return 1e-9 * mach_absolute_time() * double(info.numer)/double(info.denom);
+	#elif defined(unix) || defined(__unix) || defined(__unix__) || defined(__linux__)
+		// POSIX code
+		// For details on clock_gettime() see: http://www.tin.org/bin/man.cgi?section=3&topic=clock_gettime
+		struct timespec T;
+		clock_gettime(CLOCK_MONOTONIC, &T); // Note that CLOCK_MONOTONIC_RAW is not available on all Linux distros
+		return double(T.tv_sec) + 1e-9*T.tv_nsec;
+	#elif defined(IS_WINDOWS)
+		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows. Update: It requires the windows.h library, which causes problems with Rcpp on CRAN.
+		return clock()/double(CLOCKS_PER_SEC);
+	#else
+		return 0; // not implemented for other systems
+	#endif
 }
 
 
@@ -2512,15 +2671,15 @@ private:
 	mutable long lastReportedCase;
 	bool silent;
 public:
-	ProgressReporter(const bool _silent){ reportCount = 10; lastReportedCase=INFTY_D; silent = _silent; }
-	ProgressReporter(long _reportCount){ reportCount = _reportCount; lastReportedCase=INFTY_D; }
-	ProgressReporter(long _reportCount, const string &_prefix, const string &_suffix, bool _asPercentage){ reportCount = _reportCount; prefix = _prefix; suffix = _suffix; asPercentage = _asPercentage; lastReportedCase = INFTY_D; }
+	ProgressReporter(const bool _silent){ reportCount = 10; lastReportedCase=-1; silent = _silent; }
+	ProgressReporter(long _reportCount){ reportCount = _reportCount; lastReportedCase=-1; }
+	ProgressReporter(long _reportCount, const string &_prefix, const string &_suffix, bool _asPercentage){ reportCount = _reportCount; prefix = _prefix; suffix = _suffix; asPercentage = _asPercentage; lastReportedCase = -1; }
 	
 	void setReportCount(long count){ reportCount = count; }
 	void setPrefix(const string &_prefix){ prefix = _prefix; }
 	void setSuffix(const string &_suffix){ suffix = _suffix; }
 	void setAsPercentage(bool _asPercentage){ asPercentage = _asPercentage; }
-	void reset(){ lastReportedCase = INFTY_D; }
+	void reset(){ lastReportedCase = -1; }
 	
 	void operator()(long casesFinished, long totalCases, double exactFraction) const{
 		if(reportCount<=0) return;
@@ -2528,7 +2687,7 @@ public:
 		const double p = (1.0*casesFinished)/totalCases;
 		const double last_p = (1.0*lastReportedCase)/totalCases;
 		const double dp = 1.0/reportCount;
-		if((lastReportedCase<=casesFinished) && (floor(p/dp)<=floor(last_p/dp))) return; //don't report this case
+		if((lastReportedCase>=0) && (floor(p/dp)<=floor(last_p/dp))) return; //don't report this case
 		if(floor(p/dp)==0) return;
 		lastReportedCase = casesFinished;
 		const long rounder = pow(10.0,1+log10(max(reportCount,1l)));
@@ -4532,12 +4691,13 @@ Rcpp::List get_min_max_tip_distance_from_root_CPP(	const long 			Ntips,
 
 // calculate distance from root, for each clade (tips+nodes)
 // distance from root = cumulative branch length from root to the clade
-void get_distances_from_root(	const long 			Ntips,
-								const long 			Nnodes,
-								const long 			Nedges,
-								const IntegerVector &tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
-								const NumericVector &edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-								std::vector<double>	&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
+template<class ARRAY_TYPE_INT, class ARRAY_TYPE_D>
+void get_distances_from_root(	const long 				Ntips,
+								const long 				Nnodes,
+								const long 				Nedges,
+								const ARRAY_TYPE_INT 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+								const ARRAY_TYPE_D		&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+								std::vector<double>		&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
 	const long Nclades = Ntips + Nnodes;
 	long parent, clade;
 										
@@ -7411,457 +7571,6 @@ Rcpp::List merge_short_edges_CPP(	const long					Ntips,
 }
 
 
-// Generate a random phylogenetic tree under a simple speciation model, where species are born or go extinct as a Poissonian process
-// New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
-// Special case is the Yule model: New species appear as a Poisson process with a constant per-capita birth rate, and without extinctions
-// More generally, the species birth rate can be a power-law function of extant tips count: birth_rate = intercept + factor*number_of_extant_tips^exponent
-// Similarly, the death rate of tips can be a power-law function of extant tip count: death_rate = intercept + factor*number_of_extant_tips^exponent
-// The resulting tree will be bifurcating (if Nsplits=2) or multifurcating (if Nsplits>2).
-// The simulation is halted as soon as Ntips>=max_tips (if max_tips>0) and/or time>=max_time (if max_time>0) and/or time>=max_time_since_equilibrium+equilibrium_time (if max_time_since_equilibrium>0)
-// Reference:
-//   Steel and McKenzie (2001). Properties of phylogenetic trees generated by Yule-type speciation models. Mathematical Biosciences. 170:91-112.
-// [[Rcpp::export]]
-Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max number of tips (extant tips, if coalescent==true). If <=0, this constraint is ignored.
-									const double	max_time,					// (INPUT) max simulation time. If <=0, this constraint is ignored.
-									const double	max_time_since_equilibrium,	// (INPUT) max simulation time, counting from the first time point where death_rate-birth_rate changed sign. This may be used as an alternative to (or in conjunction with) max_time to ensure the tree has reached speciation/extinction equilibrium. If <0, this constraint is ignored.
-									const double 	birth_rate_intercept,		// (INPUT) intercept of Poissonian rate at which new tips are added to the tree
-									const double 	birth_rate_factor,			// (INPUT) power-law factor of Poissonian rate at which new tips are added to the tree
-									const double 	birth_rate_exponent,		// (INPUT) power-law exponent of Poissonian rate at which new tips are added to the tree
-									const double 	death_rate_intercept,		// (INPUT) intercept of Poissonian rate at which extant tips are removed from the tree
-									const double 	death_rate_factor,			// (INPUT) power-law factor of Poissonian rate at which extant tips are removed from the tree
-									const double 	death_rate_exponent,		// (INPUT) power-law exponent of Poissonian rate at which extant tips are removed from the tree
-									const std::vector<double>	&additional_rates_times,	// (INPUT) optional 1D array of size NAR, listing time points (in ascending order) for custom additional birth and/or death rates. Can be empty. The time series is repeated periodically if needed.
-									const std::vector<double>	&additional_birth_rates_pc,	// (INPUT) optional 1D array of size NAR, listing custom per-capita birth rates (additive to the power law). Can be empty.
-									const std::vector<double>	&additional_death_rates_pc,	// (INPUT) optional 1D array of size NAR, listing custom per-capita birth rates (additive to the power law). Can be empty.
-									const bool		additional_periodic,		// (INPUT) if true, additional pc birth & death rates are extended periodically if needed. Otherwise they are extended with zeros.
-									const bool		coalescent,					// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
-									const long		Nsplits,					// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
-									const bool		as_generations,				// (INPUT) if false, then edge lengths correspond to time. If true, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
-									const bool		include_birth_times,		// (INPUT) if true, then the times of speciations (in order of occurrence) will also be returned
-									const bool		include_death_times){		// (INPUT) if true, then the times of extinctions (in order of occurrence) will also be returned
-	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
-	long next_Nsplits = max(2l, Nsplits);
-	std::vector<long> tree_edge;
-	std::vector<long> extant_tips;
-	std::vector<double> clade2end_time;
-	std::vector<double> birth_times, death_times;
-	tree_edge.reserve(expected_Nclades*2);
-	extant_tips.reserve(ceil(expected_Nclades/2.0)); // keep track of which clades are extant tips, as the tree is built
-	clade2end_time.reserve(expected_Nclades); // keep track of time at which each clade split or went extinct (negative if clade is an extant tip)
-	
-	// prepare interpolators for additional birth & death rates
-	LinearInterpolationFunctor<double> added_birth_rates_pc, added_death_rates_pc;
-	const bool has_added_birth_rates = ((additional_rates_times.size()>0) && (additional_birth_rates_pc.size()>0));
-	const bool has_added_death_rates = ((additional_rates_times.size()>0) && (additional_death_rates_pc.size()>0));
-	if(has_added_birth_rates) added_birth_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_birth_rates_pc,additional_periodic,0.0,true);
-	if(has_added_death_rates) added_death_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_death_rates_pc,additional_periodic,0.0,true);
-	
-	// create the first tip (which is also the root)
-	long Ntips = 0; 	// current number of extant + extinct tips
-	long Nclades = 0;	// current number of clades
-	long root = 0;
-	extant_tips.push_back(Nclades++);
-	clade2end_time.push_back(-1);
-	++Ntips;
-	
-	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
-	long Nedges 		= 0;
-	long Nbirths		= 0;
-	long Ndeaths 		= 0;
-	double time 		= 0;
-	double total_rate	= INFTY_D;
-	double equilibrium_time = INFTY_D;
-	double initial_growth_rate = NAN_D;
-	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
-		// determine time of next speciation or extinction event
-		// prevent deaths if only one tip is left
-		const double NEtips 	= extant_tips.size();
-		const double birth_rate = max(0.0, birth_rate_intercept + birth_rate_factor * pow(NEtips, birth_rate_exponent) + (has_added_birth_rates ? added_birth_rates_pc(time)*NEtips : 0.0));
-		const double death_rate = (NEtips<=1 ? 0 : max(0.0, (death_rate_intercept + death_rate_factor * pow(NEtips, death_rate_exponent)) + (has_added_death_rates ? added_death_rates_pc(time)*NEtips : 0.0)));
-		if(std::isnan(initial_growth_rate)) initial_growth_rate = birth_rate-death_rate;
-		if(((birth_rate-death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
-		total_rate = birth_rate+death_rate;
-		time += random_exponential_distribution(total_rate);
-		const bool birth = random_bernoulli(birth_rate/(birth_rate+death_rate));
-				
-		// randomly pick an existing tip to split or kill
-		long tip   = uniformIntWithin(0,NEtips-1);
-		long clade = extant_tips[tip];
-		clade2end_time[clade] = time;
-		
-		if(birth){
-			// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
-			if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? NEtips : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
-			// child 1:
-			++Nedges;
-			++Nbirths;
-			tree_edge.push_back(clade);
-			tree_edge.push_back(Nclades);
-			extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
-			clade2end_time.push_back(-1);
-			if(include_birth_times) birth_times.push_back(time);
-			// remaining children:
-			for(long c=1; c<next_Nsplits; ++c){
-				++Nedges;
-				tree_edge.push_back(clade);
-				tree_edge.push_back(Nclades);
-				extant_tips.push_back(Nclades++);
-				clade2end_time.push_back(-1);
-				++Ntips;
-			}
-		}else{
-			// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
-			extant_tips[tip] = extant_tips.back();
-			extant_tips.pop_back();
-			++Ndeaths;
-			if(include_death_times) death_times.push_back(time);
-		}
-		// abort if the user has interrupted the calling R program
-		Rcpp::checkUserInterrupt();
-	}
-	
-	
-	// add a small dt at the end to make all edges non-zero length
-	time += random_exponential_distribution(total_rate);
-	if(max_time>0) time = min(time, max_time); // prevent going past max_time
-	if(max_time_since_equilibrium>=0) time = min(time, max_time_since_equilibrium+equilibrium_time); // prevent going past max_time_since_equilibrium
-
-	std::vector<double> edge_length(Nedges);
-	if(as_generations){
-		// set all edge lengths to 1
-		edge_length.assign(Nedges,1);
-	}else{
-		// calculate edge lengths based on end times
-		for(long edge=0, child; edge<Nedges; ++edge){
-			child = tree_edge[edge*2+1];
-			if(clade2end_time[child]>=0) edge_length[edge] = clade2end_time[child] - clade2end_time[tree_edge[edge*2+0]];
-			else edge_length[edge] = time - clade2end_time[tree_edge[edge*2+0]];
-		}	
-	}
-	double root_time = clade2end_time[root]; // root_time = time at which the root split
-	
-	// identify tips as the clades with no outgoing edge
-	std::vector<bool> clade_is_tip(Nclades,true);
-	for(long edge=0; edge<Nedges; ++edge){
-		clade_is_tip[tree_edge[edge*2+0]] = false;
-	}
-
-	// re-number tip & node indices to conform with the phylo format, where tips are indexed first (0,..,Ntips-1) and nodes last (Ntips,..,Ntips+Nnodes-1).
-	long Nnodes = Nclades - Ntips;
-	std::vector<long> old2new_clade(Nclades,-1);
-	long next_new_tip  = 0;
-	long next_new_node = 0;
-	for(long clade=0; clade<Nclades; ++clade){
-		if(clade_is_tip[clade]) old2new_clade[clade] = (next_new_tip++);
-		else old2new_clade[clade] = Ntips + (next_new_node++);
-	}
-	for(long edge=0; edge<Nedges; ++edge){
-		tree_edge[edge*2+0] = old2new_clade[tree_edge[edge*2+0]];
-		tree_edge[edge*2+1] = old2new_clade[tree_edge[edge*2+1]];
-	}
-	for(long tip=0; tip<extant_tips.size(); ++tip){
-		extant_tips[tip] = old2new_clade[extant_tips[tip]];
-	}
-	root = old2new_clade[root];
-	
-	if(Ntips<=1){
-		// something went wrong (e.g. zero birth & death rates)
-		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
-	}
-
-		
-	// remove extinct tips if needed (make coalescent)
-	if(coalescent && ((death_rate_intercept!=0) || (death_rate_factor!=0) || has_added_death_rates)){
-		std::vector<long> pruning_new_tree_edge, pruning_new2old_clade;
-		std::vector<double> pruning_new_edge_length;
-		long pruning_new_root, pruning_Ntips_kept, pruning_Nnodes_kept, pruning_Nedges_kept;
-		double root_shift;
-		get_subtree_with_specific_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										tree_edge,
-										edge_length,
-										extant_tips,
-										true, // collapse monofurcations
-										false,
-										pruning_new_tree_edge,
-										pruning_new_edge_length,
-										pruning_new2old_clade,
-										pruning_new_root,
-										pruning_Ntips_kept,
-										pruning_Nnodes_kept,
-										pruning_Nedges_kept,
-										root_shift);
-		tree_edge 	= pruning_new_tree_edge;
-		edge_length = pruning_new_edge_length;
-		Ntips		= pruning_Ntips_kept;
-		Nnodes		= pruning_Nnodes_kept;
-		Nclades 	= Ntips + Nnodes;
-		Nedges		= pruning_Nedges_kept;
-		root 		= pruning_new_root;
-		root_time 	+= root_shift; // alternative: = clade2end_time[new2old_clade[pruning_new2old_clade[pruning_new_root]]];
-	}
-	
-	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
-								Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
-								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
-								Rcpp::Named("Nnodes") 			= Nnodes,
-								Rcpp::Named("Ntips") 			= Ntips,
-								Rcpp::Named("Nedges") 			= Nedges,
-								Rcpp::Named("root")				= root, // this is actually guaranteed to be = Ntips
-								Rcpp::Named("Nbirths")			= Nbirths,
-								Rcpp::Named("Ndeaths")			= Ndeaths,
-								Rcpp::Named("root_time")		= root_time,
-								Rcpp::Named("final_time")		= time,
-								Rcpp::Named("equilibrium_time")	= equilibrium_time,
-								Rcpp::Named("birth_times")		= Rcpp::wrap(birth_times),
-								Rcpp::Named("death_times")		= Rcpp::wrap(death_times));
-}
-
-
-
-
-// Generate a random phylogenetic tree under a speciation/extinction model, where species are born or go extinct as a Poissonian process
-// New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
-// This function is similar to generate_random_tree_CPP(..) above, with one important difference:
-//    Per-capita speciation and extinction rates are modelled as Brownian motions evolving along the tree edges (constrained in a finite interval via reflection)
-//	  Hence per-capita speciation/extinction rates are scalar traits specific to each node & tip.
-// [[Rcpp::export]]
-Rcpp::List generate_random_tree_BM_rates_CPP(	const long 	 	max_tips,					// (INPUT) max number of tips (extant tips, if coalescent==true). If <=0, this constraint is ignored.
-												const double	max_time,					// (INPUT) max simulation time. If <=0, this constraint is ignored.
-												const double	max_time_since_equilibrium,	// (INPUT) max simulation time, counting from the first time point where death_rate-birth_rate changed sign. This may be used as an alternative to (or in conjunction with) max_time to ensure the tree has reached speciation/extinction equilibrium. If <0, this constraint is ignored.
-												const double	birth_rate_diffusivity,		// (INPUT) diffusivity of the evolving per-capita birth rate
-												const double 	min_birth_rate_pc,			// (INPUT) minimum allowed per-capita birth rate
-												const double 	max_birth_rate_pc,			// (INPUT) maximum allowed per-capita birth rate
-												const double	death_rate_diffusivity,		// (INPUT) diffusivity of the evolving per-capita death rate
-												const double 	min_death_rate_pc,			// (INPUT) minimum allowed per-capita death rate
-												const double 	max_death_rate_pc,			// (INPUT) maximum allowed per-capita death rate
-												const bool		coalescent,					// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
-												const long		Nsplits,					// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
-												const bool		as_generations,				// (INPUT) if false, then edge lengths correspond to time. If true, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
-												const bool		include_birth_times,		// (INPUT) if true, then the times of speciations (in order of occurrence) will also be returned
-												const bool		include_death_times,		// (INPUT) if true, then the times of extinctions (in order of occurrence) will also be returned
-												const bool		include_rates){				// (INPUT) if true, then the per-capita birth & death rates for each clade will also be returned
-	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
-	long next_Nsplits = max(2l, Nsplits);
-	std::vector<long> tree_edge;
-	std::vector<long> extant_tips;
-	std::vector<long> clade2parent;
-	std::vector<double> clade2end_time;
-	std::vector<double> clade2birth_rate_pc; // per-capita birth rate for each node/tip (i.e. determining the waiting time until splitting)
-	std::vector<double> clade2death_rate_pc; // per-capita death rate for each node/tip (i.e. determining the waiting time until extinction)
-	std::vector<double> birth_times, death_times;
-	tree_edge.reserve(expected_Nclades*2);
-	extant_tips.reserve(ceil(expected_Nclades/2.0)); 	// keep track of which clades are extant tips, as the tree is built
-	clade2parent.reserve(expected_Nclades); 			// keep track of parent of each clade
-	clade2end_time.reserve(expected_Nclades); 			// keep track of time at which each clade split or went extinct (negative if clade is an extant tip)
-	clade2birth_rate_pc.reserve(expected_Nclades);
-	clade2death_rate_pc.reserve(expected_Nclades);
-	
-	// create the first tip (which is also the root)
-	long Ntips 		= 0; 	// current number of extant + extinct tips
-	long Nclades 	= 0;	// current number of clades
-	long root 		= 0;
-	extant_tips.push_back(Nclades++);
-	clade2parent.push_back(-1); // root has no parent
-	clade2end_time.push_back(-1);
-	clade2birth_rate_pc.push_back(uniformWithinInclusiveRight(min_birth_rate_pc,max_birth_rate_pc)); // randomly choose the root's per-capita birth rate
-	clade2death_rate_pc.push_back(uniformWithinInclusiveRight(min_death_rate_pc,max_death_rate_pc)); // randomly choose the root's per-capita death rate
-	++Ntips;
-	
-	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
-	long Nedges 		= 0;
-	long Nbirths		= 0;
-	long Ndeaths 		= 0;
-	double time 		= 0;
-	double total_rate	= INFTY_D;
-	double total_birth_rate		= clade2birth_rate_pc[root];
-	double total_death_rate		= clade2death_rate_pc[root];
-	double equilibrium_time 	= INFTY_D;
-	double initial_growth_rate 	= NAN_D; // keep track of the net growth rate (birth rate - death rate) at the beginning of the simulation
-	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
-		// determine time of next speciation or extinction event
-		// prevent deaths if only one tip is left
-		const double restricted_death_rate = (extant_tips.size()<=1 ? 0 : total_death_rate);
-		if(std::isnan(initial_growth_rate)) initial_growth_rate = total_birth_rate - restricted_death_rate;
-		if(((total_birth_rate - restricted_death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
-		total_rate = total_birth_rate + restricted_death_rate;
-		time += random_exponential_distribution(total_rate);
-		const bool birth = random_bernoulli(total_birth_rate/(total_birth_rate+restricted_death_rate));
-				
-		// randomly pick an existing tip to split or kill
-		long tip   = random_int_from_distribution(extant_tips, (birth ? clade2birth_rate_pc : clade2death_rate_pc), (birth ? total_birth_rate : total_death_rate));
-		long clade = extant_tips[tip];
-		clade2end_time[clade] = time;
-		const double edge_length = clade2end_time[clade]-(clade==root ? 0 : clade2end_time[clade2parent[clade]]);
-		
-		// update total birth & death rates for the removal of the chosen clade from the pool of tips
-		total_birth_rate -= clade2birth_rate_pc[clade];
-		total_death_rate -= clade2death_rate_pc[clade];
-				
-		if(birth){
-			// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
-			if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? extant_tips.size() : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
-			// child 1:
-			++Nedges;
-			++Nbirths;
-			tree_edge.push_back(clade);
-			tree_edge.push_back(Nclades);
-			extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
-			clade2parent.push_back(clade);
-			clade2end_time.push_back(-1);
-			if(include_birth_times) birth_times.push_back(time);
-			// pick per-capita birth & death rates for this splitting point (node) and update total birth & death rates
-			clade2birth_rate_pc.push_back(get_next_bounded_BM_sample(birth_rate_diffusivity,min_birth_rate_pc,max_birth_rate_pc,edge_length,clade2birth_rate_pc[clade]));
-			clade2death_rate_pc.push_back(get_next_bounded_BM_sample(death_rate_diffusivity,min_death_rate_pc,max_death_rate_pc,edge_length,clade2death_rate_pc[clade]));
-			total_birth_rate += clade2birth_rate_pc.back();
-			total_death_rate += clade2death_rate_pc.back();
-			
-			// remaining children:
-			for(long c=1; c<next_Nsplits; ++c){
-				++Nedges;
-				++Ntips;
-				tree_edge.push_back(clade);
-				tree_edge.push_back(Nclades);
-				extant_tips.push_back(Nclades++);
-				clade2parent.push_back(clade);
-				clade2end_time.push_back(-1);
-				// pick per-capita birth & death rates for this splitting point (node) and update total birth & death rates
-				clade2birth_rate_pc.push_back(get_next_bounded_BM_sample(birth_rate_diffusivity,min_birth_rate_pc,max_birth_rate_pc,edge_length,clade2birth_rate_pc[clade]));
-				clade2death_rate_pc.push_back(get_next_bounded_BM_sample(death_rate_diffusivity,min_death_rate_pc,max_death_rate_pc,edge_length,clade2death_rate_pc[clade]));
-				total_birth_rate += clade2birth_rate_pc.back();
-				total_death_rate += clade2death_rate_pc.back();
-			}
-		}else{
-			// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
-			extant_tips[tip] = extant_tips.back();
-			extant_tips.pop_back();
-			++Ndeaths;
-			if(include_death_times) death_times.push_back(time);
-		}
-		// abort if the user has interrupted the calling R program
-		Rcpp::checkUserInterrupt();
-	}
-	
-	// add a small dt at the end to make all edges non-zero length
-	time += random_exponential_distribution(total_rate);
-	if(max_time>0) time = min(time, max_time); // prevent going past max_time
-	if(max_time_since_equilibrium>=0) time = min(time, max_time_since_equilibrium+equilibrium_time); // prevent going past max_time_since_equilibrium
-
-	std::vector<double> edge_length(Nedges);
-	if(as_generations){
-		// set all edge lengths to 1
-		edge_length.assign(Nedges,1);
-	}else{
-		// calculate edge lengths based on end times
-		for(long edge=0, child; edge<Nedges; ++edge){
-			child = tree_edge[edge*2+1];
-			if(clade2end_time[child]>=0) edge_length[edge] = clade2end_time[child] - clade2end_time[tree_edge[edge*2+0]];
-			else edge_length[edge] = time - clade2end_time[tree_edge[edge*2+0]];
-		}	
-	}
-	double root_time = clade2end_time[root]; // root_time = time at which the root split
-	
-	// identify tips as the clades with no outgoing edge
-	std::vector<bool> clade_is_tip(Nclades,true);
-	for(long edge=0; edge<Nedges; ++edge){
-		clade_is_tip[tree_edge[edge*2+0]] = false;
-	}
-	
-	// re-number tip & node indices to conform with the phylo format, where tips are indexed first (0,..,Ntips-1) and nodes last (Ntips,..,Ntips+Nnodes-1).
-	long Nnodes = Nclades - Ntips;
-	std::vector<long> old2new_clade(Nclades,-1);
-	long next_new_tip  = 0;
-	long next_new_node = 0;
-	for(long clade=0; clade<Nclades; ++clade){
-		if(clade_is_tip[clade]) old2new_clade[clade] = (next_new_tip++);
-		else old2new_clade[clade] = Ntips + (next_new_node++);
-	}
-	for(long edge=0; edge<Nedges; ++edge){
-		tree_edge[edge*2+0] = old2new_clade[tree_edge[edge*2+0]];
-		tree_edge[edge*2+1] = old2new_clade[tree_edge[edge*2+1]];
-	}
-	for(long tip=0; tip<extant_tips.size(); ++tip){
-		extant_tips[tip] = old2new_clade[extant_tips[tip]];
-	}
-	root = old2new_clade[root];
-	
-	// also update pc birth & death rates to new indices if needed
-	std::vector<double> birth_rates_pc, death_rates_pc;
-	if(include_rates){
-		birth_rates_pc.resize(Nclades);
-		death_rates_pc.resize(Nclades);
-		for(long c=0; c<Nclades; ++c){
-			birth_rates_pc[old2new_clade[c]] = clade2birth_rate_pc[c];
-			death_rates_pc[old2new_clade[c]] = clade2death_rate_pc[c];
-		}
-	}
-		
-	// remove extinct tips if needed (make coalescent)
-	if(coalescent && (max_death_rate_pc>0)){
-		std::vector<long> pruning_new_tree_edge, pruning_new2old_clade;
-		std::vector<double> pruning_new_edge_length;
-		long pruning_new_root, pruning_Ntips_kept, pruning_Nnodes_kept, pruning_Nedges_kept;
-		double root_shift;
-		get_subtree_with_specific_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										tree_edge,
-										edge_length,
-										extant_tips,
-										true, // collapse monofurcations
-										false,
-										pruning_new_tree_edge,
-										pruning_new_edge_length,
-										pruning_new2old_clade,
-										pruning_new_root,
-										pruning_Ntips_kept,
-										pruning_Nnodes_kept,
-										pruning_Nedges_kept,
-										root_shift);
-		tree_edge 	= pruning_new_tree_edge;
-		edge_length = pruning_new_edge_length;
-		Ntips		= pruning_Ntips_kept;
-		Nnodes		= pruning_Nnodes_kept;
-		Nclades 	= Ntips + Nnodes;
-		Nedges		= pruning_Nedges_kept;
-		root 		= pruning_new_root;
-		root_time 	+= root_shift; // alternative: = clade2end_time[new2old_clade[pruning_new2old_clade[pruning_new_root]]];
-		
-		// also update pc birth & death rates to new indices if needed
-		if(include_rates){
-			std::vector<double> old_birth_rates_pc(birth_rates_pc);
-			std::vector<double> old_death_rates_pc(death_rates_pc);
-			birth_rates_pc.resize(Nclades);
-			death_rates_pc.resize(Nclades);
-			for(long c=0; c<Nclades; ++c){
-				birth_rates_pc[c] = old_birth_rates_pc[pruning_new2old_clade[c]];
-				death_rates_pc[c] = old_death_rates_pc[pruning_new2old_clade[c]];
-			}
-		}
-	}
-	
-	return Rcpp::List::create(	Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
-								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
-								Rcpp::Named("Nnodes") 			= Nnodes,
-								Rcpp::Named("Ntips") 			= Ntips,
-								Rcpp::Named("Nedges") 			= Nedges,
-								Rcpp::Named("root")				= root, // this is actually guaranteed to be = Ntips
-								Rcpp::Named("Nbirths")			= Nbirths,
-								Rcpp::Named("Ndeaths")			= Ndeaths,
-								Rcpp::Named("root_time")		= root_time,
-								Rcpp::Named("final_time")		= time,
-								Rcpp::Named("equilibrium_time")	= equilibrium_time,
-								Rcpp::Named("birth_times")		= Rcpp::wrap(birth_times),
-								Rcpp::Named("death_times")		= Rcpp::wrap(death_times),
-								Rcpp::Named("birth_rates_pc")	= Rcpp::wrap(birth_rates_pc),	// birth_rates_pc[c] will be the per-capita birth rate of clade c (prior to its extinction or splitting)
-								Rcpp::Named("death_rates_pc")	= Rcpp::wrap(death_rates_pc));	// death_rates_pc[c] will be the per-capita death rate of clade c (prior to its extinction or splitting)
-}
-
-
-
-
-
 // Pick random subsets of tips from a tree, by traversing from root-->tips and at each node choosing randomly between children
 // The size of each random subset is Nrandoms, the number of independent subsets is Nsubsets
 // [[Rcpp::export]]
@@ -8599,12 +8308,12 @@ Rcpp::List autocorrelation_function_of_continuous_trait_CPP(const long 			Ntips,
 // This may be a very crude reconstruction of ancestral state probabilities (when normalized)
 // Returns a 2D integer array of size Nnodes x Nstates, in row-major format
 // [[Rcpp::export]]
-IntegerVector get_empirical_state_frequencies_per_node(	const long			Ntips,
-														const long			Nnodes,
-														const long			Nedges,
-														const long			Nstates,		// (INPUT) number of discrete states for the trait
-														const IntegerVector &tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2, or an empty std::vector (no tree available). A tree is needed if the tip_distribution relies on a tree structure.
-														const IntegerVector	&tip_states){	// (INPUT) 1D array of size Ntips, listing the discrete state for each tip
+Rcpp::List get_empirical_state_frequencies_per_node_CPP(	const long			Ntips,
+															const long			Nnodes,
+															const long			Nedges,
+															const long			Nstates,		// (INPUT) number of discrete states for the trait
+															const IntegerVector &tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2, or an empty std::vector (no tree available). A tree is needed if the tip_distribution relies on a tree structure.
+															const IntegerVector	&tip_states){	// (INPUT) 1D array of size Ntips, listing the discrete state for each tip
 	
 	
 	// determine parent clade for each clade
@@ -8644,7 +8353,7 @@ IntegerVector get_empirical_state_frequencies_per_node(	const long			Ntips,
 		}
 	}
 	
-	return Rcpp::wrap(frequencies_per_node);
+	return Rcpp::List::create(Rcpp::Named("frequencies_per_node") = Rcpp::wrap(frequencies_per_node));
 }
 
 
@@ -9795,13 +9504,7 @@ void aux_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 											const NumericVector 		&edge_length, 						// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 											const NumericVector			&prior_probabilities_per_tip, 		// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
 											const NumericVector			&prior_probabilities_for_root,		// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
-											const long					Npolynomials,						// (INPUT) Number of transition polynomials provided (polynomials of the rescaled transition matrix) for exponentiating the transition matrix
-											const std::vector<double>	&transition_polynomials,			// (INPUT) Optional array of size Npolynomials x Nstates x Nstates, containing the pre-computed polynomials of the rescaled transition matrix (in layer-row-major format). Only relevant if use_precalculated_expQ==false. Can be empty if eigendecomposition is available instead.
-											const std::vector<double>	&transition_polynomial_norms,		// (INPUT) Optional array of size Npolynomials, containing the Hilbert-Schmidt L2 norm of each transition_polynomial. Can be empty if eigendecomposition is available instead.
-											const double				exponentiation_accuracy,			// (INPUT) desired accuracy when exponentiating using polynomials
-											const long					min_polynomials,					// (INPUT) minimum number of polynomials to include during exponentiation, regardless of the pursued exponentiation_accuracy.
-											const std::vector<double>	&exponentiation_balances,			// (INPUT) array of size Nstates, storing the diagonal elements of the balancing transformation that was applied to the polynomials (and should be reversed for the exponential)
-											const long					exponentiation_scaling_power,		// (INPUT) base-2 scaling power that was applied prior to calculation of the polynomials (and should be reversed for the exponential)
+											const matrix_exponentiator	&transition_exponentiator,			// (INPUT) initialized exponentiator object for transition matrix
 											const std::vector<cdouble>	&eigenvalues,						// (INPUT) Optional 1D vector of size Nstates, listing the eigenvalues of the transition_matrix (corresponding to some diagonalization). Can also be an empty vector if eigendecomposition not available.
 											const std::vector<cdouble>	&EVmatrix,							// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, whose columns are the eigenvectors of the transition_matrix. Can also be an empty vector if eigendecomposition not available.
 											const std::vector<cdouble>	&inverse_EVmatrix,					// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
@@ -9844,16 +9547,7 @@ void aux_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 				expQ_pointer = &expQ[0];
 			}else{
 				// calculate exponential of transition matrix along edge
-				get_matrix_exponential_using_balanced_polynomials(	Nstates,
-																	Npolynomials,
-																	transition_polynomials,
-																	transition_polynomial_norms,
-																	(edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length,
-																	exponentiation_accuracy,
-																	min_polynomials,
-																	exponentiation_balances,
-																	exponentiation_scaling_power,
-																	expQ);
+				transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
 				expQ_pointer = &expQ[0];
 			}
 						
@@ -9904,13 +9598,7 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 																const std::vector<long>		&inout_edges,						// (INPUT) 1D array of size 2*Nedges, with values in 0:(Nedges-1). Maps internal edge indices (i.e. as listed in clade2first_inout_edge[] and clade2last_inout_edge[]) to original edge indices.
 																const NumericVector			&prior_probabilities_per_tip, 		// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
 																const NumericVector			&prior_probabilities_for_root,		// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
-																const long					Npolynomials,						// (INPUT) Number of transition polynomials provided (polynomials of the rescaled transition matrix) for exponentiating the transition matrix
-																const std::vector<double>	&transition_polynomials,			// (INPUT) Optional array of size Npolynomials x Nstates x Nstates, containing the pre-computed polynomials of the rescaled transition matrix (in layer-row-major format). Only relevant if use_precalculated_expQ==false. Can be empty if eigendecomposition is available instead.
-																const std::vector<double>	&transition_polynomial_norms,		// (INPUT) Optional array of size Npolynomials, containing the Hilbert-Schmidt L2 norm of each transition_polynomial. Can be empty if eigendecomposition is available instead.
-																const double				exponentiation_accuracy,			// (INPUT) Desired accuracy when exponentiating transition matrix using polynomials.
-																const long					min_polynomials,					// (INPUT) minimum number of polynomials to include during exponentiation, regardless of the pursued exponentiation_accuracy.
-																const std::vector<double>	&exponentiation_balances,			// (INPUT) array of size Nstates, storing the diagonal elements of the balancing transformation that was applied prior to calculation of the polynomials (and should be reversed for the exponential)
-																const long					exponentiation_scaling_power,		// (INPUT) base-2 scaling power that was applied prior to calculation of the polynomials (and should be reversed for the exponential)
+																const matrix_exponentiator	&transition_exponentiator,			// (INPUT) initialized exponentiator object for transition matrix
 																const std::vector<cdouble>	&eigenvalues,						// (INPUT) Optional 1D vector of size Nstates, listing the eigenvalues of the transition_matrix (corresponding to some diagonalization). Can also be an empty vector if eigendecomposition not available.
 																const std::vector<cdouble>	&EVmatrix,							// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, whose columns are the eigenvectors of the transition_matrix. Can also be an empty vector if eigendecomposition not available.
 																const std::vector<cdouble>	&inverse_EVmatrix,					// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
@@ -9951,16 +9639,7 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 				expQ_pointer = &expQ[0];
 			}else{
 				// calculate exponential of transition matrix along edge
-				get_matrix_exponential_using_balanced_polynomials(	Nstates,
-																	Npolynomials,
-																	transition_polynomials,
-																	transition_polynomial_norms,
-																	(edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length,
-																	exponentiation_accuracy,
-																	min_polynomials,
-																	exponentiation_balances,
-																	exponentiation_scaling_power,
-																	expQ);
+				transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
 				expQ_pointer = &expQ[0];
 			}
 			// use exponentiated transition matrix to propagate probabilities from children to parent
@@ -9998,22 +9677,22 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 //   Tree can include multi- and mono-furcations.
 //   Tree must be rooted. Root will be determined automatically as the node with no parent.
 // [[Rcpp::export]]
-Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
-													const long 			Nnodes,
-													const long			Nedges,
-													const long			Nstates,
-													const IntegerVector &tree_edge,						// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-													const NumericVector &edge_length, 					// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
-													const NumericVector &transition_matrix,				// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c.
-													const ComplexVector	&eigenvalues,					// (INPUT) Optional 1D vector of size Nstates, listing the eigenvalues of the transition_matrix (corresponding to some diagonalization). Can also be an empty vector if eigendecomposition not available.
-													const ComplexVector	&EVmatrix,						// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, whose columns are the eigenvectors of the transition_matrix. Can also be an empty vector if eigendecomposition not available.
-													const ComplexVector	&inverse_EVmatrix,				// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
-													const NumericVector	&prior_probabilities_per_tip, 	// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
-													const NumericVector	&prior_probabilities_for_root,	// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
-													bool				include_ancestral_likelihoods,	// (INPUT) if true, then the marginal ancestral states estimates (conditional scaled likelihoods as if each node was a root) of all nodes are also returned as an array of size Nnodes x Nstates. Only use if needed, since it's computationally expensive.
-													const double		exponentiation_accuracy,		// (INPUT) maximum allowed error when exponentiating the transition matrix via polynomials, in terms of the Hilbert-Schmidt L2 norm. Only relevant if exponentiation is done using the polynomials.
-													const long			max_polynomials,				// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix via polynomials, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
-													const bool			store_exponentials){			// (INPUT) if True, then exponentials are pre-calculated and stored for the calculation of ancestral_likelihoods. This may save time because each exponential is only calculated once, but will use up more memory since all exponentials are stored. Only relevant if include_ancestral_likelihoods==TRUE, otherwise exponentials are never stored.
+Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long					Ntips,
+													const long 					Nnodes,
+													const long					Nedges,
+													const long					Nstates,
+													const IntegerVector 		&tree_edge,						// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+													const NumericVector 		&edge_length, 					// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+													const std::vector<double> 	&transition_matrix,				// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c.
+													const ComplexVector			&eigenvalues,					// (INPUT) Optional 1D vector of size Nstates, listing the eigenvalues of the transition_matrix (corresponding to some diagonalization). Can also be an empty vector if eigendecomposition not available.
+													const ComplexVector			&EVmatrix,						// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, whose columns are the eigenvectors of the transition_matrix. Can also be an empty vector if eigendecomposition not available.
+													const ComplexVector			&inverse_EVmatrix,				// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
+													const NumericVector			&prior_probabilities_per_tip, 	// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
+													const NumericVector			&prior_probabilities_for_root,	// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
+													bool						include_ancestral_likelihoods,	// (INPUT) if true, then the marginal ancestral states estimates (conditional scaled likelihoods as if each node was a root) of all nodes are also returned as an array of size Nnodes x Nstates. Only use if needed, since it's computationally expensive.
+													const double				exponentiation_accuracy,		// (INPUT) maximum allowed error when exponentiating the transition matrix via polynomials, in terms of the Hilbert-Schmidt L2 norm. Only relevant if exponentiation is done using the polynomials.
+													const long					max_polynomials,				// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix via polynomials, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
+													const bool					store_exponentials){			// (INPUT) if True, then exponentials are pre-calculated and stored for the calculation of ancestral_likelihoods. This may save time because each exponential is only calculated once, but will use up more memory since all exponentials are stored. Only relevant if include_ancestral_likelihoods==TRUE, otherwise exponentials are never stored.
 	const long Nclades 					= Ntips + Nnodes;
 	const bool use_precalculated_expQ 	= (include_ancestral_likelihoods && store_exponentials);
 	const bool has_eigendecomposition	= (eigenvalues.size()>0 && EVmatrix.size()>0 && inverse_EVmatrix.size()>0);
@@ -10042,25 +9721,12 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 									traversal_edges,
 									false,
 									"");
-									
 
-	// prepare data structures for exponentiations of transition matrix
-	std::vector<double> transition_polynomials, transition_polynomial_norms, exponentiation_balances;
-	long Npolynomials;
-	const long min_polynomials = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
-	long exponentiation_scaling_power;
+	// prepare data structure for exponentiations of transition matrix, if needed
+	matrix_exponentiator transition_exponentiator;
 	if(!has_eigendecomposition){
-		calculate_balanced_matrix_polynomials(	Nstates,
-												std::vector<double>(transition_matrix.begin(), transition_matrix.end()),
-												max_edge_length,
-												exponentiation_accuracy,
-												min_polynomials,
-												max_polynomials,
-												transition_polynomials,
-												transition_polynomial_norms,
-												Npolynomials,
-												exponentiation_balances,
-												exponentiation_scaling_power);
+		const long min_polynomials = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
+		transition_exponentiator.initialize(Nstates, transition_matrix, max_edge_length, 1e-4, min_polynomials, 1000, true);
 	}
 											
 	// pre-calculate exponentials of transition_matrix along edges if needed
@@ -10080,16 +9746,7 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 																exponentiation_scratch,
 																scratch_expQ);
 			}else{
-				get_matrix_exponential_using_balanced_polynomials(	Nstates,
-																	Npolynomials,
-																	transition_polynomials,
-																	transition_polynomial_norms,
-																	(edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length,
-																	exponentiation_accuracy,
-																	min_polynomials,
-																	exponentiation_balances,
-																	exponentiation_scaling_power,
-																	scratch_expQ);
+				transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, scratch_expQ);
 			}
 			for(long r=0; r<Nstates; ++r){
 				for(long c=0; c<Nstates; ++c){
@@ -10112,13 +9769,7 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 											edge_length,
 											prior_probabilities_per_tip,
 											prior_probabilities_for_root,
-											Npolynomials,
-											transition_polynomials,
-											transition_polynomial_norms,
-											exponentiation_accuracy,
-											min_polynomials,
-											exponentiation_balances,
-											exponentiation_scaling_power,
+											transition_exponentiator,
 											eigenvaluesCPP,
 											EVmatrixCPP,
 											inverse_EVmatrixCPP,
@@ -10176,13 +9827,7 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 																	inout_edges,
 																	prior_probabilities_per_tip,
 																	prior_probabilities_for_root,
-																	Npolynomials,
-																	transition_polynomials,
-																	transition_polynomial_norms,
-																	exponentiation_accuracy,
-																	min_polynomials,
-																	exponentiation_balances,
-																	exponentiation_scaling_power,
+																	transition_exponentiator,
 																	eigenvaluesCPP,
 																	EVmatrixCPP,
 																	inverse_EVmatrixCPP,
@@ -10672,6 +10317,65 @@ Rcpp::List ASR_via_squared_change_parsimony_CPP(const long			Ntips,
 
 
 
+// [[Rcpp::export]]
+Rcpp::List get_mean_state_per_node_CPP(	const long					Ntips,
+										const long 					Nnodes,
+										const long					Nedges,
+										const IntegerVector 		&tree_edge,					// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+										const NumericVector			&edge_length,				// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+										const std::vector<double>	&tip_states){
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (tips --> root)
+	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,	// include tips
+										false,	// edge mapping is not pre-computed
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										false,
+										"");
+	
+	// calculate average & standard deviation per node, traversing tips-->root (excluding the root)
+	std::vector<double> means(Nnodes,0), stds(Nnodes,0), counts(Nnodes,0);
+	long clade, parent, pnode, cnode;
+	for(long q=traversal_queue.size()-1; q>=1; --q){
+		clade	= traversal_queue[q];
+		parent 	= clade2parent[clade];
+		cnode	= clade - Ntips;
+		pnode	= parent - Ntips;
+		if(clade<Ntips){
+			means[pnode] 	+= tip_states[clade];
+			stds[pnode]		+= SQ(tip_states[clade]);
+			counts[pnode]	+= 1;
+		}else{
+			means[pnode] 	+= means[cnode];
+			stds[pnode] 	+= stds[cnode];
+			counts[pnode] 	+= counts[cnode];
+		}
+	}
+	for(long node=0; node<Nnodes; ++node){
+		means[node] /= counts[node];
+		stds[node]  = sqrt(stds[node]/counts[node] - SQ(means[node]));
+	}
+	
+	return	Rcpp::List::create(	Rcpp::Named("means")  	= Rcpp::wrap(means),
+								Rcpp::Named("stds") 	= Rcpp::wrap(stds),
+								Rcpp::Named("counts")	= Rcpp::wrap(counts));										
+}
+
 
 
 // ASR via Phylogenetic Independent Contrasts (PIC) for a scalar continuous trait on a tree [Felsenstein 1985, page 10]
@@ -10912,17 +10616,17 @@ NumericVector apply_BM_parsimony_to_missing_clades_CPP(	const long			Ntips,
 // Starting with a specified vector of root_probabilities, and moving from root to tips, each node is assigned a random state according to its parent's state and according to the markov transition matrix.
 // Optionally, multiple independent simulations can be performed using the same model (e.g. as part of some Monte Carlo integration)
 // [[Rcpp::export]]
-Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long			Ntips,
-													const long 			Nnodes,
-													const long			Nedges,
-													const long			Nstates,
-													const IntegerVector &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-													const NumericVector &edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-													const NumericVector &transition_matrix,		// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q, which is the transition rate r-->c.
-													const NumericVector	&root_probabilities,	// (INPUT) probability distribution of states at the root. sum(root_probabilities) must be 1.0.
-													const bool			include_tips,			// (INPUT) include states for tips in the output
-													const bool			include_nodes,			// (INPUT) include states for nodes in the output
-													const long			Nsimulations){			// (INPUT) number of random simulations (draws) of the model on the tree. If 1, then a single simulation is performed, yielding a single random state for each node and/or tip.
+Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long					Ntips,
+													const long 					Nnodes,
+													const long					Nedges,
+													const long					Nstates,
+													const IntegerVector 		&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+													const NumericVector		 	&edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+													const std::vector<double> 	&transition_matrix,		// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q, which is the transition rate r-->c.
+													const NumericVector			&root_probabilities,	// (INPUT) probability distribution of states at the root. sum(root_probabilities) must be 1.0.
+													const bool					include_tips,			// (INPUT) include states for tips in the output
+													const bool					include_nodes,			// (INPUT) include states for nodes in the output
+													const long					Nsimulations){			// (INPUT) number of random simulations (draws) of the model on the tree. If 1, then a single simulation is performed, yielding a single random state for each node and/or tip.
 	if((Nsimulations<=0) || ((!include_tips) && (!include_nodes))){
 		return	Rcpp::List::create(	Rcpp::Named("tip_states")  = IntegerVector(),
 									Rcpp::Named("node_states") = IntegerVector());
@@ -10954,45 +10658,22 @@ Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long			Ntips,
 	// prepare data structures for exponentiations of transition matrix
 	const double max_edge_length = (edge_length.size()==0 ? 1.0 : get_array_max(edge_length));
 	std::vector<double> transition_polynomials, transition_polynomial_norms, exponentiation_balances;
-	long Npolynomials;
-	const double exponentiation_accuracy = 1e-4;
 	const long NPmin = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
-	const long NPmax = 1000;
-	long exponentiation_scaling_power;
-	calculate_balanced_matrix_polynomials(	Nstates,
-											std::vector<double>(transition_matrix.begin(), transition_matrix.end()),
-											max_edge_length,
-											exponentiation_accuracy,
-											NPmin,
-											NPmax,
-											transition_polynomials,
-											transition_polynomial_norms,
-											Npolynomials,
-											exponentiation_balances,
-											exponentiation_scaling_power);
+	const matrix_exponentiator transition_exponentiator(Nstates, transition_matrix, max_edge_length, 1e-4, NPmin, 1000, true);
 	
 	// traverse root-->tips and draw random states, conditional upon their parent's state
 	vector<double> expQ;
 	vector<long> tip_states, node_states;
 	if(include_tips) tip_states.resize(Nsimulations*Ntips);
 	node_states.resize(Nsimulations*Nnodes); // always store node states, since needed for moving root-->tips
-	long clade, edge, parent, parent_state, state;
+	long clade, edge, parent, parent_state, state=0;
 	for(long q=0; q<traversal_queue.size(); ++q){
 		clade = traversal_queue[q];
 		if(clade!=root){
 			edge 	= incoming_edge_per_clade[clade];
 			parent 	= tree_edge[edge*2+0];
 			// exponentiate transition matrix along incoming edge
-			get_matrix_exponential_using_balanced_polynomials(	Nstates,
-																Npolynomials,
-																transition_polynomials,
-																transition_polynomial_norms,
-																(edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length,
-																exponentiation_accuracy,
-																NPmin,
-																exponentiation_balances,
-																exponentiation_scaling_power,
-																expQ);
+			transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
 		}
 		for(long r=0; r<Nsimulations; ++r){
 			if(clade==root){
@@ -11064,7 +10745,7 @@ Rcpp::List simulate_Ornstein_Uhlenbeck_model_CPP(	const long			Ntips,
 	if(include_tips) tip_states.resize(Nsimulations*Ntips);
 	node_states.resize(Nsimulations*Nnodes); // always store node states, since needed for moving root-->tips
 	long clade, edge, parent;
-	double parent_state, state;
+	double parent_state, state = 0;
 	for(long r=0; r<Nsimulations; ++r){
 		for(long q=0; q<traversal_queue.size(); ++q){
 			clade = traversal_queue[q];
@@ -11146,7 +10827,7 @@ Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_model_CPP(	const long			Ntips,
 	if(include_tips) tip_states.resize(Nsimulations*Ntips);
 	node_states.resize(Nsimulations*Nnodes); // always store node states, since needed for moving root-->tips
 	long clade, edge, parent;
-	double parent_state, state;
+	double parent_state, state = 0;
 	for(long r=0; r<Nsimulations; ++r){
 		for(long q=0; q<traversal_queue.size(); ++q){
 			clade = traversal_queue[q];
@@ -11217,7 +10898,7 @@ Rcpp::List simulate_scalar_Brownian_motion_model_CPP(	const long			Ntips,
 	if(include_tips) tip_states.resize(Nsimulations*Ntips);
 	node_states.resize(Nsimulations*Nnodes); // always store node states, since needed for moving root-->tips
 	long clade, edge, parent;
-	double parent_state, state;
+	double parent_state, state = 0;
 	for(long r=0; r<Nsimulations; ++r){
 		for(long q=0; q<traversal_queue.size(); ++q){
 			clade = traversal_queue[q];
@@ -11431,6 +11112,750 @@ Rcpp::List simulate_neutral_gene_evolution_CPP(	const long				Ntips,
 								Rcpp::Named("node_states") 		= Rcpp::wrap(node_states),		// 3D array of size Nsimulations x Nnodes x Nsites, in layer-row-major format, i.e. indexed as [simulation*Nnodes*Nsites+node*Nsites+site]
 								Rcpp::Named("gene_distances")	= Rcpp::wrap(gene_distances));	// 2D array of size Nsimulations x Nedges, in row-major format, i.e. indexed as [simulation*Nedges+edge]
 }
+
+
+
+
+
+
+
+
+#pragma mark -
+#pragma mark Generating random trees via cladogenic models
+#pragma mark 
+
+
+
+// auxiliary function used to generate random phylogenetic trees based on some cladogenic model
+void aux_finalize_generated_random_tree(const double				time,					// (INPUT)
+										const bool					as_generations,			// (INPUT)
+										const bool					coalescent,				// (INPUT)
+										const bool					include_rates,			// (INPUT)
+										const std::vector<double>	&clade2end_time,		// (INPUT)
+										const std::vector<double>	&clade2birth_rate_pc,	// (INPUT) optional input, listing pc birth rate per clade. Only relevant if include_rates==true.
+										const std::vector<double>	&clade2death_rate_pc,	// (INPUT) optional input, listing pc birth rate per clade. Only relevant if include_rates==true.
+										const bool					tree_had_deaths,		// (INPUT) whether deaths (extinctions) were part of cladogenesis
+										long						&Ntips,					// (INPUT/OUTPUT)
+										long						&Nclades,				// (INPUT/OUTPUT)
+										long 						&Nedges,				// (INPUT/OUTPUT)
+										long						&root,					// (INPUT/OUTPUT)
+										double						&root_time,				// (OUTPUT)
+										std::vector<long>			&tree_edge,				// (INPUT/OUTPUT)
+										std::vector<double>			&edge_length,			// (OUTPUT)
+										std::vector<long>			&extant_tips,			// (INPUT/OUTPUT)
+										std::vector<long>			&new2old_clade,			// (OUTPUT)
+										std::vector<double> 		&birth_rates_pc,		// (OUTPUT) optional output of size Nclades, only returned if include_rates==true
+										std::vector<double> 		&death_rates_pc){		// (OUTPUT) optional output of size Nclades, only returned if include_rates==true
+	long Nnodes = Nclades - Ntips;
+	edge_length.resize(Nedges);
+	if(as_generations){
+		// set all edge lengths to 1
+		edge_length.assign(Nedges,1);
+	}else{
+		// calculate edge lengths based on end times
+		for(long edge=0, child; edge<Nedges; ++edge){
+			child = tree_edge[edge*2+1];
+			if(clade2end_time[child]>=0) edge_length[edge] = clade2end_time[child] - clade2end_time[tree_edge[edge*2+0]];
+			else edge_length[edge] = time - clade2end_time[tree_edge[edge*2+0]];
+		}	
+	}
+	root_time = clade2end_time[root]; // root_time = time at which the root split
+	
+	// identify tips as the clades with no outgoing edge
+	std::vector<bool> clade_is_tip(Nclades,true);
+	for(long edge=0; edge<Nedges; ++edge){
+		clade_is_tip[tree_edge[edge*2+0]] = false;
+	}
+	
+	// re-number tip & node indices to conform with the phylo format, where tips are indexed first (0,..,Ntips-1) and nodes last (Ntips,..,Ntips+Nnodes-1).
+	std::vector<long> old2new_clade(Nclades,-1);
+	new2old_clade.resize(Nclades);
+	long next_new_tip  = 0;
+	long next_new_node = 0;
+	for(long clade=0; clade<Nclades; ++clade){
+		if(clade_is_tip[clade]) old2new_clade[clade] = (next_new_tip++);
+		else old2new_clade[clade] = Ntips + (next_new_node++);
+		new2old_clade[old2new_clade[clade]] = clade;
+	}
+	for(long edge=0; edge<Nedges; ++edge){
+		tree_edge[edge*2+0] = old2new_clade[tree_edge[edge*2+0]];
+		tree_edge[edge*2+1] = old2new_clade[tree_edge[edge*2+1]];
+	}
+	for(long tip=0; tip<extant_tips.size(); ++tip){
+		extant_tips[tip] = old2new_clade[extant_tips[tip]];
+	}
+	root = old2new_clade[root];
+			
+	// remove extinct tips if needed (make coalescent)
+	if(coalescent && tree_had_deaths){
+		std::vector<long> pruning_new_tree_edge, pruning_new2old_clade;
+		std::vector<double> pruning_new_edge_length;
+		long pruning_new_root, pruning_Ntips_kept, pruning_Nnodes_kept, pruning_Nedges_kept;
+		double root_shift;
+		get_subtree_with_specific_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										tree_edge,
+										edge_length,
+										extant_tips,
+										true, // collapse monofurcations
+										false,
+										pruning_new_tree_edge,
+										pruning_new_edge_length,
+										pruning_new2old_clade,
+										pruning_new_root,
+										pruning_Ntips_kept,
+										pruning_Nnodes_kept,
+										pruning_Nedges_kept,
+										root_shift);
+		tree_edge 	= pruning_new_tree_edge;
+		edge_length = pruning_new_edge_length;
+		Ntips		= pruning_Ntips_kept;
+		Nnodes		= pruning_Nnodes_kept;
+		Nclades 	= Ntips + Nnodes;
+		Nedges		= pruning_Nedges_kept;
+		root 		= pruning_new_root;
+		root_time 	+= root_shift; // alternative: = clade2end_time[new2old_clade[pruning_new2old_clade[pruning_new_root]]];
+		
+		// update new2old_clade & old2new_clade
+		const std::vector<long> old2older_clade(new2old_clade);
+		old2new_clade.assign(old2new_clade.size(),-1);
+		new2old_clade.resize(Nclades);
+		for(long new_clade=0; new_clade<pruning_new2old_clade.size(); ++new_clade){
+			new2old_clade[new_clade] = old2older_clade[pruning_new2old_clade[new_clade]];
+			old2new_clade[new2old_clade[new_clade]] = new_clade;
+		}
+	}
+	
+	// also archive pc birth & death rates (using new clade indices) if needed
+	if(include_rates){
+		birth_rates_pc.resize(Nclades);
+		death_rates_pc.resize(Nclades);
+		for(long c=0; c<Nclades; ++c){
+			birth_rates_pc[c] = clade2birth_rate_pc[new2old_clade[c]];
+			death_rates_pc[c] = clade2death_rate_pc[new2old_clade[c]];
+		}
+	}
+}
+
+
+
+
+// Generate a random phylogenetic tree under a simple speciation model, where species are born or go extinct as a Poissonian process
+// New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
+// Special case is the Yule model: New species appear as a Poisson process with a constant per-capita birth rate, and without extinctions
+// More generally, the species birth rate can be a power-law function of extant tips count: birth_rate = intercept + factor*number_of_extant_tips^exponent
+// Similarly, the death rate of tips can be a power-law function of extant tip count: death_rate = intercept + factor*number_of_extant_tips^exponent
+// The resulting tree will be bifurcating (if Nsplits=2) or multifurcating (if Nsplits>2).
+// The simulation is halted as soon as Ntips>=max_tips (if max_tips>0) and/or time>=max_time (if max_time>0) and/or time>=max_time_since_equilibrium+equilibrium_time (if max_time_since_equilibrium>0)
+// Reference:
+//   Steel and McKenzie (2001). Properties of phylogenetic trees generated by Yule-type speciation models. Mathematical Biosciences. 170:91-112.
+// [[Rcpp::export]]
+Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max number of tips (extant tips, if coalescent==true). If <=0, this constraint is ignored.
+									const double	max_time,					// (INPUT) max simulation time. If <=0, this constraint is ignored.
+									const double	max_time_since_equilibrium,	// (INPUT) max simulation time, counting from the first time point where death_rate-birth_rate changed sign. This may be used as an alternative to (or in conjunction with) max_time to ensure the tree has reached speciation/extinction equilibrium. If <0, this constraint is ignored.
+									const double 	birth_rate_intercept,		// (INPUT) intercept of Poissonian rate at which new tips are added to the tree
+									const double 	birth_rate_factor,			// (INPUT) power-law factor of Poissonian rate at which new tips are added to the tree
+									const double 	birth_rate_exponent,		// (INPUT) power-law exponent of Poissonian rate at which new tips are added to the tree
+									const double 	death_rate_intercept,		// (INPUT) intercept of Poissonian rate at which extant tips are removed from the tree
+									const double 	death_rate_factor,			// (INPUT) power-law factor of Poissonian rate at which extant tips are removed from the tree
+									const double 	death_rate_exponent,		// (INPUT) power-law exponent of Poissonian rate at which extant tips are removed from the tree
+									const std::vector<double>	&additional_rates_times,	// (INPUT) optional 1D array of size NAR, listing time points (in ascending order) for custom additional birth and/or death rates. Can be empty. The time series is repeated periodically if needed.
+									const std::vector<double>	&additional_birth_rates_pc,	// (INPUT) optional 1D array of size NAR, listing custom per-capita birth rates (additive to the power law). Can be empty.
+									const std::vector<double>	&additional_death_rates_pc,	// (INPUT) optional 1D array of size NAR, listing custom per-capita birth rates (additive to the power law). Can be empty.
+									const bool		additional_periodic,		// (INPUT) if true, additional pc birth & death rates are extended periodically if needed. Otherwise they are extended with zeros.
+									const bool		coalescent,					// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
+									const long		Nsplits,					// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
+									const bool		as_generations,				// (INPUT) if false, then edge lengths correspond to time. If true, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
+									const bool		include_birth_times,		// (INPUT) if true, then the times of speciations (in order of occurrence) will also be returned
+									const bool		include_death_times){		// (INPUT) if true, then the times of extinctions (in order of occurrence) will also be returned
+	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
+	long next_Nsplits = max(2l, Nsplits);
+	std::vector<long> tree_edge;
+	std::vector<long> extant_tips;
+	std::vector<double> clade2end_time;
+	std::vector<double> birth_times, death_times;
+	tree_edge.reserve(expected_Nclades*2);
+	extant_tips.reserve(ceil(expected_Nclades/2.0)); // keep track of which clades are extant tips, as the tree is built
+	clade2end_time.reserve(expected_Nclades); // keep track of time at which each clade split or went extinct (negative if clade is an extant tip)
+	
+	// prepare interpolators for additional birth & death rates
+	LinearInterpolationFunctor<double> added_birth_rates_pc, added_death_rates_pc;
+	const bool has_added_birth_rates = ((additional_rates_times.size()>0) && (additional_birth_rates_pc.size()>0));
+	const bool has_added_death_rates = ((additional_rates_times.size()>0) && (additional_death_rates_pc.size()>0));
+	if(has_added_birth_rates) added_birth_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_birth_rates_pc,additional_periodic,0.0,true);
+	if(has_added_death_rates) added_death_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_death_rates_pc,additional_periodic,0.0,true);
+	
+	// create the first tip (which is also the root)
+	long Ntips = 0; 	// current number of extant + extinct tips
+	long Nclades = 0;	// current number of clades
+	long root = 0;
+	extant_tips.push_back(Nclades++);
+	clade2end_time.push_back(-1);
+	++Ntips;
+	
+			
+	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
+	long Nedges 		= 0;
+	long Nbirths		= 0;
+	long Ndeaths 		= 0;
+	double time 		= 0;
+	double total_rate	= INFTY_D;
+	double equilibrium_time = INFTY_D;
+	double initial_growth_rate = NAN_D;
+	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
+		// determine time of next speciation or extinction event
+		// prevent deaths if only one tip is left
+		const double NEtips 	= extant_tips.size();
+		const double birth_rate = max(0.0, birth_rate_intercept + birth_rate_factor * pow(NEtips, birth_rate_exponent) + (has_added_birth_rates ? added_birth_rates_pc(time)*NEtips : 0.0));
+		const double death_rate = (NEtips<=1 ? 0 : max(0.0, (death_rate_intercept + death_rate_factor * pow(NEtips, death_rate_exponent)) + (has_added_death_rates ? added_death_rates_pc(time)*NEtips : 0.0)));
+		if(std::isnan(initial_growth_rate)) initial_growth_rate = birth_rate-death_rate;
+		if(((birth_rate-death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
+		total_rate = birth_rate+death_rate;
+		const double dt = random_exponential_distribution(total_rate);
+		time += dt;
+		const bool birth = random_bernoulli(birth_rate/total_rate);
+				
+		// randomly pick an existing tip to split or kill
+		long tip   = uniformIntWithin(0,NEtips-1);
+		long clade = extant_tips[tip];
+		clade2end_time[clade] = time;
+		
+		if(birth){
+			// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
+			if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? NEtips : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
+			// child 1:
+			++Nedges;
+			++Nbirths;
+			tree_edge.push_back(clade);
+			tree_edge.push_back(Nclades);
+			extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
+			clade2end_time.push_back(-1);
+			if(include_birth_times) birth_times.push_back(time);
+			// remaining children:
+			for(long c=1; c<next_Nsplits; ++c){
+				++Nedges;
+				tree_edge.push_back(clade);
+				tree_edge.push_back(Nclades);
+				extant_tips.push_back(Nclades++);
+				clade2end_time.push_back(-1);
+				++Ntips;
+			}
+		}else{
+			// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
+			extant_tips[tip] = extant_tips.back();
+			extant_tips.pop_back();
+			++Ndeaths;
+			if(include_death_times) death_times.push_back(time);
+		}
+		// abort if the user has interrupted the calling R program
+		Rcpp::checkUserInterrupt();
+	}
+		
+	if(Ntips<=1){
+		// something went wrong (e.g. zero birth & death rates)
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
+	}
+
+	// add a small dt at the end to make all edges non-zero length
+	time += random_exponential_distribution(total_rate);
+	if(max_time>0) time = min(time, max_time); // prevent going past max_time
+	if(max_time_since_equilibrium>=0) time = min(time, max_time_since_equilibrium+equilibrium_time); // prevent going past max_time_since_equilibrium
+	
+	// finalize tree (make valid phylo structure, make coalescent if needed)
+	std::vector<double> edge_length, birth_rates_pc, death_rates_pc, vdummy1, vdummy2, vdummy3, vdummy4;
+	std::vector<long> new2old_clade;
+	double root_time;
+	aux_finalize_generated_random_tree(	time,
+										as_generations,
+										coalescent,
+										false, // don't return rates-per-clade
+										clade2end_time,
+										vdummy1,
+										vdummy2,
+										((death_rate_intercept!=0) || (death_rate_factor!=0) || has_added_death_rates), // whether deaths were included
+										Ntips,
+										Nclades,
+										Nedges,
+										root,
+										root_time,
+										tree_edge,
+										edge_length,
+										extant_tips,
+										new2old_clade,
+										vdummy3,
+										vdummy4);
+	long Nnodes = Nclades - Ntips;
+	
+	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
+								Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
+								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
+								Rcpp::Named("Nnodes") 			= Nnodes,
+								Rcpp::Named("Ntips") 			= Ntips,
+								Rcpp::Named("Nedges") 			= Nedges,
+								Rcpp::Named("root")				= root, // this is actually guaranteed to be = Ntips
+								Rcpp::Named("Nbirths")			= Nbirths,
+								Rcpp::Named("Ndeaths")			= Ndeaths,
+								Rcpp::Named("root_time")		= root_time,
+								Rcpp::Named("final_time")		= time,
+								Rcpp::Named("equilibrium_time")	= equilibrium_time,
+								Rcpp::Named("birth_times")		= Rcpp::wrap(birth_times),
+								Rcpp::Named("death_times")		= Rcpp::wrap(death_times));
+}
+
+
+
+// Generate a random phylogenetic tree under a speciation/extinction model, where species are born or go extinct as a Poissonian process
+// New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
+// This function is similar to generate_random_tree_CPP(..) above, with one important difference:
+//    Per-capita speciation and extinction rates are modelled as Brownian motions evolving along the tree edges (constrained in a finite interval via reflection)
+//	  Hence per-capita speciation/extinction rates are scalar traits specific to each node & tip.
+// [[Rcpp::export]]
+Rcpp::List generate_random_tree_BM_rates_CPP(	const long 	 	max_tips,					// (INPUT) max number of tips (extant tips, if coalescent==true). If <=0, this constraint is ignored.
+												const double	max_time,					// (INPUT) max simulation time. If <=0, this constraint is ignored.
+												const double	max_time_since_equilibrium,	// (INPUT) max simulation time, counting from the first time point where death_rate-birth_rate changed sign. This may be used as an alternative to (or in conjunction with) max_time to ensure the tree has reached speciation/extinction equilibrium. If <0, this constraint is ignored.
+												const double	birth_rate_diffusivity,		// (INPUT) diffusivity of the evolving per-capita birth rate
+												const double 	min_birth_rate_pc,			// (INPUT) minimum allowed per-capita birth rate
+												const double 	max_birth_rate_pc,			// (INPUT) maximum allowed per-capita birth rate
+												const double	death_rate_diffusivity,		// (INPUT) diffusivity of the evolving per-capita death rate
+												const double 	min_death_rate_pc,			// (INPUT) minimum allowed per-capita death rate
+												const double 	max_death_rate_pc,			// (INPUT) maximum allowed per-capita death rate
+												const bool		coalescent,					// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
+												const long		Nsplits,					// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
+												const bool		as_generations,				// (INPUT) if false, then edge lengths correspond to time. If true, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
+												const bool		include_birth_times,		// (INPUT) if true, then the times of speciations (in order of occurrence) will also be returned
+												const bool		include_death_times,		// (INPUT) if true, then the times of extinctions (in order of occurrence) will also be returned
+												const bool		include_rates){				// (INPUT) if true, then the per-capita birth & death rates for each clade will also be returned
+	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
+	long next_Nsplits = max(2l, Nsplits);
+	std::vector<long> tree_edge;
+	std::vector<long> extant_tips;
+	std::vector<long> clade2parent;
+	std::vector<double> clade2end_time;
+	std::vector<double> clade2birth_rate_pc; // per-capita birth rate for each node/tip (i.e. determining the waiting time until splitting)
+	std::vector<double> clade2death_rate_pc; // per-capita death rate for each node/tip (i.e. determining the waiting time until extinction)
+	std::vector<double> birth_times, death_times;
+	tree_edge.reserve(expected_Nclades*2);
+	extant_tips.reserve(ceil(expected_Nclades/2.0)); 	// keep track of which clades are extant tips, as the tree is built
+	clade2parent.reserve(expected_Nclades); 			// keep track of parent of each clade
+	clade2end_time.reserve(expected_Nclades); 			// keep track of time at which each clade split or went extinct (negative if clade is an extant tip)
+	clade2birth_rate_pc.reserve(expected_Nclades);
+	clade2death_rate_pc.reserve(expected_Nclades);
+	
+	// create the first tip (which is also the root)
+	long Ntips 		= 0; 	// current number of extant + extinct tips
+	long Nclades 	= 0;	// current number of clades
+	long root 		= 0;
+	extant_tips.push_back(Nclades++);
+	clade2parent.push_back(-1); // root has no parent
+	clade2end_time.push_back(-1);
+	clade2birth_rate_pc.push_back(uniformWithinInclusiveRight(min_birth_rate_pc,max_birth_rate_pc)); // randomly choose the root's per-capita birth rate
+	clade2death_rate_pc.push_back(uniformWithinInclusiveRight(min_death_rate_pc,max_death_rate_pc)); // randomly choose the root's per-capita death rate
+	++Ntips;
+	
+	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
+	long Nedges 		= 0;
+	long Nbirths		= 0;
+	long Ndeaths 		= 0;
+	double time 		= 0;
+	double total_rate	= INFTY_D;
+	double total_birth_rate		= clade2birth_rate_pc[root];
+	double total_death_rate		= clade2death_rate_pc[root];
+	double equilibrium_time 	= INFTY_D;
+	double initial_growth_rate 	= NAN_D; // keep track of the net growth rate (birth rate - death rate) at the beginning of the simulation
+	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
+		// determine time of next speciation or extinction event
+		// prevent deaths if only one tip is left
+		const double restricted_death_rate = (extant_tips.size()<=1 ? 0 : total_death_rate);
+		if(std::isnan(initial_growth_rate)) initial_growth_rate = total_birth_rate - restricted_death_rate;
+		if(((total_birth_rate - restricted_death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
+		total_rate = total_birth_rate + restricted_death_rate;
+		time += random_exponential_distribution(total_rate);
+		const bool birth = random_bernoulli(total_birth_rate/(total_birth_rate+restricted_death_rate));
+				
+		// randomly pick an existing tip to split or kill
+		long tip   = random_int_from_distribution(extant_tips, (birth ? clade2birth_rate_pc : clade2death_rate_pc), (birth ? total_birth_rate : total_death_rate));
+		long clade = extant_tips[tip];
+		clade2end_time[clade] = time;
+		const double edge_length = clade2end_time[clade]-(clade==root ? 0 : clade2end_time[clade2parent[clade]]);
+		
+		// update total birth & death rates for the removal of the chosen clade from the pool of tips
+		total_birth_rate -= clade2birth_rate_pc[clade];
+		total_death_rate -= clade2death_rate_pc[clade];
+				
+		if(birth){
+			// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
+			if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? extant_tips.size() : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
+			// child 1:
+			++Nedges;
+			++Nbirths;
+			tree_edge.push_back(clade);
+			tree_edge.push_back(Nclades);
+			extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
+			clade2parent.push_back(clade);
+			clade2end_time.push_back(-1);
+			if(include_birth_times) birth_times.push_back(time);
+			// pick per-capita birth & death rates for this child and update total birth & death rates
+			clade2birth_rate_pc.push_back(get_next_bounded_BM_sample(birth_rate_diffusivity,min_birth_rate_pc,max_birth_rate_pc,edge_length,clade2birth_rate_pc[clade]));
+			clade2death_rate_pc.push_back(get_next_bounded_BM_sample(death_rate_diffusivity,min_death_rate_pc,max_death_rate_pc,edge_length,clade2death_rate_pc[clade]));
+			total_birth_rate += clade2birth_rate_pc.back();
+			total_death_rate += clade2death_rate_pc.back();
+			
+			// remaining children:
+			for(long c=1; c<next_Nsplits; ++c){
+				++Nedges;
+				++Ntips;
+				tree_edge.push_back(clade);
+				tree_edge.push_back(Nclades);
+				extant_tips.push_back(Nclades++);
+				clade2parent.push_back(clade);
+				clade2end_time.push_back(-1);
+				// pick per-capita birth & death rates for this child and update total birth & death rates
+				clade2birth_rate_pc.push_back(get_next_bounded_BM_sample(birth_rate_diffusivity,min_birth_rate_pc,max_birth_rate_pc,edge_length,clade2birth_rate_pc[clade]));
+				clade2death_rate_pc.push_back(get_next_bounded_BM_sample(death_rate_diffusivity,min_death_rate_pc,max_death_rate_pc,edge_length,clade2death_rate_pc[clade]));
+				total_birth_rate += clade2birth_rate_pc.back();
+				total_death_rate += clade2death_rate_pc.back();
+			}
+		}else{
+			// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
+			extant_tips[tip] = extant_tips.back();
+			extant_tips.pop_back();
+			++Ndeaths;
+			if(include_death_times) death_times.push_back(time);
+		}
+		// abort if the user has interrupted the calling R program
+		Rcpp::checkUserInterrupt();
+	}
+
+	if(Ntips<=1){
+		// something went wrong (e.g. zero birth & death rates)
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
+	}
+	
+	// add a small dt at the end to make all edges non-zero length
+	time += random_exponential_distribution(total_rate);
+	if(max_time>0) time = min(time, max_time); // prevent going past max_time
+	if(max_time_since_equilibrium>=0) time = min(time, max_time_since_equilibrium+equilibrium_time); // prevent going past max_time_since_equilibrium
+
+	// finalize tree (make valid phylo structure, make coalescent if needed)
+	std::vector<double> edge_length, birth_rates_pc, death_rates_pc;
+	std::vector<long> new2old_clade;
+	double root_time;
+	aux_finalize_generated_random_tree(	time,
+										as_generations,
+										coalescent,
+										include_rates,
+										clade2end_time,
+										clade2birth_rate_pc,
+										clade2death_rate_pc,
+										(max_death_rate_pc>0),
+										Ntips,
+										Nclades,
+										Nedges,
+										root,
+										root_time,
+										tree_edge,
+										edge_length,
+										extant_tips,
+										new2old_clade,
+										birth_rates_pc,
+										death_rates_pc);
+	long Nnodes = Nclades - Ntips;
+	
+	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
+								Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
+								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
+								Rcpp::Named("Nnodes") 			= Nnodes,
+								Rcpp::Named("Ntips") 			= Ntips,
+								Rcpp::Named("Nedges") 			= Nedges,
+								Rcpp::Named("root")				= root, // this is actually guaranteed to be = Ntips
+								Rcpp::Named("Nbirths")			= Nbirths,
+								Rcpp::Named("Ndeaths")			= Ndeaths,
+								Rcpp::Named("root_time")		= root_time,
+								Rcpp::Named("final_time")		= time,
+								Rcpp::Named("equilibrium_time")	= equilibrium_time,
+								Rcpp::Named("birth_times")		= Rcpp::wrap(birth_times),
+								Rcpp::Named("death_times")		= Rcpp::wrap(death_times),
+								Rcpp::Named("birth_rates_pc")	= Rcpp::wrap(birth_rates_pc),	// birth_rates_pc[c] will be the per-capita birth rate of clade c (prior to its extinction or splitting)
+								Rcpp::Named("death_rates_pc")	= Rcpp::wrap(death_rates_pc));	// death_rates_pc[c] will be the per-capita death rate of clade c (prior to its extinction or splitting)
+}
+
+
+// Generate a random phylogenetic tree under a speciation/extinction model, where species are born or go extinct as a Poissonian process
+// New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
+// This function is similar to generate_random_tree_CPP(..) above, with one important difference:
+//    Per-capita speciation and extinction rates are modelled as discrete-state continuous-time Markov chains evolving along the tree edges
+//	  Hence per-capita speciation/extinction rates are scalar traits specific to each node & tip.
+// [[Rcpp::export]]
+Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// (INPUT) max number of tips (extant tips, if coalescent==true). If <=0, this constraint is ignored.
+												const double				max_time,					// (INPUT) max simulation time. If <=0, this constraint is ignored.
+												const double				max_time_since_equilibrium,	// (INPUT) max simulation time, counting from the first time point where death_rate-birth_rate changed sign. This may be used as an alternative to (or in conjunction with) max_time to ensure the tree has reached speciation/extinction equilibrium. If <0, this constraint is ignored.
+												const long					Nstates,					// (INPUT) number of possible states
+												const std::vector<double>	&state_birth_rates,			// (INPUT) list of per-capita birth rates for each state
+												const std::vector<double>	&state_death_rates,			// (INPUT) list of per-capita death rates for each state
+												const long					root_state,					// (INPUT) root state (0,..,Nstates-1)
+												const std::vector<double>	&transition_matrix,			// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q for the possible states. In row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q, which is the transition rate r-->c.
+												const bool					coalescent,					// (INPUT) whether to return only the coalescent tree (i.e. including only extant tips)
+												const long					Nsplits,					// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
+												const bool					as_generations,				// (INPUT) if false, then edge lengths correspond to time. If true, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
+												const bool					all_transitions,			// (INPUT) if true, then all transitions between states are simulated along edges over time. This is the exact version of the model. If false, an approximation is used whereby transitions only occur at branching points (i.e. during speciation events).
+												const bool					include_birth_times,		// (INPUT) if true, then the times of speciations (in order of occurrence) will also be returned
+												const bool					include_death_times,		// (INPUT) if true, then the times of extinctions (in order of occurrence) will also be returned
+												const bool					include_rates){				// (INPUT) if true, then the per-capita birth & death rates for each clade will also be returned
+	const double max_death_rate_pc = get_array_max(state_death_rates);
+	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
+	long next_Nsplits = max(2l, Nsplits);
+	std::vector<long> tree_edge;
+	std::vector<long> extant_tips;
+	std::vector<long> clade2parent;
+	std::vector<double> clade2end_time;
+	std::vector<long> clade2state; 		// state for each node/tip (i.e. determining the waiting times until speciation & extinction)
+	std::vector<double> birth_times, death_times;
+	tree_edge.reserve(expected_Nclades*2);
+	extant_tips.reserve(ceil(expected_Nclades/2.0)); 	// keep track of which clades are extant tips, as the tree is built
+	clade2parent.reserve(expected_Nclades); 			// keep track of parent of each clade
+	clade2end_time.reserve(expected_Nclades); 			// keep track of time at which each clade split or went extinct (negative if clade is an extant tip)
+	clade2state.reserve(expected_Nclades);
+	
+	// prepare exponentiation of birth & death rate matrix
+	const double exponentiation_rescaling = max(1.0,max(max_time_since_equilibrium,max_time));
+	const long NPmin = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
+	const matrix_exponentiator transition_exponentiator(Nstates, transition_matrix, exponentiation_rescaling, 1e-4, NPmin, 1000, true);
+	vector<double> scratch_exp;
+	
+	// pre-calculate auxiliary info about transition matrix
+	std::vector<double> state_total_transition_rates(Nstates,0);
+	for(long state=0; state<Nstates; ++state){
+		state_total_transition_rates[state] = sum_of_row(Nstates, Nstates, transition_matrix, state) - transition_matrix[state*Nstates+state];
+	}
+	
+	// create the first tip (which is also the root)
+	long Ntips 		= 0; 	// current number of extant + extinct tips
+	long Nclades 	= 0;	// current number of clades
+	long root 		= 0;
+	extant_tips.push_back(Nclades++);
+	clade2parent.push_back(-1); // root has no parent
+	clade2end_time.push_back(-1);
+	clade2state.push_back(root_state);
+	++Ntips;
+		
+	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
+	long Nedges 		= 0;
+	long Nbirths		= 0;
+	long Ndeaths 		= 0;
+	double time 		= 0;
+	double total_rate	= INFTY_D;
+	double total_birth_rate		= state_birth_rates[clade2state[root]];
+	double total_death_rate		= state_death_rates[clade2state[root]];
+	double total_transition_rate = state_total_transition_rates[clade2state[root]];
+	double equilibrium_time 	= INFTY_D;
+	double initial_growth_rate 	= NAN_D; // keep track of the net growth rate (birth rate - death rate) at the beginning of the simulation
+	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
+		// determine time of next speciation or extinction event
+		// prevent deaths if only one tip is left
+		const double restricted_death_rate = (extant_tips.size()<=1 ? 0 : total_death_rate);
+		if(std::isnan(initial_growth_rate)) initial_growth_rate = total_birth_rate - restricted_death_rate;
+		if(((total_birth_rate - restricted_death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
+		total_rate = total_birth_rate + restricted_death_rate;
+		
+		// add transition rates if needed and draw time lag to next event
+		if(all_transitions) total_rate += total_transition_rate;
+		time += random_exponential_distribution(total_rate);
+		
+		const bool cladogenic = random_bernoulli((total_birth_rate+restricted_death_rate)/total_rate);
+		if(cladogenic){
+			// speciation or extinction event, decide which of the two
+			const bool birth = random_bernoulli(total_birth_rate/(total_birth_rate+restricted_death_rate));
+						
+			// randomly pick an existing tip to split or kill
+			const long tip   = random_int_from_distribution(extant_tips, (birth ? state_birth_rates : state_death_rates), clade2state, (birth ? total_birth_rate : total_death_rate));
+			const long clade = extant_tips[tip];
+			clade2end_time[clade] = time;
+			const double edge_length = clade2end_time[clade]-(clade==root ? 0 : clade2end_time[clade2parent[clade]]);
+		
+			// update total birth & death rates for the removal of the chosen clade from the pool of tips
+			total_birth_rate -= state_birth_rates[clade2state[clade]];
+			total_death_rate -= state_death_rates[clade2state[clade]];
+				
+			// update total transition rate for the removal of the chosen clade from the pool of tips
+			total_transition_rate -= state_total_transition_rates[clade2state[clade]];
+
+			if(birth){
+				// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
+				if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? extant_tips.size() : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
+				// child 1:
+				++Nedges;
+				++Nbirths;
+				tree_edge.push_back(clade);
+				tree_edge.push_back(Nclades);
+				extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
+				clade2parent.push_back(clade);
+				clade2end_time.push_back(-1);
+				if(include_birth_times) birth_times.push_back(time);
+			
+				// remaining children:
+				for(long c=1; c<next_Nsplits; ++c){
+					++Nedges;
+					++Ntips;
+					tree_edge.push_back(clade);
+					tree_edge.push_back(Nclades);
+					extant_tips.push_back(Nclades++);
+					clade2parent.push_back(clade);
+					clade2end_time.push_back(-1);
+				}
+				
+				// assign states to all children
+				for(long c=0; c<next_Nsplits; ++c){
+					if(all_transitions){
+						// child state is the same as parent, since transitions are modelled separately
+						clade2state.push_back(clade2state[clade]);
+					}else{
+						// pick random state for this child and update total birth & death rates
+						clade2state.push_back(get_next_Mk_state(transition_exponentiator,scratch_exp,edge_length/exponentiation_rescaling,clade2state[clade]));
+					}
+					// update total birth & death rates
+					total_birth_rate += state_birth_rates[clade2state.back()];
+					total_death_rate += state_death_rates[clade2state.back()];					
+					// update total transition rate
+					total_transition_rate += state_total_transition_rates[clade2state.back()];
+				}
+				
+			}else{
+				// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
+				extant_tips[tip] = extant_tips.back();
+				extant_tips.pop_back();
+				++Ndeaths;
+				if(include_death_times) death_times.push_back(time);
+			}
+		}else{
+			// transition event
+			// randomly pick an existing tip to transition
+			const long tip	 = random_int_from_distribution(extant_tips, state_total_transition_rates, clade2state, total_transition_rate);
+			const long clade = extant_tips[tip];
+			
+			// randomly pick new state
+			const long old_state = clade2state[clade];
+			const long new_state = get_next_Mk_state(Nstates,transition_matrix,state_total_transition_rates[old_state],old_state);
+			clade2state[clade] 	 = new_state;
+						
+			// update total transition rate
+			total_transition_rate += state_total_transition_rates[new_state] - state_total_transition_rates[old_state];
+			
+			// update total birth & death rate
+			total_birth_rate += state_birth_rates[new_state] - state_birth_rates[old_state];
+			total_death_rate += state_death_rates[new_state] - state_death_rates[old_state];			
+		}
+		// abort if the user has interrupted the calling R program
+		Rcpp::checkUserInterrupt();
+	}
+	
+	if(Ntips<=1){
+		// something went wrong (e.g. zero birth & death rates)
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
+	}
+		
+	// add a small dt at the end to make all edges non-zero length
+	time += random_exponential_distribution(total_rate);
+	if(max_time>0) time = min(time, max_time); // prevent going past max_time
+	if(max_time_since_equilibrium>=0) time = min(time, max_time_since_equilibrium+equilibrium_time); // prevent going past max_time_since_equilibrium
+
+	// translate clade states to pc birth & death rates
+	std::vector<double> clade2birth_rate_pc(Nclades), clade2death_rate_pc(Nclades);
+	for(long c=0; c<Nclades; ++c){
+		clade2birth_rate_pc[c] = state_birth_rates[clade2state[c]];
+		clade2death_rate_pc[c] = state_death_rates[clade2state[c]];
+	}
+
+	// finalize tree (make valid phylo structure, make coalescent if needed)
+	std::vector<double> edge_length, birth_rates_pc, death_rates_pc;
+	std::vector<long> new2old_clade;
+	double root_time;
+	aux_finalize_generated_random_tree(	time,
+										as_generations,
+										coalescent,
+										include_rates,
+										clade2end_time,
+										clade2birth_rate_pc,
+										clade2death_rate_pc,
+										(max_death_rate_pc>0),
+										Ntips,
+										Nclades,
+										Nedges,
+										root,
+										root_time,
+										tree_edge,
+										edge_length,
+										extant_tips,
+										new2old_clade,
+										birth_rates_pc,
+										death_rates_pc);
+	long Nnodes = Nclades - Ntips;
+	
+	// update clade2state to new clade indices
+	const std::vector<long> old_clade2state(clade2state);
+	clade2state.resize(Nclades);
+	for(long clade=0; clade<Nclades; ++clade) clade2state[clade] = old_clade2state[new2old_clade[clade]];
+	
+	// debug : calculate mean edge lengths per state
+	/*
+	std::vector<long> node2first_edge, node2last_edge, edges;
+	std::vector<double> distances;
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, distances);
+	get_node2edge_mappings(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							node2first_edge,
+							node2last_edge,
+							edges);
+	std::vector<double> mean_el(Nstates,0);
+	std::vector<long> counts(Nstates,0);
+	for(long node=0; node<Nnodes; ++node){
+		if(distances[node+Ntips]>0.8*(time-root_time)) continue;
+		bool OK = true;
+		for(long e=node2first_edge[node], edge, child; e<=node2last_edge[node]; ++e){
+			edge = edges[e];
+			child = tree_edge[2*edge+1];
+			if(distances[child]>0.999*(time-root_time) || child<Ntips) OK=false;
+		}
+		if(OK){
+			for(long e=node2first_edge[node], edge, state; e<=node2last_edge[node]; ++e){
+				edge = edges[e];
+				state = clade2state[tree_edge[2*edge+1]];
+				++counts[state];
+				mean_el[state] += edge_length[edge];
+			}
+		}
+	}
+	for(long state=0; state<Nstates; ++state){
+		mean_el[state] /= counts[state];
+		Rcout << "  debug: state " << state << ": mean_el=" << mean_el[state] << ", N=" << counts[state] << "\n";
+	}
+	*/
+
+	
+	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
+								Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
+								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
+								Rcpp::Named("Nnodes") 			= Nnodes,
+								Rcpp::Named("Ntips") 			= Ntips,
+								Rcpp::Named("Nedges") 			= Nedges,
+								Rcpp::Named("root")				= root, // this is actually guaranteed to be = Ntips
+								Rcpp::Named("Nbirths")			= Nbirths,
+								Rcpp::Named("Ndeaths")			= Ndeaths,
+								Rcpp::Named("root_time")		= root_time,
+								Rcpp::Named("final_time")		= time,
+								Rcpp::Named("equilibrium_time")	= equilibrium_time,
+								Rcpp::Named("clade_states")		= clade2state,
+								Rcpp::Named("birth_times")		= Rcpp::wrap(birth_times),
+								Rcpp::Named("death_times")		= Rcpp::wrap(death_times),
+								Rcpp::Named("birth_rates_pc")	= Rcpp::wrap(birth_rates_pc),	// birth_rates_pc[c] will be the per-capita birth rate of clade c (prior to its extinction or splitting)
+								Rcpp::Named("death_rates_pc")	= Rcpp::wrap(death_rates_pc));	// death_rates_pc[c] will be the per-capita death rate of clade c (prior to its extinction or splitting)
+}
+
+
+
+
 
 
 

@@ -40,6 +40,9 @@ This function is meant for reconstructing ancestral states in all nodes of a tre
 
 \value{
 A list with the following elements:
+\item{success}{
+Logical, indicating whether HSP was successful. If \code{FALSE}, some return values may be \code{NULL}.
+}
 \item{states}{
 A numeric vector of size Ntips+Nnodes, listing the reconstructed state of each tip and node. The entries in this vector will be in the order in which tips and nodes are indexed in \code{tree$edge}.
 }
@@ -65,7 +68,6 @@ J. R. Zaneveld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 \code{\link{asr_squared_change_parsimony}}
 \code{\link{hsp_max_parsimony}}, 
 \code{\link{hsp_mk_model}}, 
-\code{\link{map_to_state_space}}
 }
 
 \examples{

@@ -153,14 +153,6 @@ merge_short_edges_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length,
     .Call('castor_merge_short_edges_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, edge_length_epsilon, force_keep_tips)
 }
 
-generate_random_tree_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times) {
-    .Call('castor_generate_random_tree_CPP', PACKAGE = 'castor', max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times)
-}
-
-generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates) {
-    .Call('castor_generate_random_tree_BM_rates_CPP', PACKAGE = 'castor', max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates)
-}
-
 pick_random_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, Nrandoms, Nsubsets, with_replacement) {
     .Call('castor_pick_random_tips_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, Nrandoms, Nsubsets, with_replacement)
 }
@@ -189,8 +181,8 @@ autocorrelation_function_of_continuous_trait_CPP <- function(Ntips, Nnodes, Nedg
     .Call('castor_autocorrelation_function_of_continuous_trait_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix)
 }
 
-get_empirical_state_frequencies_per_node <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, tip_states) {
-    .Call('castor_get_empirical_state_frequencies_per_node', PACKAGE = 'castor', Ntips, Nnodes, Nedges, Nstates, tree_edge, tip_states)
+get_empirical_state_frequencies_per_node_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, tip_states) {
+    .Call('castor_get_empirical_state_frequencies_per_node_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, Nstates, tree_edge, tip_states)
 }
 
 get_trait_richness_collectors_curve_CPP <- function(Ntips, Nnodes, Nedges, Ntraits, root, tree_edge, edge_length, tip2first_trait, tip2last_trait, traits, rarefaction_depths, Nrepeats, tip_distribution, use_realized_depths) {
@@ -245,6 +237,10 @@ ASR_via_squared_change_parsimony_CPP <- function(Ntips, Nnodes, Nedges, tree_edg
     .Call('castor_ASR_via_squared_change_parsimony_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, global)
 }
 
+get_mean_state_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states) {
+    .Call('castor_get_mean_state_per_node_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states)
+}
+
 ASR_via_independent_contrasts_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, include_standard_errors) {
     .Call('castor_ASR_via_independent_contrasts_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_states, include_standard_errors)
 }
@@ -275,5 +271,17 @@ simulate_multivariate_Brownian_motion_model_CPP <- function(Ntips, Nnodes, Nedge
 
 simulate_neutral_gene_evolution_CPP <- function(Ntips, Nnodes, Nedges, Nsites, Nstates, tree_edge, edge_length, root_states, mutation_rate, include_tips, include_nodes, include_gene_distances, Nsimulations) {
     .Call('castor_simulate_neutral_gene_evolution_CPP', PACKAGE = 'castor', Ntips, Nnodes, Nedges, Nsites, Nstates, tree_edge, edge_length, root_states, mutation_rate, include_tips, include_nodes, include_gene_distances, Nsimulations)
+}
+
+generate_random_tree_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times) {
+    .Call('castor_generate_random_tree_CPP', PACKAGE = 'castor', max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times)
+}
+
+generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates) {
+    .Call('castor_generate_random_tree_BM_rates_CPP', PACKAGE = 'castor', max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates)
+}
+
+generate_random_tree_Mk_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, root_state, transition_matrix, coalescent, Nsplits, as_generations, all_transitions, include_birth_times, include_death_times, include_rates) {
+    .Call('castor_generate_random_tree_Mk_rates_CPP', PACKAGE = 'castor', max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, root_state, transition_matrix, coalescent, Nsplits, as_generations, all_transitions, include_birth_times, include_death_times, include_rates)
 }
 

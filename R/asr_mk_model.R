@@ -56,6 +56,7 @@ asr_mk_model = function(tree,
 			if((!is.null(rownames(tip_priors))) && (!is.null(tree$tip.label)) && (rownames(tip_priors)!=tree$tip.label)) stop("ERROR: Row names in tip_priors and tip labels in tree don't match")
 		}
 	}
+
     
     # figure out prior distribution for root if needed
     if(root_prior[1]=="flat"){
@@ -169,7 +170,7 @@ asr_mk_model = function(tree,
 		# extract information from best fit (note that some fits may have LL=NaN or NA)
 		LLs 	= sapply(1:Ntrials, function(trial) fits[[trial]]$LL)
 		pars	= sapply(1:Ntrials, function(trial) fits[[trial]]$fit$par)
-		valids 	= which((!is.na(LLs)) & (!is.nan(LLs)) & (!is.null(LLs)) & (!is.na(pars)) & (!is.nan(pars)) & (!is.null(pars)))
+		valids 	= which((!is.na(LLs)) & (!is.nan(LLs)) & (!is.null(LLs)) & (!any(is.na(pars))) & (!any(is.nan(pars))) & (!any(is.null(pars))))
 		if(length(valids)==0){
 			return_value_on_failure$error = "Fitting failed for all trials"
 			return(return_value_on_failure);
@@ -177,7 +178,7 @@ asr_mk_model = function(tree,
 		best 				= valids[which.max(sapply(valids, function(i) LLs[i]))]
 		loglikelihood		= fits[[best]]$LL;
 		fitted_rates 		= fits[[best]]$fit$par;
-		transition_matrix 	= get_transition_matrix_from_rate_vector(fitted_rates, index_matrix, Nstates);			
+		transition_matrix 	= get_transition_matrix_from_rate_vector(fitted_rates, index_matrix, Nstates);
 		if(is.null(loglikelihood) || any(is.na(fitted_rates)) || any(is.nan(fitted_rates))){
 			return_value_on_failure$error = "Fitting yielded NaN loglikelihood and/or rates"
 			return(return_value_on_failure);
