@@ -18,6 +18,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 											 include_death_times	= FALSE,
 											 include_rates			= FALSE){
 	if(is.null(max_tips) && is.null(max_time) && is.null(max_time_eq)) stop("ERROR: At least one of max_tips and/or max_time and/or max_time_eq must be non-NULL")
+	discrete_state_model = (rate_model=="Mk")
 	
 	# set default model parameters
 	if(rate_model=="BM"){
@@ -27,6 +28,10 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		if(is.null(parameters$death_rate_diffusivity)) 	parameters$death_rate_diffusivity = 1;
 		if(is.null(parameters$min_death_rate_pc))		parameters$min_death_rate_pc = 0;
 		if(is.null(parameters$max_death_rate_pc)) 		parameters$max_death_rate_pc = 1;
+		if(is.null(parameters$root_birth_rate_pc))		parameters$root_birth_rate_pc = runif(1, parameters$min_birth_rate_pc, parameters$max_birth_rate_pc);
+		if(is.null(parameters$root_death_rate_pc))		parameters$root_death_rate_pc = runif(1, parameters$min_death_rate_pc, parameters$max_death_rate_pc);
+		parameters$root_birth_rate_pc = max(parameters$min_birth_rate_pc, min(parameters$max_birth_rate_pc, parameters$root_birth_rate_pc))
+		parameters$root_death_rate_pc = max(parameters$min_death_rate_pc, min(parameters$max_death_rate_pc, parameters$root_death_rate_pc))
 	}else if(rate_model=="Mk"){
 		if(is.null(parameters$Nstates)) 			parameters$Nstates = 1;
 		if(is.null(parameters$transition_matrix))	parameters$transition_matrix = matrix(0,nrow=parameters$Nstates, ncol=parameters$Nstates);
@@ -42,6 +47,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		}else if(length(parameters$state_death_rates)==1){
 			parameters$state_death_rates = rep(parameters$state_death_rates, times=parameters$Nstates);
 		}
+		if(is.null(parameters$root_state)) parameters$root_state = sample.int(n=parameters$Nstates,size=1)
 	}else{
 		stop(sprintf("ERROR: Invalid rate_model '%s'",rate_model))
 	}
@@ -59,6 +65,8 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													death_rate_diffusivity 		= parameters$death_rate_diffusivity,
 													min_death_rate_pc			= parameters$min_death_rate_pc,
 													max_death_rate_pc			= parameters$max_death_rate_pc,
+													root_birth_rate_pc			= parameters$root_birth_rate_pc,
+													root_death_rate_pc			= parameters$root_death_rate_pc,
 													coalescent					= coalescent,
 													Nsplits						= Nsplits,
 													as_generations				= as_generations,
@@ -72,7 +80,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													Nstates						= parameters$Nstates,
 													state_birth_rates			= parameters$state_birth_rates, 
 													state_death_rates			= parameters$state_death_rates,
-													root_state					= sample.int(n=parameters$Nstates,size=1)-1,
+													root_state					= max(1,min(parameters$Nstates, parameters$root_state)) - 1,
 													transition_matrix 			= as.vector(t(parameters$transition_matrix)), # flatten in row-major format
 													coalescent					= coalescent,
 													Nsplits						= Nsplits,
@@ -124,7 +132,10 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 				Nbirths		 		= results$Nbirths,
 				Ndeaths				= results$Ndeaths,
 				Nrarefied			= Nrarefied, # number of tips removed via rarefaction at the end
-				states				= results$clade_states+1L, # only relevant for discrete-state rate models
+				states				= (if(is.null(results$clade_states) || (!discrete_state_model)) NULL else results$clade_states+1L), # only relevant for discrete-state rate models
+				root_state			= (if(discrete_state_model) parameters$root_state else NULL), # only relevant for discrete-state rate models
+				root_birth_rate_pc	= (if(discrete_state_model) NULL else parameters$root_birth_rate_pc),
+				root_death_rate_pc	= (if(discrete_state_model) NULL else parameters$root_death_rate_pc),
 				birth_times			= (if(include_birth_times) results$birth_times else NULL),
 				death_times			= (if(include_death_times) results$death_times else NULL),
 				birth_rates_pc		= (if(include_rates) results$birth_rates_pc else NULL),

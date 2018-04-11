@@ -40,8 +40,9 @@ If \code{file==""}, then a string is returned containing the Newick representati
 %\references{
 %}
 
-%\seealso{
-%}
+\seealso{
+\code{\link{read_tree}}
+}
 
 \examples{
 # generate a random tree

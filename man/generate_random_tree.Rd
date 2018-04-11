@@ -4,11 +4,11 @@
 Generate a tree using a Poissonian speciation/extinction model.
 }
 \description{
-Generate a random phylogenetic tree via simulation of a Poissonian speciation/extinction (birth/death) process. New species are added (born) by splitting of a randomly chosen extant tip. The birth and death rates of tips can each be constant or power-law functions of the number of extant tips. For example,
+Generate a random phylogenetic tree via simulation of a Poissonian speciation/extinction (birth/death) process. New species are added (born) by splitting of a randomly chosen extant tip. The tree-wide birth and death rates of tips can each be constant or power-law functions of the number of extant tips. For example,
 \deqn{
 B = I + F\cdot N^E,
 }
-where \eqn{B} is the birth (or speciation) rate, \eqn{I} is the intercept, \eqn{F} is the power-law factor, \eqn{N} is the current number of extant tips and \eqn{E} is the power-law exponent. Optionally, the per-capita birth and death rates can be extended by adding a custom time series provided by the user.
+where \eqn{B} is the tree-wide birth rate (species generation rate), \eqn{I} is the intercept, \eqn{F} is the power-law factor, \eqn{N} is the current number of extant tips and \eqn{E} is the power-law exponent. Optionally, the per-capita (tip-specific) birth and death rates can be extended by adding a custom time series provided by the user.
 }
 \usage{
 generate_random_tree(parameters           = list(),

@@ -420,6 +420,38 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_relative_evolutionary_divergences_CPP
+NumericVector get_relative_evolutionary_divergences_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const NumericVector& edge_length);
+RcppExport SEXP castor_get_relative_evolutionary_divergences_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type edge_length(edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_relative_evolutionary_divergences_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
+// date_tree_via_RED_CPP
+Rcpp::List date_tree_via_RED_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const NumericVector& edge_length, const long anchor_node, const long anchor_age);
+RcppExport SEXP castor_date_tree_via_RED_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP anchor_nodeSEXP, SEXP anchor_ageSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const long >::type anchor_node(anchor_nodeSEXP);
+    Rcpp::traits::input_parameter< const long >::type anchor_age(anchor_ageSEXP);
+    rcpp_result_gen = Rcpp::wrap(date_tree_via_RED_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, anchor_node, anchor_age));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sort_tree_edges_root_to_tips_CPP
 IntegerVector sort_tree_edges_root_to_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const bool depth_first_search, const bool root_to_tips, const IntegerVector& tree_edge);
 RcppExport SEXP castor_sort_tree_edges_root_to_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP depth_first_searchSEXP, SEXP root_to_tipsSEXP, SEXP tree_edgeSEXP) {
@@ -654,6 +686,74 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// assign_clades_to_taxa_CPP
+Rcpp::List assign_clades_to_taxa_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const std::vector<long>& representatives);
+RcppExport SEXP castor_assign_clades_to_taxa_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP representativesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type representatives(representativesSEXP);
+    rcpp_result_gen = Rcpp::wrap(assign_clades_to_taxa_CPP(Ntips, Nnodes, Nedges, tree_edge, representatives));
+    return rcpp_result_gen;
+END_RCPP
+}
+// congruify_trees_CPP
+Rcpp::List congruify_trees_CPP(const long RNtips, const long RNnodes, const long RNedges, const IntegerVector& Rtree_edge, const long TNtips, const long TNnodes, const long TNedges, const IntegerVector& Ttree_edge, const IntegerVector& mapping);
+RcppExport SEXP castor_congruify_trees_CPP(SEXP RNtipsSEXP, SEXP RNnodesSEXP, SEXP RNedgesSEXP, SEXP Rtree_edgeSEXP, SEXP TNtipsSEXP, SEXP TNnodesSEXP, SEXP TNedgesSEXP, SEXP Ttree_edgeSEXP, SEXP mappingSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type RNtips(RNtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type RNnodes(RNnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type RNedges(RNedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type Rtree_edge(Rtree_edgeSEXP);
+    Rcpp::traits::input_parameter< const long >::type TNtips(TNtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type TNnodes(TNnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type TNedges(TNedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type Ttree_edge(Ttree_edgeSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type mapping(mappingSEXP);
+    rcpp_result_gen = Rcpp::wrap(congruify_trees_CPP(RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping));
+    return rcpp_result_gen;
+END_RCPP
+}
+// match_tree_nodes_CPP
+Rcpp::List match_tree_nodes_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edgeA, const IntegerVector& tree_edgeB, const IntegerVector& tipsA2B);
+RcppExport SEXP castor_match_tree_nodes_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeASEXP, SEXP tree_edgeBSEXP, SEXP tipsA2BSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edgeA(tree_edgeASEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edgeB(tree_edgeBSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tipsA2B(tipsA2BSEXP);
+    rcpp_result_gen = Rcpp::wrap(match_tree_nodes_CPP(Ntips, Nnodes, Nedges, tree_edgeA, tree_edgeB, tipsA2B));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_Robinson_Foulds_distance_CPP
+Rcpp::List get_Robinson_Foulds_distance_CPP(const long Ntips, const long NnodesA, const long NedgesA, const IntegerVector& tree_edgeA, const long NnodesB, const long NedgesB, const IntegerVector& tree_edgeB, const IntegerVector& tipsA2B);
+RcppExport SEXP castor_get_Robinson_Foulds_distance_CPP(SEXP NtipsSEXP, SEXP NnodesASEXP, SEXP NedgesASEXP, SEXP tree_edgeASEXP, SEXP NnodesBSEXP, SEXP NedgesBSEXP, SEXP tree_edgeBSEXP, SEXP tipsA2BSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type NnodesA(NnodesASEXP);
+    Rcpp::traits::input_parameter< const long >::type NedgesA(NedgesASEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edgeA(tree_edgeASEXP);
+    Rcpp::traits::input_parameter< const long >::type NnodesB(NnodesBSEXP);
+    Rcpp::traits::input_parameter< const long >::type NedgesB(NedgesBSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edgeB(tree_edgeBSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tipsA2B(tipsA2BSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_Robinson_Foulds_distance_CPP(Ntips, NnodesA, NedgesA, tree_edgeA, NnodesB, NedgesB, tree_edgeB, tipsA2B));
+    return rcpp_result_gen;
+END_RCPP
+}
 // relative_to_absolute_node_ages_CPP
 std::vector<double> relative_to_absolute_node_ages_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& traversal_queue, const std::vector<double>& relative_node_ages, const std::vector<double>& min_abs_node_ages, const std::vector<double>& max_abs_node_ages);
 RcppExport SEXP castor_relative_to_absolute_node_ages_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP traversal_queueSEXP, SEXP relative_node_agesSEXP, SEXP min_abs_node_agesSEXP, SEXP max_abs_node_agesSEXP) {
@@ -706,6 +806,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_phylogram_geometry_CPP
+Rcpp::List get_phylogram_geometry_CPP(const long Ntips, const long Nnodes, const long Nedges, IntegerVector tree_edge, const NumericVector& edge_length);
+RcppExport SEXP castor_get_phylogram_geometry_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type edge_length(edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_phylogram_geometry_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
 // tree_to_Newick_string_CPP
 std::string tree_to_Newick_string_CPP(const long Ntips, const long Nnodes, const long Nedges, IntegerVector tree_edge, const NumericVector& edge_length, const StringVector& tip_labels, const StringVector& node_labels, const long digits, const double root_edge_length);
 RcppExport SEXP castor_tree_to_Newick_string_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_labelsSEXP, SEXP node_labelsSEXP, SEXP digitsSEXP, SEXP root_edge_lengthSEXP) {
@@ -722,6 +837,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const long >::type digits(digitsSEXP);
     Rcpp::traits::input_parameter< const double >::type root_edge_length(root_edge_lengthSEXP);
     rcpp_result_gen = Rcpp::wrap(tree_to_Newick_string_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, digits, root_edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
+// read_Newick_string_CPP
+Rcpp::List read_Newick_string_CPP(std::string input, const bool underscores_as_blanks);
+RcppExport SEXP castor_read_Newick_string_CPP(SEXP inputSEXP, SEXP underscores_as_blanksSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< std::string >::type input(inputSEXP);
+    Rcpp::traits::input_parameter< const bool >::type underscores_as_blanks(underscores_as_blanksSEXP);
+    rcpp_result_gen = Rcpp::wrap(read_Newick_string_CPP(input, underscores_as_blanks));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1234,8 +1361,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // generate_random_tree_BM_rates_CPP
-Rcpp::List generate_random_tree_BM_rates_CPP(const long max_tips, const double max_time, const double max_time_since_equilibrium, const double birth_rate_diffusivity, const double min_birth_rate_pc, const double max_birth_rate_pc, const double death_rate_diffusivity, const double min_death_rate_pc, const double max_death_rate_pc, const bool coalescent, const long Nsplits, const bool as_generations, const bool include_birth_times, const bool include_death_times, const bool include_rates);
-RcppExport SEXP castor_generate_random_tree_BM_rates_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP max_time_since_equilibriumSEXP, SEXP birth_rate_diffusivitySEXP, SEXP min_birth_rate_pcSEXP, SEXP max_birth_rate_pcSEXP, SEXP death_rate_diffusivitySEXP, SEXP min_death_rate_pcSEXP, SEXP max_death_rate_pcSEXP, SEXP coalescentSEXP, SEXP NsplitsSEXP, SEXP as_generationsSEXP, SEXP include_birth_timesSEXP, SEXP include_death_timesSEXP, SEXP include_ratesSEXP) {
+Rcpp::List generate_random_tree_BM_rates_CPP(const long max_tips, const double max_time, const double max_time_since_equilibrium, const double birth_rate_diffusivity, const double min_birth_rate_pc, const double max_birth_rate_pc, const double death_rate_diffusivity, const double min_death_rate_pc, const double max_death_rate_pc, const double root_birth_rate_pc, const double root_death_rate_pc, const bool coalescent, const long Nsplits, const bool as_generations, const bool include_birth_times, const bool include_death_times, const bool include_rates);
+RcppExport SEXP castor_generate_random_tree_BM_rates_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP max_time_since_equilibriumSEXP, SEXP birth_rate_diffusivitySEXP, SEXP min_birth_rate_pcSEXP, SEXP max_birth_rate_pcSEXP, SEXP death_rate_diffusivitySEXP, SEXP min_death_rate_pcSEXP, SEXP max_death_rate_pcSEXP, SEXP root_birth_rate_pcSEXP, SEXP root_death_rate_pcSEXP, SEXP coalescentSEXP, SEXP NsplitsSEXP, SEXP as_generationsSEXP, SEXP include_birth_timesSEXP, SEXP include_death_timesSEXP, SEXP include_ratesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1248,13 +1375,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type death_rate_diffusivity(death_rate_diffusivitySEXP);
     Rcpp::traits::input_parameter< const double >::type min_death_rate_pc(min_death_rate_pcSEXP);
     Rcpp::traits::input_parameter< const double >::type max_death_rate_pc(max_death_rate_pcSEXP);
+    Rcpp::traits::input_parameter< const double >::type root_birth_rate_pc(root_birth_rate_pcSEXP);
+    Rcpp::traits::input_parameter< const double >::type root_death_rate_pc(root_death_rate_pcSEXP);
     Rcpp::traits::input_parameter< const bool >::type coalescent(coalescentSEXP);
     Rcpp::traits::input_parameter< const long >::type Nsplits(NsplitsSEXP);
     Rcpp::traits::input_parameter< const bool >::type as_generations(as_generationsSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_birth_times(include_birth_timesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_death_times(include_death_timesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_rates(include_ratesSEXP);
-    rcpp_result_gen = Rcpp::wrap(generate_random_tree_BM_rates_CPP(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates));
+    rcpp_result_gen = Rcpp::wrap(generate_random_tree_BM_rates_CPP(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates));
     return rcpp_result_gen;
 END_RCPP
 }

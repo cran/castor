@@ -93,19 +93,28 @@ Non-negative number. The minimum allowed per-capita death rate of a clade. In un
 \code{max_death_rate_pc}:
 Non-negative number. The maximum allowed per-capita death rate of a clade. In units 1/time. By default this is 1.
 
+\code{root_birth_rate_pc}:
+Non-negative number, between \code{min_birth_rate_pc} and \code{max_birth_rate_pc}, specifying the initial per-capita birth rate of the root. If left unspecified, this will be chosen randomly and uniformly within the allowed interval.
+
+\code{root_death_rate_pc}:
+Non-negative number, between \code{min_death_rate_pc} and \code{max_death_rate_pc}, specifying the initial per-capita death rate of the root. If left unspecified, this will be chosen randomly and uniformly within the allowed interval.
+
 \code{rarefaction}:
 Numeric between 0 and 1. Rarefaction to be applied at the end of the simulation (fraction of random tips kept in the tree). 
 Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction.
 
 If \code{rate_model=='Mk'}, then speciation/extinction rates are determined by a tip's current "state", which evolves according to a continuous-time discrete-state Markov chain (Mk model) with constant transition rates. The argument \code{parameters} should be a named list including one or more of the following elements:
 
-\code{Nstates}: Number of possible discrete states a tip can have. For example, if \code{Nstates} then this corresponds to the common Binary State Speciation and Extinction (BiSSE) model (Maddison et al., 2007).
+\code{Nstates}: Number of possible discrete states a tip can have. For example, if \code{Nstates} then this corresponds to the common Binary State Speciation and Extinction (BiSSE) model (Maddison et al., 2007). By default this is 1.
 
 \code{state_birth_rates}: Numeric vector of size Nstates, listing the per-capita birth rate (speciation rate) at each state. Can also be a single number (all states have the same birth rate).
 
 \code{state_death_rates}: Numeric vector of size Nstates, listing the per-capita death rate (extinction rate) at each state. Can also be a single number (all states have the same death rate).
 
 \code{transition_matrix}: 2D numeric matrix of size Nstates x Nstates. Transition rate matrix for the Markov chain model of birth/death rate evolution.
+
+\code{root_state}:
+Integer within 1,..,\code{Nstates}, specifying the initial state of the root. If left unspecified, this is chosen randomly and uniformly among all possible states.
 
 \code{rarefaction}: Same as when \code{rate_model=='BM'}.
 
@@ -153,6 +162,15 @@ Numeric vector, listing the per-capita death rate of each tip and node in the tr
 }
 \item{states}{
 Integer vector of size Ntips+Nnodes, listing the discrete state of each tip and node in the tree. Only included if \code{rate_model=="Mk"}.
+}
+\item{root_state}{
+Integer, specifying the initial state of the root (either provided during the function call, or generated randomly). Only included if \code{rate_model=="Mk"}.
+}
+\item{root_birth_rate_pc}{
+Numeric, specifying the initial per-capita birth rate of the root (either provided during the function call, or generated randomly). Only included if \code{rate_model=="BM"}.
+}
+\item{root_death_rate_pc}{
+Numeric, specifying the initial per-capita death rate of the root (either provided during the function call, or generated randomly). Only included if \code{rate_model=="BM"}.
 }
 }
 

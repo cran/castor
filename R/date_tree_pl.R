@@ -1,5 +1,5 @@
 # date a tree (make ultrametric) using penalized likelihood
-date_tree_PL = function(	tree,		# rooted tree
+date_tree_pl = function(	tree,		# rooted tree
 							lambda,		# smoothing parameter
 							min_age			= 1,
 							max_age			= NULL,
@@ -175,5 +175,5 @@ date_tree_PL = function(	tree,		# rooted tree
 	age[unknown.ages] = out$par[-EDGES]
 	
 	tree$edge.length = age[e1] - age[e2]
-	return(list(dated_tree=tree))
+	return(list(success=TRUE, tree=tree))
 }
