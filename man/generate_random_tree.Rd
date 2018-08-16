@@ -4,7 +4,7 @@
 Generate a tree using a Poissonian speciation/extinction model.
 }
 \description{
-Generate a random phylogenetic tree via simulation of a Poissonian speciation/extinction (birth/death) process. New species are added (born) by splitting of a randomly chosen extant tip. The tree-wide birth and death rates of tips can each be constant or power-law functions of the number of extant tips. For example,
+Generate a random timetree via simulation of a Poissonian speciation/extinction (birth/death) process. New species are added (born) by splitting of a randomly chosen extant tip. The tree-wide birth and death rates of tips can each be constant or power-law functions of the number of extant tips. For example,
 \deqn{
 B = I + F\cdot N^E,
 }
@@ -50,8 +50,11 @@ Non-negative number. The power-law factor of the Poissonian rate at which extant
 \code{death_rate_exponent}:
 Numeric. The power-law exponent of the Poissonian rate at which extant species (tips) go extinct. Unitless. By default this is 1.
 
+\code{resolution}:
+Non-negative numeric, specifying the resolution (in time units) at which to collapse the final tree by combining closely related tips. Any node whose age is smaller than this threshold, will be represented by a single tip. Set \code{resolution=0} to not collapse tips (default).
+
 \code{rarefaction}:
-Numeric between 0 and 1. Rarefaction to be applied at the end of the simulation (fraction of random tips kept in the tree). Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction.
+Numeric between 0 and 1. Rarefaction to be applied to the final tree (fraction of random tips kept in the tree). Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction (default).
 }
 \item{max_tips}{
 Maximum number of tips of the tree to be generated. If \code{coalescent=TRUE}, this refers to the number of extant tips. Otherwise, it refers to the number of extinct + extant tips. If \code{NULL} or <=0, the number of tips is unlimited (so be careful).
@@ -101,6 +104,8 @@ Logical. If \code{TRUE}, then the times of extinction events (in order of occurr
 \details{
 If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
 
+If \code{rarefaction<1} and \code{resolution>0}, collapsing of closely related tips (at the resolution specified) takes place prior to rarefaction (i.e., subsampling applies to the already collapsed tips).
+
 Both the per-capita birth and death rates can be made into completely arbitrary functions of time, by setting all power-law coefficients to zero and providing custom time series \code{added_birth_rates_pc} and \code{added_death_rates_pc}.
 }
 
@@ -127,6 +132,12 @@ Total number of birth events (speciations) that occurred during tree growth. Thi
 }
 \item{Ndeaths}{
 Total number of deaths (extinctions) that occurred during tree growth.
+}
+\item{Ncollapsed}{
+Number of tips removed from the tree while collapsing at the resolution specified.
+}
+\item{Nrarefied}{
+Number of tips removed from the tree due to rarefaction.
 }
 \item{birth_times}{
 Numeric vector, listing the times of speciation events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.

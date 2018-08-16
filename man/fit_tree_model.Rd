@@ -55,8 +55,13 @@ Non-negative number. The power-law factor of the Poissonian rate at which extant
 \code{death_rate_exponent}:
 Numeric. The power-law exponent of the Poissonian rate at which extant species (tips) go extinct. Unitless.
 
+\code{resolution}:
+Numeric. Resolution at which the tree was collapsed (i.e. every node of age smaller than this resolution replaced by a single tip). In units time. A resolution of 0 means the tree was not collapsed.
+
 \code{rarefaction}:
-Numeric. Species sampling fraction, i.e. fraction of extant species represented (as tips) in the tree. A rarefaction of 1, for example, implies that the tree is complete, i.e. includes all extant species.
+Numeric. Species sampling fraction, i.e. fraction of extant species represented (as tips) in the tree. A rarefaction of 1, for example, implies that the tree is complete, i.e. includes all extant species. Rarefaction is assumed to have occurred after collapsing.
+
+\code{extant_diversity}: The current total extant diversity, regardless of the rarefaction and resolution of the tree at hand. For example, if \code{resolution==0} and \code{rarefaction==0.5} and the tree has 1000 tips, then \code{extant_diversity} should be \code{2000}. If \code{resolution} is fixed at 0 and \code{rarefaction} is also fixed, this can be left \code{NULL} and will be inferred automatically by the function.
 
 Each of the above elements can also be \code{NULL}, in which case the parameter is fitted. Elements can also be vectors of size 2 (specifying constraint intervals), in which case the parameters are fitted and constrained within the intervals specified. For example, to fit \code{death_rate_factor} while constraining it to the interval [1,2], set its value to \code{c(1,2)}.
 }
@@ -193,6 +198,7 @@ parameters = list(birth_rate_intercept  = 1,
                   death_rate_intercept  = 0,
                   death_rate_factor     = 0,
                   death_rate_exponent   = 0,
+                  resolution            = 0,
                   rarefaction           = 1)
 tree = generate_random_tree(parameters, max_tips=100)
 

@@ -1831,7 +1831,7 @@ bool interpolateTimeSeriesAtTimes(	const std::vector<double> 	&oldTimes,					// 
 	if((tpLastNew<tpNew) || (newTimes[tpLastNew]<oldTimes[oldStart])) return true; // new time domain does not overlap with old time domain
 	includedNewTimesEnd = tpLastNew;
 	
-	valuesAtNewTimes.reserve(includedNewTimesEnd - includedNewTimesStart + 1);
+	valuesAtNewTimes.assign(newTimes.size(),NAN_D);
 	
 	long tpOld = oldStart;
 	double time;
@@ -1846,7 +1846,7 @@ bool interpolateTimeSeriesAtTimes(	const std::vector<double> 	&oldTimes,					// 
 		// at this point it is guaranteed that either (tpOld==oldEnd and oldTimes[tpOld]==time), or (tpOld<oldEnd and oldTimes[tpOld]<=time and oldTimes[tpOld+1]>time)
 				
 		// interpolate old series at focal time
-		valuesAtNewTimes.push_back(tpOld==oldEnd ? valuesAtOldTimes[oldEnd] : interpolateBetween2PointsLinear(oldTimes[tpOld], valuesAtOldTimes[tpOld], oldTimes[tpOld+1], valuesAtOldTimes[tpOld+1], time));
+		valuesAtNewTimes[tpNew] = (tpOld==oldEnd ? valuesAtOldTimes[oldEnd] : interpolateBetween2PointsLinear(oldTimes[tpOld], valuesAtOldTimes[tpOld], oldTimes[tpOld+1], valuesAtOldTimes[tpOld+1], time));
 	}
 	return true;
 }
@@ -2743,103 +2743,113 @@ public:
 // Class for representing simulated diversity at any time point, including cumulative speciation & extinction events
 class TreeStateHistory{
 public:
-	double diversity;		// current number of extant species
-	double Nbirths;			// cumulative number of speciation events since the beginning of a simulation
-	double Ndeaths;			// cumulative number of extinction events since the beginning of a simulation
-	double Pextinction;		// extinction probability of a size-1 clade until max time. Only makes sense for simulations performed in reverse.
-	double Pmissing;		// probability of a size-1 clade missing at max time (either extinction or not discovered). Only makes sense for simulations performed in reverse.
-	TreeStateHistory(){ diversity = Nbirths = Ndeaths = Pextinction = 0; }
-	TreeStateHistory(const double start_diversity){ diversity = start_diversity; Nbirths = Ndeaths = 0; Pextinction = 0; Pmissing = 0; }
-	bool isnan() const{ return (std::isnan(diversity) || std::isnan(Nbirths) || std::isnan(Ndeaths) || std::isnan(Pextinction) || std::isnan(Pmissing)); }
+	double diversity;				// current number of extant species
+	double coalescent_diversity;	// number of species in coalescent final tree
+	double Nbirths;					// cumulative number of speciation events since the beginning of a simulation
+	double Ndeaths;					// cumulative number of extinction events since the beginning of a simulation
+	double Pextinction;				// extinction probability of a size-1 clade until max time. Only makes sense for simulations performed in reverse.
+	double Pmissing;				// probability of a size-1 clade missing at max time (either extinction or not discovered). Only makes sense for simulations performed in reverse.
+	TreeStateHistory(){ diversity = coalescent_diversity = Nbirths = Ndeaths = Pextinction = 0; }
+	TreeStateHistory(const double start_diversity){ diversity = coalescent_diversity = start_diversity; Nbirths = Ndeaths = 0; Pextinction = 0; Pmissing = 0; }
+	bool isnan() const{ return (std::isnan(diversity) || std::isnan(coalescent_diversity) || std::isnan(Nbirths) || std::isnan(Ndeaths) || std::isnan(Pextinction) || std::isnan(Pmissing)); }
 };
 
 
 inline TreeStateHistory operator*(TreeStateHistory x, double scalar){
-	x.diversity 	*= scalar;
-	x.Nbirths 		*= scalar;
-	x.Ndeaths 		*= scalar;
-	x.Pextinction 	*= scalar;
-	x.Pmissing	 	*= scalar;
+	x.diversity 			*= scalar;
+	x.coalescent_diversity 	*= scalar;
+	x.Nbirths 				*= scalar;
+	x.Ndeaths 				*= scalar;
+	x.Pextinction 			*= scalar;
+	x.Pmissing	 			*= scalar;
 	return x;
 }
 
 
 TreeStateHistory& operator*=(TreeStateHistory &x, double scalar) {
-	x.diversity 	*= scalar;
-	x.Nbirths 		*= scalar;
-	x.Ndeaths 		*= scalar;
-	x.Pextinction	*= scalar;
-	x.Pmissing		*= scalar;
+	x.diversity 			*= scalar;
+	x.coalescent_diversity	*= scalar;
+	x.Nbirths 				*= scalar;
+	x.Ndeaths 				*= scalar;
+	x.Pextinction			*= scalar;
+	x.Pmissing				*= scalar;
 	return x;
 }
 
 
 inline TreeStateHistory operator+(TreeStateHistory x, const TreeStateHistory &y){
-	x.diversity 	+= y.diversity;
-	x.Nbirths 		+= y.Nbirths;
-	x.Ndeaths 		+= y.Ndeaths;
-	x.Pextinction	+= y.Pextinction;
-	x.Pmissing		+= y.Pmissing;
+	x.diversity 			+= y.diversity;
+	x.coalescent_diversity	+= y.coalescent_diversity;
+	x.Nbirths 				+= y.Nbirths;
+	x.Ndeaths 				+= y.Ndeaths;
+	x.Pextinction			+= y.Pextinction;
+	x.Pmissing				+= y.Pmissing;
 	return x;
 }
 
 
 inline TreeStateHistory &operator+=(TreeStateHistory &x, const TreeStateHistory &y){
-	x.diversity 	+= y.diversity;
-	x.Nbirths 		+= y.Nbirths;
-	x.Ndeaths 		+= y.Ndeaths;
-	x.Pextinction	+= y.Pextinction;
-	x.Pmissing		+= y.Pmissing;
+	x.diversity 			+= y.diversity;
+	x.coalescent_diversity	+= y.coalescent_diversity;
+	x.Nbirths 				+= y.Nbirths;
+	x.Ndeaths 				+= y.Ndeaths;
+	x.Pextinction			+= y.Pextinction;
+	x.Pmissing				+= y.Pmissing;
 	return x;
 }
 
 
 inline TreeStateHistory operator-(TreeStateHistory x, const TreeStateHistory &y){
-	x.diversity 	-= y.diversity;
-	x.Nbirths 		-= y.Nbirths;
-	x.Ndeaths 		-= y.Ndeaths;
-	x.Pextinction	-= y.Pextinction;
-	x.Pmissing		-= y.Pmissing;
+	x.diversity 			-= y.diversity;
+	x.coalescent_diversity 	-= y.coalescent_diversity;
+	x.Nbirths 				-= y.Nbirths;
+	x.Ndeaths 				-= y.Ndeaths;
+	x.Pextinction			-= y.Pextinction;
+	x.Pmissing				-= y.Pmissing;
 	return x;
 }
 
 
 inline TreeStateHistory &operator-=(TreeStateHistory &x, const TreeStateHistory &y){
-	x.diversity 	-= y.diversity;
-	x.Nbirths 		-= y.Nbirths;
-	x.Ndeaths 		-= y.Ndeaths;
-	x.Pextinction	-= y.Pextinction;
-	x.Pmissing		-= y.Pmissing;
+	x.diversity 			-= y.diversity;
+	x.coalescent_diversity	-= y.coalescent_diversity;
+	x.Nbirths 				-= y.Nbirths;
+	x.Ndeaths 				-= y.Ndeaths;
+	x.Pextinction			-= y.Pextinction;
+	x.Pmissing				-= y.Pmissing;
 	return x;
 }
 
 
 inline TreeStateHistory operator/(TreeStateHistory x, const TreeStateHistory &y){
-	x.diversity 	/= y.diversity;
-	x.Nbirths 		/= y.Nbirths;
-	x.Ndeaths 		/= y.Ndeaths;
-	x.Pextinction	/= y.Pextinction;
-	x.Pmissing		/= y.Pmissing;
+	x.diversity 			/= y.diversity;
+	x.coalescent_diversity	/= y.coalescent_diversity;
+	x.Nbirths 				/= y.Nbirths;
+	x.Ndeaths 				/= y.Ndeaths;
+	x.Pextinction			/= y.Pextinction;
+	x.Pmissing				/= y.Pmissing;
 	return x;
 }
 
 
 inline TreeStateHistory operator/(TreeStateHistory x, double scalar){
-	x.diversity 	/= scalar;
-	x.Nbirths 		/= scalar;
-	x.Ndeaths 		/= scalar;
-	x.Pextinction	/= scalar;
-	x.Pmissing		/= scalar;
+	x.diversity 			/= scalar;
+	x.coalescent_diversity	/= scalar;
+	x.Nbirths 				/= scalar;
+	x.Ndeaths 				/= scalar;
+	x.Pextinction			/= scalar;
+	x.Pmissing				/= scalar;
 	return x;
 }
 
 
 inline TreeStateHistory &operator/=(TreeStateHistory &x, double scalar){
-	x.diversity 	/= scalar;
-	x.Nbirths 		/= scalar;
-	x.Ndeaths 		/= scalar;
-	x.Pextinction	/= scalar;
-	x.Pmissing		/= scalar;
+	x.diversity 			/= scalar;
+	x.coalescent_diversity	/= scalar;
+	x.Nbirths 				/= scalar;
+	x.Ndeaths 				/= scalar;
+	x.Pextinction			/= scalar;
+	x.Pmissing				/= scalar;
 	return x;
 }
 
@@ -2849,22 +2859,36 @@ inline TreeStateHistory &operator/=(TreeStateHistory &x, double scalar){
 // includes integration of cumulative birth & death events
 // can be integrated in reverse (time counted backwards) as well as in forward direction
 // When integrated in reverse, the extinction probability Pextinction(t,T) and the probability of missing Pmissing are also simulated
-// In any case, the simulated diversity is the true (total) extant diversity at any time. To make the simulated time series coalescent, use make_coalescent() afterwards.
+// In any case, the simulated diversity is the true (total) extant diversity at any time. To make the simulated time series coalescent, use calculate_coalescent_diversities() afterwards.
 class TreeSpeciationExtinctionModel{
 	double 	min_valid_diversity;
 	bool 	reverse;
 	double 	reflection_time;
+	bool	has_probabilities;
 public:
 	std::vector<TreeStateHistory> trajectory;
 	std::vector<double> times;
-	std::vector<double> survival_chances;
 	double initial_diversity;
 	double rarefaction;
 
-	TreeSpeciationExtinctionModel(){ min_valid_diversity = 0; reverse = false; rarefaction = 1; }
+	TreeSpeciationExtinctionModel(){ min_valid_diversity = 0; reverse = false; rarefaction = 1; has_probabilities = false; }
 	double birth_rate_intercept, birth_rate_factor, birth_rate_exponent;
 	double death_rate_intercept, death_rate_factor, death_rate_exponent;
 	long Nsplits;
+	
+	// use parameters from another model instance
+	void adopt_parameters(const TreeSpeciationExtinctionModel &model2){
+		birth_rate_intercept 	= model2.birth_rate_intercept;
+		birth_rate_factor 		= model2.birth_rate_factor;
+		birth_rate_exponent 	= model2.birth_rate_exponent;
+		death_rate_intercept 	= model2.death_rate_intercept;
+		death_rate_factor 		= model2.death_rate_factor;
+		death_rate_exponent 	= model2.death_rate_exponent;
+		Nsplits 				= model2.Nsplits;
+		min_valid_diversity 	= model2.min_valid_diversity;
+		reflection_time 		= model2.reflection_time;
+		reverse	 				= model2.reverse;
+	}
 		
 	// model is warned that a time series of size count will need to be stored
 	void reserveSpaceForTimeSeries(long Ntimes){ 
@@ -2874,17 +2898,44 @@ public:
 		times.reserve(Ntimes); 
 	}
 	
-	// reverse the dynamics of the model, i.e. return -V(_reflection_time-t) whenever V(t) is requested.
+	// reverse the dynamics of the model, i.e. return vector field -V(_reflection_time-t) whenever V(t) is requested.
+	// this should be called prior to simulating
 	void set_reverse(double _reflection_time){
 		reflection_time = _reflection_time;
 		reverse = true;
+		has_probabilities = true;
 	}
 	
+	// reverse the time course of a simulated trajectory
+	// this should be called after simulating
+	void reverse_trajectory(const double final_time){
+		TreeStateHistory state;
+		const long NMT = times.size();
+		double time;
+		for(long t=0, s; t<NMT/2; ++t){
+			s = NMT-t-1;
+			state = trajectory[t];
+			trajectory[t] = trajectory[s];
+			trajectory[s] = state;
+			time = times[t];
+			times[t] = times[s];
+			times[s] = time;
+		}
+		// correct direction of accumulation of time, Nbirths & Ndeaths
+		const double max_Nbirths = trajectory[0].Nbirths;
+		const double max_Ndeaths = trajectory[0].Ndeaths;
+		for(long t=0; t<NMT; ++t){
+			times[t] = final_time - times[t];
+			trajectory[t].Nbirths = max_Nbirths - trajectory[t].Nbirths;
+			trajectory[t].Ndeaths = max_Ndeaths - trajectory[t].Ndeaths;
+		}
+	}
 	
 	// calculate probabilities fo extinction and missing, by integrating in reverse
 	// this should be done after the end of a simulation, since the ODE's has initial condition and rate of change depends on the final trajectory of diversity
 	// assumes that times[] are in ascending order
 	void calculate_probabilities(){
+		if(has_probabilities) return;
 		const long NMT = times.size();
 		trajectory[NMT-1].Pextinction = 0; 					// probability of extinction begins at 0
 		trajectory[NMT-1].Pmissing = (1.0-rarefaction); 	// probability of missing begins at (1-rarefacton_fraction)
@@ -2895,14 +2946,56 @@ public:
 			trajectory[t].Pextinction = trajectory[t+1].Pextinction + dt*(death_rate_pc - trajectory[t+1].Pextinction*(birth_rate_pc+death_rate_pc) + pow(trajectory[t+1].Pextinction,Nsplits)*birth_rate_pc);
 			trajectory[t].Pmissing	  = trajectory[t+1].Pmissing + dt*(death_rate_pc - trajectory[t+1].Pmissing*(birth_rate_pc+death_rate_pc) + pow(trajectory[t+1].Pmissing,Nsplits)*birth_rate_pc);
 		}
+		has_probabilities = true;
 	}
 	
 	
-	// adjust (reduce) diversities time series to reflect a coalescent tree, based on the diversities & Pmissing
-	void make_coalescent(){
-		if(!reverse) calculate_probabilities();  // if not integrated in reverse, then Pmissing still need to be calculated
+	void get_coalescent_trajectory(	double 							resolution, 	// (INPUT)
+									double 							rarefaction, 	// (INPUT)
+									std::vector<TreeStateHistory> 	&coalescent) const{	// (OUTPUT)
+		const long NMT = times.size();
+		const double final_time = times.back();
+		coalescent = trajectory;
+		coalescent[NMT-1].Pextinction = 0; // probability of extinction begins at 0
+		coalescent[NMT-1].Pmissing = (resolution<=0 ? (1.0-rarefaction) : 0.0);
+		long resolution_jump = NMT-1; // will be updated (decreased) when we actually find the resolution jump
+		double total_diversity_at_resolution_age, coalescent_diversity_at_resolution_age;
+		for(long t=NMT-2; t>=0; --t){
+			const double birth_rate_pc = get_speciation_rate_at_state(times[t+1],coalescent[t+1].diversity)/coalescent[t+1].diversity;
+			const double death_rate_pc = get_extinction_rate_at_state(times[t+1],coalescent[t+1].diversity)/coalescent[t+1].diversity;
+			double dt = times[t+1]-times[t];
+			coalescent[t].Pextinction = coalescent[t+1].Pextinction + dt*(death_rate_pc - coalescent[t+1].Pextinction*(birth_rate_pc+death_rate_pc) + pow(coalescent[t+1].Pextinction,Nsplits)*birth_rate_pc);
+			coalescent[t].Pmissing	  = coalescent[t+1].Pmissing + dt*(death_rate_pc - coalescent[t+1].Pmissing*(birth_rate_pc+death_rate_pc) + pow(coalescent[t+1].Pmissing,Nsplits)*birth_rate_pc);
+			const double last_age = final_time-times[t+1];
+			const double new_age  = final_time-times[t];
+			if((new_age>=resolution) && (last_age<resolution)){
+				// we just jumped over rarefaction_age, so apply rarefaction to Pmissing
+				resolution_jump = t+1;
+				total_diversity_at_resolution_age = trajectory[t+1].diversity + (trajectory[t].diversity-trajectory[t+1].diversity)*(resolution-last_age)/(new_age-last_age);
+				double Pmissing_at_resolution_age = coalescent[t+1].Pmissing + (coalescent[t].Pmissing-coalescent[t+1].Pmissing)*(resolution-last_age)/(new_age-last_age); // linearly interpolate to get Pmissing at resolution age
+				Pmissing_at_resolution_age = 1 - rarefaction*(1-Pmissing_at_resolution_age); // apply rarefaction at resolution age
+				coalescent_diversity_at_resolution_age = total_diversity_at_resolution_age * (1-Pmissing_at_resolution_age);
+				dt = new_age-resolution;
+				coalescent[t].Pmissing = Pmissing_at_resolution_age + dt*(death_rate_pc - Pmissing_at_resolution_age*(birth_rate_pc+death_rate_pc) + pow(Pmissing_at_resolution_age,Nsplits)*birth_rate_pc);
+			}
+		}
+		// flatten coalescent diversity for ages < resolution_age
+		for(long t=NMT-2; t>=0; --t){
+			if((final_time-times[t])<resolution){
+				coalescent[t].coalescent_diversity = coalescent_diversity_at_resolution_age;
+				coalescent[t].Pmissing = coalescent_diversity_at_resolution_age/coalescent[t].diversity;
+			}else{
+				coalescent[t].coalescent_diversity = coalescent[t].diversity * (1-coalescent[t].Pmissing);
+			}
+		}
+	}
+	
+	
+	// calculate coalescent diversities time series, based on the diversities & Pmissing
+	void calculate_coalescent_diversities(){
+		calculate_probabilities();  // make sure probabilities have been calculated
 		for(long t=0; t<times.size(); ++t){
-			trajectory[t].diversity *= (1-trajectory[t].Pmissing);
+			trajectory[t].coalescent_diversity = trajectory[t].diversity * (1-trajectory[t].Pmissing);
 		}
 	}
 
@@ -3059,7 +3152,6 @@ bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
 	bool crossedBoundaryButFixedByReducingTimeStep = false;
 	bool crossedBoundaryYesButFixedBruteForce = false;
 	bool crossedBoundaryYesButFixedUsingEuler = false;
-	bool simulationExceededMaxProcessingTime = false;
 
 	//preliminary error checking
 	if(dt<simulationTime*RELATIVE_EPSILON){
@@ -3098,9 +3190,12 @@ bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
 		
 		// check runtime-out
 		if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
-			warningMessage = "Simulation timed out";
-			return false;
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely because it reached the maximum allowed processing time.";
+			return true;
 		}
+		
+		// reduce time step to not exceed end time, if needed
+		current_dt1 = min(current_dt1, endTime-t);
 				
 		// get dynamics (k1) at currentPoint if needed
 		if(!k1AlreadyCalculated){
@@ -3174,8 +3269,8 @@ bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
 		RK2_REGISTER_STATE:
 		// check sanity (some ODEs may explode)		
 		if(std::isnan(t) || model.stateIsNaN(currentPoint)){
-			warningMessage = "Solution is NaN";
-			return false;
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
+			return (recorded>1);
 		}
 		k1AlreadyCalculated = false;
 		if(t-lastRecordedTime > recordingTimeStep){
@@ -3200,10 +3295,11 @@ bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
 	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
 	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
 	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
-	if(simulationExceededMaxProcessingTime) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely because it reached the maximum allowed processing time.";
 
 	return true;
 }
+
+
 
 
 
@@ -3218,29 +3314,32 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 														const double 		death_rate_intercept,	// (INPUT) intercept of Poissonian rate at which extant tips are removed from the tree
 														const double 		death_rate_factor,		// (INPUT) power-law factor of Poissonian rate at which extant tips are removed from the tree
 														const double 		death_rate_exponent,	// (INPUT) power-law exponent of Poissonian rate at which extant tips are removed from the tree
-														const double		rarefaction,			// (INPUT) optional rarefaction fraction to apply, i.e. fraction of tips remaining after rarefaction. Set this to 1 for no rarefaction. Note that rarefaction affects the full coalescent diversity curve in a non-uniform manner. If coalescent==false, rarefaction has no effect.
+														const double		resolution,				// (INPUT) optional resoluton at which to collapse final tree (prior to any rarefaction). Set this to 0 for no collapsing. Note that collapsing affects the last part of the coalescent diversity curve.
+														const double		rarefaction,			// (INPUT) optional rarefaction fraction to apply, i.e. fraction of tips remaining after rarefaction. Rarefaction is assumed to occur after collapsing at the given resolution (i.e. the collapsed tree is rarefied). Set this to 1 for no rarefaction. Note that rarefaction affects the full coalescent diversity curve in a non-uniform manner.
 														const long			Nsplits,				// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
 														const NumericVector	&times,					// (INPUT) times at which to calculate deterministic diversities, in ascending order
-														const double		start_time,				// (INPUT) Time at which to start simulation. If reverse==true, then this should be the ending time of the tree (>= times.back()), otherwise this should be the beginning of the tree (<=times[0])
-														const double		start_diversity,		// (INPUT) diversity of extant clades at start_time. If reverse==true, this is the visible diversity after rarefaction.
+														const double		start_time,				// (INPUT) Time at which to start simulation. This should be the beginning of the tree (<=times[0]).
+														const double		final_time,				// (INPUT) Time at which to end simulation. This should be the ending time of the tree (>= times.back()).
+														const double		start_diversity,		// (INPUT) diversity of extant clades at start_time. If reverse==true, this is the visible diversity after rarefaction. Only relevant if reverse=false.
+														const double		final_diversity,		// (INPUT) total extant diversity at final_time, without any rarefaction or collapsing at some resolution. Only relevant if reverse==true.
 														const bool			reverse,				// (OUTPUT) if true, then the tree model is integrated in backward time direction. In that case, start_diversity is interpreted as the true diversity at times.back()
-														const bool			coalescent,				// (INPUT) if true, the diversities at any time are replaced by the diversities that would remain in a coalescent tree (i.e. only including ancestors of extant tips)
-														const bool			include_probabilities,	// (INPUT) if true, then Prepresentation (for each time point) will also be returned. This only makes sense for reverse integrations
+														const bool			include_coalescent,			// (INPUT) if true, the coalescent diversities are also returned. These are the diversities that would remain in a coalescent tree (i.e. only including ancestors of extant tips)
+														const bool			include_probabilities,		// (INPUT) if true, then Prepresentation (for each time point) will also be returned. This only makes sense for reverse integrations
 														const bool			include_birth_rates,		// (INPUT) if true, the speciation rates corresponding to times[] will also be returned
 														const bool			include_death_rates,		// (INPUT) if true, the extinction rates corresponding to times[] will also be returned
 														const bool			include_Nevents,			// (INPUT) if true, then the total predicted birth events (starting from times[0] and up to each time point) will also be calculated and returned
 														const double		runtime_out_seconds){		// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.
 	const long NT = times.size();
-	const double max_time = (reverse ? start_time : times[NT-1]);
 	
 	// prepare returned data structures, fill later
 	std::vector<double> birth_rates, death_rates, Nbirths, Ndeaths;
-	std::vector<double> diversities, Psurvival, Prepresentation;
+	std::vector<double> coalescent_diversities, total_diversities, Psurvival, Prepresentation;
 	
 	if((birth_rate_intercept==0) && (birth_rate_exponent==1) && (death_rate_intercept==0) && (death_rate_exponent==1) && (Nsplits==2)){
 		// special case: constant per-capita speciation & extinction rates
 		// use known analytical solutions
-		diversities.resize(NT);
+		total_diversities.resize(NT);
+		if(include_coalescent) coalescent_diversities.resize(NT);
 		if(include_probabilities){
 			Psurvival.resize(NT);
 			Prepresentation.resize(NT);
@@ -3253,12 +3352,40 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 		}
 		const double diversification_rate = birth_rate_factor-death_rate_factor;
 		double Pmissing;
-		for(long t=0; t<NT; ++t){
-			const double age = max_time - times[t];
+		double Pmissing_at_resolution_age, total_diversity_at_resolution_age, coalescent_diversity_at_resolution_age;
+		// calculate total & coalescent diversity at resolution_age, as well as Pmissing at resolution_age.
+		if(resolution>0){
 			if(birth_rate_factor==death_rate_factor){
-				Pmissing = 1 - rarefaction/(1+rarefaction*age*birth_rate_factor);
+				Pmissing_at_resolution_age = 1 - 1/(1+resolution*birth_rate_factor);
 			}else{
-				Pmissing = 1 - rarefaction*diversification_rate/(rarefaction*birth_rate_factor + ((1-rarefaction)*birth_rate_factor - death_rate_factor)*exp(-age*diversification_rate));
+				Pmissing_at_resolution_age = 1 - diversification_rate/(birth_rate_factor - death_rate_factor*exp(-resolution*diversification_rate));
+			}
+			if(reverse){
+				total_diversity_at_resolution_age = final_diversity * exp(-resolution*diversification_rate);
+			}else{
+				total_diversity_at_resolution_age = start_diversity * exp((final_time-resolution-start_time)*diversification_rate);
+			}
+			coalescent_diversity_at_resolution_age = total_diversity_at_resolution_age * rarefaction * (1-Pmissing_at_resolution_age);
+			
+		}
+		// calculate total & coalescnet diversity and other variables for all time points
+		for(long t=0; t<NT; ++t){
+			const double age = final_time - times[t];
+			if(reverse){
+				total_diversities[t] = final_diversity * exp(-age*diversification_rate);
+			}else{
+				total_diversities[t] = start_diversity * exp((times[t]-start_time)*diversification_rate);
+			}
+			if(age>=resolution){
+				const double effective_rarefaction = rarefaction * (1-Pmissing_at_resolution_age);
+				const double effective_age = age-resolution;
+				if(birth_rate_factor==death_rate_factor){
+					Pmissing = 1 - effective_rarefaction/(1+effective_rarefaction*effective_age*birth_rate_factor);
+				}else{
+					Pmissing = 1 - effective_rarefaction*diversification_rate/(effective_rarefaction*birth_rate_factor + ((1-effective_rarefaction)*birth_rate_factor - death_rate_factor)*exp(-effective_age*diversification_rate));
+				}
+			}else{
+				Pmissing = 1.0 - coalescent_diversity_at_resolution_age/total_diversities[t]; // effective Pmissing, based on coalescent and total diversity after collapsing and rarefaction
 			}
 			if(include_probabilities){
 				if(birth_rate_factor==death_rate_factor){
@@ -3268,22 +3395,22 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 				}
 				Prepresentation[t] = 1-Pmissing;
 			}
-			if(reverse){
-				diversities[t] = (start_diversity/rarefaction) * exp(-age*diversification_rate);
-			}else{
-				diversities[t] = start_diversity * exp((times[t]-start_time)*diversification_rate);
-			}
-			if(include_birth_rates) birth_rates[t] = birth_rate_factor * diversities[t];
-			if(include_death_rates) death_rates[t] = death_rate_factor * diversities[t];
+			if(include_birth_rates) birth_rates[t] = birth_rate_factor * total_diversities[t];
+			if(include_death_rates) death_rates[t] = death_rate_factor * total_diversities[t];
 			if(include_Nevents){
-				Nbirths[t] = diversities[0]*(birth_rate_factor/diversification_rate) * (exp(diversification_rate*(times[t]-times[0])) - 1);
-				Ndeaths[t] = diversities[0]*(death_rate_factor/diversification_rate) * (exp(diversification_rate*(times[t]-times[0])) - 1);
+				Nbirths[t] = total_diversities[0]*(birth_rate_factor/diversification_rate) * (exp(diversification_rate*(times[t]-times[0])) - 1);
+				Ndeaths[t] = total_diversities[0]*(death_rate_factor/diversification_rate) * (exp(diversification_rate*(times[t]-times[0])) - 1);
 			}
-			if(coalescent) diversities[t] *= (1-Pmissing); // make coalescent
+			if(include_coalescent) coalescent_diversities[t] = total_diversities[t] * (1-Pmissing);
 		}
 		
 	}else{
 		// general case: integrate ODEs using Runge-Kutta
+		
+		// prepare data structures for storing raw simulation results (will be interpolated onto requested time points afterwards)
+		std::vector<double> model_times;
+		std::vector<TreeStateHistory> model_trajectory;
+		long NMT;
 
 		// initialize model for tree growth
 		TreeSpeciationExtinctionModel model;
@@ -3294,144 +3421,168 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 		model.death_rate_factor 	= death_rate_factor;
 		model.death_rate_exponent 	= death_rate_exponent;
 		model.Nsplits				= Nsplits;
-		model.initial_diversity		= (reverse ? 1.0/rarefaction : 1.0) * start_diversity; // for curves simulated in reverse, undo the rarefaction for the initial condition (i.e. increase diversity from tau=0 to tau=epsilon)
-		model.rarefaction			= rarefaction;
-		if(reverse) model.set_reverse(max_time);
-		
-		// run simulation
-		// note that simulation a priori calculates total extant diversities over time, we make the diversities coalescent afterwards
+		model.initial_diversity		= (reverse ? final_diversity : start_diversity);
+		if(reverse) model.set_reverse(final_time); // time-reverse the dynamics (vector field) of the model, in order to the simulate backwards in time using the conventional Runge-Kitta integrator
 		string warningMessage;
-		const double default_dt = min((max_time-times[0])/NT, (reverse ? 1e-1*rarefaction*start_diversity/model.estimate_max_rate_of_change(max_time, start_diversity,false) : (max_time-times[0])/NT)); // guess appropriate simulation time step
-		const bool success = RungeKutta2<TreeStateHistory,TreeSpeciationExtinctionModel,ProgressReporter>
-									((reverse ? 0 : times[0]),
-									default_dt+(reverse ? max_time-times[0] : max_time),
-									default_dt,
-									model,
-									10*times.size(),
-									2l,
-									ProgressReporter(true),
-									runtime_out_seconds,
-									warningMessage);
-		const long NMT = model.times.size();
-		if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = warningMessage ); // simulation failed
+		const double default_dt = min((final_time-times[0])/NT, (reverse ? 1e-1*final_diversity/model.estimate_max_rate_of_change(final_time, final_diversity,false) : (final_time-times[0])/NT)); // guess appropriate simulation time step
 		
-		if(reverse){
-			// reverse time course of trajectory
-			TreeStateHistory state;
-			double time;
-			for(long t=0, s; t<NMT/2; ++t){
-				s = NMT-t-1;
-				state = model.trajectory[t];
-				model.trajectory[t] = model.trajectory[s];
-				model.trajectory[s] = state;
-				time = model.times[t];
-				model.times[t] = model.times[s];
-				model.times[s] = time;
-			}
-			// correct direction of accumulation of time, Nbirths & Ndeaths
-			const double max_Nbirths = model.trajectory[0].Nbirths;
-			const double max_Ndeaths = model.trajectory[0].Ndeaths;
-			for(long t=0; t<NMT; ++t){
-				model.times[t] = max_time - model.times[t];
-				model.trajectory[t].Nbirths = max_Nbirths - model.trajectory[t].Nbirths;
-				model.trajectory[t].Ndeaths = max_Ndeaths - model.trajectory[t].Ndeaths;
-			}
-		}
+		if((resolution>0) && reverse){
+			// run simulation in 2 chunks, one for ages<resolution and then again for ages>resolution
+			model.rarefaction = 1; // rarefaction occurs after collapsing tree at resolution, so simulate first part as if there was no rarefaction
+			bool success = RungeKutta2<TreeStateHistory,TreeSpeciationExtinctionModel,ProgressReporter>
+										(0,
+										resolution,
+										min(resolution/100, 1e-1*final_diversity/model.estimate_max_rate_of_change(final_time, final_diversity,false)),
+										model,
+										3, // number of points to record
+										2l,
+										ProgressReporter(true),
+										runtime_out_seconds,
+										warningMessage);
+			if((!success) || (model.times.back()<resolution)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not integrate backwards until resolution age: "+warningMessage ); // simulation failed
+			// extract some information about the resolution_age (last time point of simulation)
+			const long NMTr = model.times.size();
+			const double total_diversity_at_resolution_age 		= model.trajectory[NMTr-1].diversity;
+			const double Pmissing_at_resolution_age 			= model.trajectory[NMTr-1].Pmissing;
+			const double coalescent_diversity_at_resolution_age = total_diversity_at_resolution_age * rarefaction * (1-Pmissing_at_resolution_age);
+			
+			// integrate further back in time, starting at resolution_age
+			TreeSpeciationExtinctionModel model2;
+			model2.adopt_parameters(model);
+			model2.initial_diversity = total_diversity_at_resolution_age;
+			model2.rarefaction = rarefaction*(1-Pmissing_at_resolution_age); // effective rarefaction at resolution age (i.e. after collapsing and rarefaction)
+			success = RungeKutta2<TreeStateHistory,TreeSpeciationExtinctionModel,ProgressReporter>
+										(resolution,
+										default_dt + (final_time-times[0]),
+										default_dt,
+										model2,
+										10*times.size(),
+										2l,
+										ProgressReporter(true),
+										runtime_out_seconds,
+										warningMessage);
+			if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not integrate backwards past resolution age: "+warningMessage ); // simulation failed
 
-		// adjust (reduce) past diversities to reflect a coalescent tree
-		// note that the effects of rarefaction are taken into account here
-		if(coalescent) model.make_coalescent();
-	
-		// extract diversities from simulated trajectory
-		std::vector<double> model_diversities(NMT);
-		for(long t=0; t<NMT; ++t){
-			model_diversities[t] = model.trajectory[t].diversity;
+			// reverse time course of simulated trajectories
+			model.reverse_trajectory(final_time); 
+			model2.reverse_trajectory(final_time);
+			
+			// until resolution_age, coalescent diversities and Pmissing are special, due to collapsing of the tree at the given resolution
+			for(long t=0; t<NMTr; ++t){
+				model.trajectory[t].coalescent_diversity = coalescent_diversity_at_resolution_age;
+				model.trajectory[t].Pmissing = coalescent_diversity_at_resolution_age/model.trajectory[t].diversity;
+			}
+
+			if(include_probabilities) model2.calculate_probabilities(); // make sure probabilities have been calculated (may not be the case if simulation was not in reverse). This must come after reversing the trajectory.
+			if(include_coalescent) model2.calculate_coalescent_diversities(); // make sure coalescent diversities have been calculated for the trajectory (may not be the case if simulation was not in reverse). This must come after reversing the trajectory.
+			
+			// adjust Nbirths & Ndeaths
+			if(include_Nevents){
+				for(long t=0; t<NMTr; ++t){
+					model.trajectory[t].Nbirths += model2.trajectory.back().Nbirths;
+					model.trajectory[t].Ndeaths += model2.trajectory.back().Ndeaths;
+				}
+			}
+
+			// extract and concatenate trajectories from the two simulations
+			NMT = NMTr+model2.times.size();
+			model_times.reserve(NMT);
+			model_times.insert(model_times.end(), model2.times.begin(), model2.times.end());
+			model_times.insert(model_times.end(), model.times.begin(), model.times.end());
+			model_trajectory.reserve(NMT);
+			model_trajectory.insert(model_trajectory.end(), model2.trajectory.begin(), model2.trajectory.end());
+			model_trajectory.insert(model_trajectory.end(), model.trajectory.begin(), model.trajectory.end());
+
+
+		}else{
+			// run simulation for all ages
+			// note that simulation a priori calculates total extant diversities over time, we make the diversities coalescent afterwards
+			model.rarefaction = rarefaction;
+			const bool success = RungeKutta2<TreeStateHistory,TreeSpeciationExtinctionModel,ProgressReporter>
+										((reverse ? 0 : start_time),
+										default_dt+(reverse ? final_time-times[0] : final_time),
+										default_dt,
+										model,
+										10*times.size(),
+										2l,
+										ProgressReporter(true),
+										runtime_out_seconds,
+										warningMessage);
+			if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = warningMessage ); // simulation failed
+
+			if(reverse) model.reverse_trajectory(final_time); // reverse time course of simulated trajectory
+			
+			if((!reverse) && (resolution>0)){
+				model.get_coalescent_trajectory(resolution, rarefaction, model_trajectory);
+			}else{
+				if(include_probabilities) model.calculate_probabilities(); // make sure probabilities have been calculated (may not be the case if simulation was not in reverse). This must come after reversing the trajectory.
+				if(include_coalescent) model.calculate_coalescent_diversities(); // make sure coalescent diversities have been calculated for the trajectory (may not be the case if simulation was not in reverse). This must come after reversing the trajectory.
+				model_trajectory = model.trajectory;
+			}
+			model_times = model.times;
+			NMT = model_times.size();
 		}
-				
-		// interpolate simulated trajectory on requested time points
+		
+		// extract total diversities (extinct+extant) from simulated trajectory
 		long includedNewTimesStart, includedNewTimesEnd;
-		interpolateTimeSeriesAtTimes(	model.times,
-										model_diversities,
-										0,
-										NMT-1,
-										times,
-										0,
-										NT-1,
-										includedNewTimesStart,
-										includedNewTimesEnd,
-										diversities);
-									
-		// calculate probabilities of lineage survival & representation for requested time points
-		// this only makes sense for reverse integrations
+		std::vector<double> model_total_diversities(NMT);
+		for(long t=0; t<NMT; ++t) model_total_diversities[t] = model_trajectory[t].diversity;
+		interpolateTimeSeriesAtTimes(model_times, model_total_diversities, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, total_diversities);
+
+		if(include_coalescent){
+			// extract coalescent diversities from simulated trajectory
+			std::vector<double> model_coalescent_diversities(NMT);
+			for(long t=0; t<NMT; ++t) model_coalescent_diversities[t] = model_trajectory[t].coalescent_diversity;
+			interpolateTimeSeriesAtTimes(model_times, model_coalescent_diversities, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, coalescent_diversities);
+		}
+	
 		if(include_probabilities){
-			// extract from model trajectory
+			// extract probabilities of lineage survival & representation from simulated trajectory
 			std::vector<double> model_Prepresentation(NMT);
 			std::vector<double> model_Psurvival(NMT);
 			for(long t=0; t<NMT; ++t){
-				model_Psurvival[t] = 1-model.trajectory[t].Pextinction;
-				model_Prepresentation[t] = 1-model.trajectory[t].Pmissing;
+				model_Psurvival[t] = 1-model_trajectory[t].Pextinction;
+				model_Prepresentation[t] = 1-model_trajectory[t].Pmissing;
 			}
-			// interpolate onto requested time points
-			interpolateTimeSeriesAtTimes(	model.times,
-											model_Prepresentation,
-											0,
-											NMT-1,
-											times,
-											0,
-											NT-1,
-											includedNewTimesStart,
-											includedNewTimesEnd,
-											Prepresentation);
-			interpolateTimeSeriesAtTimes(	model.times,
-											model_Psurvival,
-											0,
-											NMT-1,
-											times,
-											0,
-											NT-1,
-											includedNewTimesStart,
-											includedNewTimesEnd,
-											Psurvival);
+			interpolateTimeSeriesAtTimes(model_times, model_Prepresentation, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Prepresentation);
+			interpolateTimeSeriesAtTimes(model_times, model_Psurvival, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Psurvival);
 		}
-								
-		// calculate speciation rates on returned time series, if needed
-		if(include_birth_rates){
-			birth_rates.resize(NT);
-			for(long t=0; t<NT; ++t){
-				birth_rates[t] = model.get_speciation_rate_at_state(times[t],diversities[t]);
-			}
-		}
-		// calculate extinction rates on returned time series, if needed
-		if(include_death_rates){
-			death_rates.resize(NT);
-			for(long t=0; t<NT; ++t){
-				death_rates[t] = model.get_extinction_rate_at_state(times[t],diversities[t]);
-			}
-		}
-	
+
 		// extract cumulative speciation & extinction events, if needed
-		// double Nbirths = NAN_D;
 		if(include_Nevents){
 			// extract from model trajectory
 			std::vector<double> model_Nbirths(NMT), model_Ndeaths(NMT);
 			for(long t=0; t<NMT; ++t){
-				model_Nbirths[t] = model.trajectory[t].Nbirths;
-				model_Ndeaths[t] = model.trajectory[t].Ndeaths;
+				model_Nbirths[t] = model_trajectory[t].Nbirths;
+				model_Ndeaths[t] = model_trajectory[t].Ndeaths;
 			}
-			// interpolate onto requested time points
-			interpolateTimeSeriesAtTimes(model.times, model_Nbirths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Nbirths);
-			interpolateTimeSeriesAtTimes(model.times, model_Ndeaths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Ndeaths);
+			interpolateTimeSeriesAtTimes(model_times, model_Nbirths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Nbirths);
+			interpolateTimeSeriesAtTimes(model_times, model_Ndeaths, 0, NMT-1, times, 0, NT-1, includedNewTimesStart, includedNewTimesEnd, Ndeaths);
+		}
+
+		// calculate speciation rates for requested times, if needed
+		if(include_birth_rates){
+			birth_rates.resize(NT);
+			for(long t=0; t<NT; ++t) birth_rates[t] = model.get_speciation_rate_at_state(times[t],total_diversities[t]);
+		}
+		// calculate extinction rates for requested times, if needed
+		if(include_death_rates){
+			death_rates.resize(NT);
+			for(long t=0; t<NT; ++t) death_rates[t] = model.get_extinction_rate_at_state(times[t],total_diversities[t]);
 		}
 	}
- 		
-	return Rcpp::List::create(	Rcpp::Named("success")			= true,
-								Rcpp::Named("diversities") 		= Rcpp::wrap(diversities),
-								Rcpp::Named("Psurvival")		= Rcpp::wrap(Psurvival),
-								Rcpp::Named("Prepresentation")	= Rcpp::wrap(Prepresentation),
-								Rcpp::Named("birth_rates")		= Rcpp::wrap(birth_rates),
-								Rcpp::Named("death_rates")		= Rcpp::wrap(death_rates),
-								Rcpp::Named("Nbirths")			= Nbirths,
-								Rcpp::Named("Ndeaths")			= Ndeaths);
+	
+
+	 		
+	return Rcpp::List::create(	Rcpp::Named("success")					= true,
+								Rcpp::Named("coalescent_diversities") 	= Rcpp::wrap(coalescent_diversities),	// coalescent diversity at each time point (if requested)
+								Rcpp::Named("total_diversities")		= Rcpp::wrap(total_diversities),	// total (extant+extinct) diversity at each time point
+								Rcpp::Named("Psurvival")				= Rcpp::wrap(Psurvival),
+								Rcpp::Named("Prepresentation")			= Rcpp::wrap(Prepresentation),
+								Rcpp::Named("birth_rates")				= Rcpp::wrap(birth_rates),
+								Rcpp::Named("death_rates")				= Rcpp::wrap(death_rates),
+								Rcpp::Named("Nbirths")					= Nbirths,
+								Rcpp::Named("Ndeaths")					= Ndeaths);
 }
 
 
@@ -6134,8 +6285,8 @@ void get_tree_with_collapsed_monofurcations(const long 				Ntips,
 											std::vector<long>		&new_tree_edge,		// (OUTPUT) 2D matrix (in row major format)
 											std::vector<double>		&new_edge_length,	// (OUTPUT)
 											std::vector<long>		&new2old_node,		// (OUTPUT)
-											long					&new_root,					// (OUTPUT) index of the root in the collapsed tree. In newer implementations, this is actually guaranteed to be = Ntips (as is common convention).
-											double					&root_shift){	// (OUTPUT) phylogenetic distance of new root from the old root (will be 0 if the old root is kept)
+											long					&new_root,			// (OUTPUT) index of the root in the collapsed tree. In newer implementations, this is actually guaranteed to be = Ntips (as is common convention).
+											double					&root_shift){		// (OUTPUT) phylogenetic distance of new root from the old root (will be 0 if the old root is kept)
 	const long Nclades = Ntips+Nnodes;
 	long node, edge, incoming_edge, child, parent;
 	
@@ -7301,6 +7452,18 @@ Rcpp::List collapse_tree_at_resolution_CPP(	const long			Ntips,
 		new_clade = old2new_clade[clade];
 		if(new_clade>=0) new2old_clade[new_clade] = clade;
 	}
+	
+	// determine new root & root shift
+	// traverse from new to old root and calculate cumulative distance
+	// use old tree structure
+	const long new_root = old2new_clade[root];
+	clade = root;
+	long root_shift = 0;
+	while(incoming_edge_per_clade[clade]>=0){
+		edge = incoming_edge_per_clade[clade];
+		root_shift += (unit_edge_lengths ? 1.0 : edge_length[edge]);
+		clade = tree_edge[edge*2 + 0];
+	}
 
 	return Rcpp::List::create(	Rcpp::Named("new_tree_edge") 		= Rcpp::wrap(new_tree_edge),
 								Rcpp::Named("new_edge_length") 		= Rcpp::wrap(new_edge_length), // only relevant if (shorten==false)
@@ -7309,10 +7472,11 @@ Rcpp::List collapse_tree_at_resolution_CPP(	const long			Ntips,
 								Rcpp::Named("old2new_clade") 		= Rcpp::wrap(old2new_clade),
 								Rcpp::Named("collapsed_nodes") 		= Rcpp::wrap(collapsed_nodes),
 								Rcpp::Named("representative_tips") 	= Rcpp::wrap(representative_tips),
-								Rcpp::Named("new_root") 			= old2new_clade[root], // in newer implementations this is actually guaranteed to be = Ntips_new
+								Rcpp::Named("new_root") 			= new_root, // in newer implementations this is actually guaranteed to be = Ntips_new
 								Rcpp::Named("Ntips_new") 			= Ntips_new,
 								Rcpp::Named("Nnodes_new") 			= Nnodes_new,
-								Rcpp::Named("Nedges_new") 			= Nedges_new);
+								Rcpp::Named("Nedges_new") 			= Nedges_new,
+								Rcpp::Named("root_shift") 			= root_shift);
 }
 
 
@@ -9126,7 +9290,7 @@ Rcpp::List get_trait_depth_consenTRAIT_CPP(	const long 			Ntips,
 				sum_random_tauD += random_tauD;
 			}
 		}
-		Pvalue = (count_valid_permutations>0 ? count_deeper/count_valid_permutations : NAN_D);
+		Pvalue = (count_valid_permutations>0 ? count_deeper/double(count_valid_permutations) : NAN_D);
 		mean_random_tauD = (count_valid_permutations>0 ? sum_random_tauD/count_valid_permutations : NAN_D);
 	}
 
@@ -12254,7 +12418,6 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 	clade2end_time.push_back(-1);
 	++Ntips;
 	
-			
 	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
 	long Nedges 		= 0;
 	long Nbirths		= 0;
@@ -12312,7 +12475,7 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		Rcpp::checkUserInterrupt();
 	}
 		
-	if(Ntips<=1){
+	if((coalescent ? extant_tips.size() : Ntips)<=1){
 		// something went wrong (e.g. zero birth & death rates)
 		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
 	}

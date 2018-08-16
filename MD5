@@ -1,6 +1,6 @@
-48f6ebb427bc2a5766f7a300b4534866 *DESCRIPTION
+5cb42dc2048c34f2185c82fdc1d9249d *DESCRIPTION
 e281db6a52e221631088286747041591 *NAMESPACE
-647f6b45b3d4b7d607b460fd4f60e0a4 *R/RcppExports.R
+afe9e9936c9594da198d4df7d9ff571e *R/RcppExports.R
 9a05b6f5fca5551459d999dc373bcacd *R/asr_empirical_probabilities.R
 989b7786c5d618f4b4a278f60d277a71 *R/asr_independent_contrasts.R
 8258435833fb0b2668b543b77c05a57e *R/asr_max_parsimony.R
@@ -9,9 +9,9 @@ e281db6a52e221631088286747041591 *NAMESPACE
 f6a1c71281b5713a4f8fe75745bbc76f *R/asr_subtree_averaging.R
 1582085403d2a11ecea6907fee738265 *R/auxiliary_routines.R
 cb3a37fa03ea67ca6ace9d5859ef2645 *R/collapse_monofurcations.R
-1813566e909da4774c9c61269a45a7fe *R/collapse_tree_at_resolution.R
+6f7617679d635f05349201c72ee8bd2d *R/collapse_tree_at_resolution.R
 bfe0fd12c907c06da622ed4fd7717a7e *R/congruent_divergence_times.R
-aff21682f662bb9b4330af47703b6531 *R/count_clades_over_time.R
+e4088061fc11a9c6e3e019a21312001e *R/count_clades_over_time.R
 d736e8020a5799df6ce10fb5d6b3baae *R/count_tips_per_node.R
 e34742c851561fef3cb7b8938a677dc7 *R/date_tree_pl.R
 d81ceeaec9a422307f401035a640debb *R/date_tree_red.R
@@ -22,8 +22,8 @@ ade362b781a86e552fd2660103662dba *R/find_farthest_tips.R
 5e8a110182785dc41dcc0ac88f009ea0 *R/find_root.R
 1ea97c12588e374ad6949df8e6c799d7 *R/find_root_of_monophyletic_tips.R
 b665f4d0c723ab385c9bdd7ec8a0910e *R/fit_bm_model.R
-4a1143f6901ea7536b39eef4bbda8e35 *R/fit_tree_model.R
-67628d179a1792bc14fc195b792a55f9 *R/generate_random_tree.R
+c925ebe7a3c9577e02f6cfcc7ea35f2a *R/fit_tree_model.R
+fd4c65f3eb85809d01908ad8d0312dd8 *R/generate_random_tree.R
 732c1aed06651e4ba377400ee92e590e *R/generate_tree_with_evolving_rates.R
 28af55d0af57073595d3665f34e2d902 *R/get_all_distances_to_root.R
 eb43f6c79321859ad6939b68ac12247c *R/get_all_node_depths.R
@@ -64,7 +64,7 @@ c826f8633301bd734ab8b4a9c836cef3 *R/root_at_node.R
 460faaea40c0102f0dba39c677ee8734 *R/root_in_edge.R
 a11ac7f05813f609e3d44deabc943baf *R/root_via_outgroup.R
 0e1651281fc770cadfac3cfd557ef3cd *R/simulate_bm_model.R
-84d0ab1609f196db0168f4a0d4068fca *R/simulate_diversification_model.R
+3f0f94150bcb616035c97ae4ce510a27 *R/simulate_diversification_model.R
 db223ac6c2ad93e431e07fdb83085223 *R/simulate_mk_model.R
 896e3fcd5d6b4fd93094c7b6c2a9d9d6 *R/simulate_neutral_gene_evolution.R
 473739c07568c4f017bf5580a687f534 *R/simulate_ou_model.R
@@ -81,7 +81,7 @@ d5e411e6fb43901be96fcbda36803d61 *man/asr_mk_model.Rd
 176efc5d7871a86f6b3876703f0dcfd1 *man/asr_subtree_averaging.Rd
 832d03b6d939a1cd46ef0e863fc5b297 *man/castor.Rd
 24217936ec8ffb4627140552e02482ef *man/collapse_monofurcations.Rd
-fc6a6634ebb8f3bbd7bf24d39606b650 *man/collapse_tree_at_resolution.Rd
+af83e02d3db1ee6f9864d26dd57f7b8e *man/collapse_tree_at_resolution.Rd
 ad0ac37de87e3623bca06e787cb618b8 *man/congruent_divergence_times.Rd
 16f8e42e478fdc1dd5f3992966b6f46e *man/count_clades_over_time.Rd
 55fc8df376f6820c4e892b418f63ad14 *man/count_tips_per_node.Rd
@@ -93,8 +93,8 @@ c5532d830fd70affe122a72814190a94 *man/date_tree_red.Rd
 474164c84fb3892a906b791c416915dc *man/find_root.Rd
 e5b3c517b235b600c18a27ef3ce044a3 *man/find_root_of_monophyletic_tips.Rd
 11807535e742affea945503fa161e3a0 *man/fit_bm_model.Rd
-a3be0f0027947f602aa2f97db09d94f9 *man/fit_tree_model.Rd
-ddfdb979cf156f6ac2c3c7c51508b41a *man/generate_random_tree.Rd
+ac5b9bd32d9cb82bc3e2d924f1ed103a *man/fit_tree_model.Rd
+e4691f910a4d3e6ade84924d1ed452f6 *man/generate_random_tree.Rd
 51c60decaa3f46989f5bd9fd22ff6bea *man/generate_tree_with_evolving_rates.Rd
 ae641e9d95c4a9a5600612d4359c09a6 *man/get_all_distances_to_root.Rd
 6733a06c7d305c81b873580f0ad87812 *man/get_all_node_depths.Rd
@@ -133,13 +133,13 @@ ec7bfbe0d0515e62b7552d3868b7c500 *man/root_at_node.Rd
 7223643ce5c3b9a4ec4563c23b9ccc78 *man/root_in_edge.Rd
 15d6da71a09fe60f14505b63fb2159a3 *man/root_via_outgroup.Rd
 8718d7438cf927ff1eb67334730d8969 *man/simulate_bm_model.Rd
-c11b1fdb5d17ed7c9008fcd74ac2bcf2 *man/simulate_diversification_model.Rd
+7cd8026dd6be4a7ff60b7689aac96cdf *man/simulate_diversification_model.Rd
 b833b9d41f8b480257e8d6ba5c7d9aab *man/simulate_mk_model.Rd
 066570e339d8fc93284ea16b9d630bc1 *man/simulate_ou_model.Rd
 2bbf6a07c19063755e483f17632ed16c *man/simulate_rou_model.Rd
 c10add43e978486a3e629de4e3c7164e *man/tree_distance.Rd
 86e2a12383bf2a7e29593fc9e1f033c7 *man/trim_tree_at_height.Rd
 0b756907845e2b72ed893cf16073be19 *man/write_tree.Rd
-fe17081825f0c0739a9206cf24a8e00a *src/RcppExports.cpp
-0af7e0f28b3b4692ef21b9fd4d6e3b5c *src/phylogenetics_cpp_routines.cpp
+ee51e4a2f1a70a6a29cf7f27038b92b9 *src/RcppExports.cpp
+78a3630ce4f5d043727258937e936961 *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

@@ -13,8 +13,8 @@ smoothenTimeSeriesSavitzkyGolay_CPP <- function(times, data, windowTimeSpan, win
     .Call('castor_smoothenTimeSeriesSavitzkyGolay_CPP', PACKAGE = 'castor', times, data, windowTimeSpan, windowIndexSpan, order)
 }
 
-simulate_deterministic_diversity_growth_CPP <- function(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds) {
-    .Call('castor_simulate_deterministic_diversity_growth_CPP', PACKAGE = 'castor', birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds)
+simulate_deterministic_diversity_growth_CPP <- function(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds) {
+    .Call('castor_simulate_deterministic_diversity_growth_CPP', PACKAGE = 'castor', birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds)
 }
 
 reconstruct_past_diversity_from_coalescent_CPP <- function(times, raw_coalescent_diversities, birth_rates_pc, rarefaction, max_age, smoothing_span, smoothing_order) {

@@ -52,8 +52,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // simulate_deterministic_diversity_growth_CPP
-Rcpp::List simulate_deterministic_diversity_growth_CPP(const double birth_rate_intercept, const double birth_rate_factor, const double birth_rate_exponent, const double death_rate_intercept, const double death_rate_factor, const double death_rate_exponent, const double rarefaction, const long Nsplits, const NumericVector& times, const double start_time, const double start_diversity, const bool reverse, const bool coalescent, const bool include_probabilities, const bool include_birth_rates, const bool include_death_rates, const bool include_Nevents, const double runtime_out_seconds);
-RcppExport SEXP castor_simulate_deterministic_diversity_growth_CPP(SEXP birth_rate_interceptSEXP, SEXP birth_rate_factorSEXP, SEXP birth_rate_exponentSEXP, SEXP death_rate_interceptSEXP, SEXP death_rate_factorSEXP, SEXP death_rate_exponentSEXP, SEXP rarefactionSEXP, SEXP NsplitsSEXP, SEXP timesSEXP, SEXP start_timeSEXP, SEXP start_diversitySEXP, SEXP reverseSEXP, SEXP coalescentSEXP, SEXP include_probabilitiesSEXP, SEXP include_birth_ratesSEXP, SEXP include_death_ratesSEXP, SEXP include_NeventsSEXP, SEXP runtime_out_secondsSEXP) {
+Rcpp::List simulate_deterministic_diversity_growth_CPP(const double birth_rate_intercept, const double birth_rate_factor, const double birth_rate_exponent, const double death_rate_intercept, const double death_rate_factor, const double death_rate_exponent, const double resolution, const double rarefaction, const long Nsplits, const NumericVector& times, const double start_time, const double final_time, const double start_diversity, const double final_diversity, const bool reverse, const bool include_coalescent, const bool include_probabilities, const bool include_birth_rates, const bool include_death_rates, const bool include_Nevents, const double runtime_out_seconds);
+RcppExport SEXP castor_simulate_deterministic_diversity_growth_CPP(SEXP birth_rate_interceptSEXP, SEXP birth_rate_factorSEXP, SEXP birth_rate_exponentSEXP, SEXP death_rate_interceptSEXP, SEXP death_rate_factorSEXP, SEXP death_rate_exponentSEXP, SEXP resolutionSEXP, SEXP rarefactionSEXP, SEXP NsplitsSEXP, SEXP timesSEXP, SEXP start_timeSEXP, SEXP final_timeSEXP, SEXP start_diversitySEXP, SEXP final_diversitySEXP, SEXP reverseSEXP, SEXP include_coalescentSEXP, SEXP include_probabilitiesSEXP, SEXP include_birth_ratesSEXP, SEXP include_death_ratesSEXP, SEXP include_NeventsSEXP, SEXP runtime_out_secondsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -63,19 +63,22 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type death_rate_intercept(death_rate_interceptSEXP);
     Rcpp::traits::input_parameter< const double >::type death_rate_factor(death_rate_factorSEXP);
     Rcpp::traits::input_parameter< const double >::type death_rate_exponent(death_rate_exponentSEXP);
+    Rcpp::traits::input_parameter< const double >::type resolution(resolutionSEXP);
     Rcpp::traits::input_parameter< const double >::type rarefaction(rarefactionSEXP);
     Rcpp::traits::input_parameter< const long >::type Nsplits(NsplitsSEXP);
     Rcpp::traits::input_parameter< const NumericVector& >::type times(timesSEXP);
     Rcpp::traits::input_parameter< const double >::type start_time(start_timeSEXP);
+    Rcpp::traits::input_parameter< const double >::type final_time(final_timeSEXP);
     Rcpp::traits::input_parameter< const double >::type start_diversity(start_diversitySEXP);
+    Rcpp::traits::input_parameter< const double >::type final_diversity(final_diversitySEXP);
     Rcpp::traits::input_parameter< const bool >::type reverse(reverseSEXP);
-    Rcpp::traits::input_parameter< const bool >::type coalescent(coalescentSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_coalescent(include_coalescentSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_probabilities(include_probabilitiesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_birth_rates(include_birth_ratesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_death_rates(include_death_ratesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_Nevents(include_NeventsSEXP);
     Rcpp::traits::input_parameter< const double >::type runtime_out_seconds(runtime_out_secondsSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_deterministic_diversity_growth_CPP(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, rarefaction, Nsplits, times, start_time, start_diversity, reverse, coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds));
+    rcpp_result_gen = Rcpp::wrap(simulate_deterministic_diversity_growth_CPP(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds));
     return rcpp_result_gen;
 END_RCPP
 }

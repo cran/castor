@@ -48,6 +48,9 @@ A list with the following elements:
 \item{tree}{
 A new rooted tree of class "phylo", containing the collapsed tree.
 }
+\item{root_shift}{
+Numeric, indicating the phylogenetic distance between the old and the new root. Will always be non-negative.
+}
 \item{collapsed_nodes}{
 Integer vector, listing indices of collapsed nodes in the original tree (subset of 1,..,Nnodes).
 }

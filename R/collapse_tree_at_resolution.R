@@ -49,6 +49,7 @@ collapse_tree_at_resolution = function(	tree,
 	}
 	class(collapsed_tree) = "phylo";
 	return(list(tree			= collapsed_tree, 
+				root_shift		= results$root_shift, # distance between old & new root (will always be non-negative)
 				collapsed_nodes	= collapsed_nodes,
 				new2old_clade	= new2old_clade, 
 				new2old_edge	= new2old_edge));
