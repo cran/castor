@@ -76,49 +76,37 @@ Logical. If \code{TRUE}, then the bper-capita birth & death rates of all tips an
 If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
 
 If \code{rate_model=='BM'}, then per-capita birth rates (speciation rates) and per-capita death rates (extinction rates) evolve according to Brownian Motion, constrained to a finite interval via reflection. Note that speciation and extinction rates are only updated at branching points, i.e. during speciation events, while waiting times until speciation/extinction are based on rates at the previous branching point. The argument \code{parameters} should be a named list including one or more of the following elements:
-
-\code{birth_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita birth rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
-
-\code{min_birth_rate_pc}:
+\itemize{
+\item\code{birth_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita birth rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
+\item\code{min_birth_rate_pc}:
 Non-negative number. The minimum allowed per-capita birth rate of a clade. In units 1/time. By default this is 0.
-
-\code{max_birth_rate_pc}:
+\item\code{max_birth_rate_pc}:
 Non-negative number. The maximum allowed per-capita birth rate of a clade. In units 1/time. By default this is 1.
-
-\code{death_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita death rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
-
-\code{min_death_rate_pc}:
+\item\code{death_rate_diffusivity}: Non-negative number. Diffusivity constant for the Brownian motion model of the evolving per-capita death rate. In units 1/time^3. See \code{\link{simulate_bm_model}} for an explanation of the diffusivity parameter.
+\item\code{min_death_rate_pc}:
 Non-negative number. The minimum allowed per-capita death rate of a clade. In units 1/time. By default this is 0.
-
-\code{max_death_rate_pc}:
+\item\code{max_death_rate_pc}:
 Non-negative number. The maximum allowed per-capita death rate of a clade. In units 1/time. By default this is 1.
-
-\code{root_birth_rate_pc}:
+\item\code{root_birth_rate_pc}:
 Non-negative number, between \code{min_birth_rate_pc} and \code{max_birth_rate_pc}, specifying the initial per-capita birth rate of the root. If left unspecified, this will be chosen randomly and uniformly within the allowed interval.
-
-\code{root_death_rate_pc}:
+\item\code{root_death_rate_pc}:
 Non-negative number, between \code{min_death_rate_pc} and \code{max_death_rate_pc}, specifying the initial per-capita death rate of the root. If left unspecified, this will be chosen randomly and uniformly within the allowed interval.
-
-\code{rarefaction}:
+\item\code{rarefaction}:
 Numeric between 0 and 1. Rarefaction to be applied at the end of the simulation (fraction of random tips kept in the tree). 
 Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction.
+}
 
 If \code{rate_model=='Mk'}, then speciation/extinction rates are determined by a tip's current "state", which evolves according to a continuous-time discrete-state Markov chain (Mk model) with constant transition rates. The argument \code{parameters} should be a named list including one or more of the following elements:
-
-\code{Nstates}: Number of possible discrete states a tip can have. For example, if \code{Nstates} then this corresponds to the common Binary State Speciation and Extinction (BiSSE) model (Maddison et al., 2007). By default this is 1.
-
-\code{state_birth_rates}: Numeric vector of size Nstates, listing the per-capita birth rate (speciation rate) at each state. Can also be a single number (all states have the same birth rate).
-
-\code{state_death_rates}: Numeric vector of size Nstates, listing the per-capita death rate (extinction rate) at each state. Can also be a single number (all states have the same death rate).
-
-\code{transition_matrix}: 2D numeric matrix of size Nstates x Nstates. Transition rate matrix for the Markov chain model of birth/death rate evolution.
-
-\code{root_state}:
+\itemize{
+\item\code{Nstates}: Number of possible discrete states a tip can have. For example, if \code{Nstates} then this corresponds to the common Binary State Speciation and Extinction (BiSSE) model (Maddison et al., 2007). By default this is 1.
+\item\code{state_birth_rates}: Numeric vector of size Nstates, listing the per-capita birth rate (speciation rate) at each state. Can also be a single number (all states have the same birth rate).
+\item\code{state_death_rates}: Numeric vector of size Nstates, listing the per-capita death rate (extinction rate) at each state. Can also be a single number (all states have the same death rate).
+\item\code{transition_matrix}: 2D numeric matrix of size Nstates x Nstates. Transition rate matrix for the Markov chain model of birth/death rate evolution.
+\item\code{root_state}:
 Integer within 1,..,\code{Nstates}, specifying the initial state of the root. If left unspecified, this is chosen randomly and uniformly among all possible states.
-
-\code{rarefaction}: Same as when \code{rate_model=='BM'}.
-
-If \code{rate_model=='BM'}, then the per-capita birth and death rates of the root are chosen randomly, independently and uniformly within their allowed intervals. If \code{rate_model=='Mk'}, then the root's discrete state is chosen randomly among all possible states.
+\item\code{rarefaction}: Same as when \code{rate_model=='BM'}.
+}
+Note: The option \code{rate_model=='Mk'} is deprecated and included for backward compatibility purposes only. To generate a tree with Markov transitions between states (known as Multiple State Speciation and Extinction model), use the command \command{simulate_musse} instead.
 }
 
 
@@ -182,8 +170,9 @@ D. J. Aldous (2001). Stochastic models and descriptive statistics for phylogenet
 W. P. Maddison, P. E. Midford, S. P. Otto (2007). Estimating a binary character's effect on speciation and extinction. Systematic Biology. 56:701-710.
 }
 
-%\seealso{
-%}
+\seealso{
+\code{\link{simulate_musse}}
+}
 
 \examples{
 # Example 1

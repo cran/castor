@@ -4,7 +4,7 @@
 Find farthest tip to each tip & node of a tree.
 }
 \description{
-Given a rooted phylogenetic tree and a subset of potential target tips, for each tip and node in the clade find the farthest target tip. The set of target tips can also be taken as the whole set of tips in the tree.
+Given a rooted phylogenetic tree and a subset of potential target tips, for each tip and node in the tree find the farthest target tip. The set of target tips can also be taken as the whole set of tips in the tree.
 }
 \usage{
 find_farthest_tips( tree, 

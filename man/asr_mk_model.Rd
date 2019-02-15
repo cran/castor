@@ -4,7 +4,7 @@
 Ancestral state reconstruction with Mk models and rerooting
 }
 \description{
-Ancestral state reconstruction of a discrete trait using a fixed-rates continuous-time Markov model (a.k.a. "Mk model"). This function can estimate the (instantaneous) transition matrix using maximum likelihood, or take a specified transition matrix. The function can optionally calculate marginal ancestral state estimates for each node in the tree, using the rerooting method by Yang et al. (1995).
+Ancestral state reconstruction of a discrete trait using a fixed-rates continuous-time Markov model (a.k.a. "Mk model"). This function can estimate the (instantaneous) transition matrix using maximum likelihood, or take a specified transition matrix. The function can optionally calculate marginal ancestral state likelihoods for each node in the tree, using the rerooting method by Yang et al. (1995).
 }
 \usage{
 asr_mk_model( tree, 
@@ -14,6 +14,7 @@ asr_mk_model( tree,
               rate_model = "ER", 
               transition_matrix = NULL, 
               include_ancestral_likelihoods = TRUE, 
+              reroot = TRUE,
               root_prior = "empirical", 
               Ntrials = 1, 
               optim_algorithm = "nlminb",
@@ -44,10 +45,13 @@ Either a numeric quadratic matrix of size Nstates x Nstates containing fixed tra
 If \code{NULL}, then the transition rates will be estimated using maximum likelihood, based on the \code{rate_model} specified.
 }
 \item{root_prior}{
-Prior probability distribution of the root's states. Can be "flat" (all states equal), "empirical" (empirical probability distribution of states across the tree's tips) or "stationary" (stationary probability distribution of the transition matrix). If "stationary" and \code{transition_matrix==NULL}, then a transition matrix is first fitted using a flat root prior, and then used to calculate the stationary distribution. \code{root_prior} can also be a non-negative numeric vector of size Nstates and with total sum equal to 1.
+Prior probability distribution of the root's states, used to calculate the model's overall likelihood from the root's marginal ancestral state likelihoods. Can be "flat" (all states equal), "empirical" (empirical probability distribution of states across the tree's tips) or "stationary" (stationary probability distribution of the transition matrix). If "stationary" and \code{transition_matrix==NULL}, then a transition matrix is first fitted using a flat root prior, and then used to calculate the stationary distribution. \code{root_prior} can also be a non-negative numeric vector of size Nstates and with total sum equal to 1.
 }
 \item{include_ancestral_likelihoods}{
-Include the marginal ancestral state distribution for each node (conditional scaled likelihoods after rerooting) in the return values. Note that this may increase the computation time and memory needed, so you may set this to \code{FALSE} if you don't need marginal ancestral states.
+Include the marginal ancestral likelihoods for each node (conditional scaled state likelihoods) in the return values. Note that this may increase the computation time and memory needed, so you may set this to \code{FALSE} if you don't need marginal ancestral states.
+}
+\item{reroot}{
+Reroot tree at each node when computing marginal ancestral likelihoods, according to Yang et al. (1995). This is the default and recommended behavior, but leads to increased computation time. If \code{FALSE}, ancestral likelihoods at each node are computed solely based on the subtree descending from that node, without rerooting.
 }
 \item{Ntrials}{
 Number of trials (starting points) for fitting the transition matrix. Only relevant if \code{transition_matrix=NULL}. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.
@@ -82,7 +86,7 @@ This function allows the specification of the precise tip states (if these are k
 
 Tips must be represented in \code{tip_states} or \code{tip_priors} in the same order as in \code{tree$tip.label}. None of the input vectors or matrixes need include row or column names; if they do, however, they are checked for consistency (if \code{check_input==TRUE}).
 
-The rerooting method by Yang et al (2015) is used to reconstruct the marginal ancestral state probabilities for each node by treating the node as a root and calculating its conditional scaled likelihoods. Note that the re-rooting algorithm is strictly speaking only valid for reversible Mk models, that is, satisfying the criterion
+The tree is either assumed to be complete (i.e. include all possible species), or to represent a random subset of species chosen independently of their states. The rerooting method by Yang et al (1995) is used to calculate the marginal ancestral state likelihoods for each node by treating the node as a root and calculating its conditional scaled likelihoods. Note that the re-rooting algorithm is strictly speaking only valid for reversible Mk models, that is, satisfying the criterion
 \deqn{
 \pi_i Q_{ij}=\pi_j Q_{ji},\quad\forall i,j,
 }
@@ -99,14 +103,17 @@ A list with the following elements:
 \item{success}{
 Logical, indicating whether ASR was successful. If \code{FALSE}, all other return values may be \code{NULL}.
 }
+\item{Nstates}{
+Integer, specifying the number of modeled trait states.
+}
 \item{transition_matrix}{
 A numeric quadratic matrix of size Nstates x Nstates, containing the transition rates of the Markov model. The [r,c]-th entry is the transition rate from state r to state c. Will be the same as the input \code{transition_matrix}, if the latter was not \code{NULL}.
 }
 \item{loglikelihood}{
-Log-likelihood of the Markov model. If \code{transition_matrix} was \code{NULL} in the input, then this will be the log-likelihood maximized during fitting.
+Log-likelihood of the Markov model for the observed tip states. If \code{transition_matrix} was \code{NULL} in the input, then this will be the log-likelihood maximized during fitting.
 }
 \item{ancestral_likelihoods}{
-Optional, only returned if \code{include_ancestral_likelihoods} was \code{TRUE}. A 2D numeric matrix, listing the probability of each node being in each state (marginal ancestral state distributions). This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument, or inferred from \code{tip_states} or \code{tip_priors} (whichever was non-\code{NULL}). The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the probability of the s-th state for the n-th node. For example, \code{likelihoods[1,3]} will store the probability that the first node was in state 3.
+Optional, only returned if \code{include_ancestral_likelihoods} was \code{TRUE}. A 2D numeric matrix, listing the likelihood of each state at each node (marginal ancestral likelihoods). This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument, or inferred from \code{tip_states} or \code{tip_priors} (whichever was non-\code{NULL}). The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the likelihood of the s-th state at the n-th node. For example, \code{likelihoods[1,3]} will store the likelihood of observing the tree's tip states (if \code{reroot=TRUE}) or the descending subtree's tip states (if \code{reroot=FALSE}), if the first node was in state 3. Note that likelihoods are rescaled (normalized) to sum to 1 for convenience and numerical stability. The marginal likelihoods at a node should not, however, be interpreted as a probability distribution among states.
 }
 }
 
@@ -143,6 +150,7 @@ cat(sprintf("Simulated states for last 20 nodes:\n"))
 print(tail(simulation$node_states,20))
 
 # reconstruct node states from simulated tip states
+# at each node, pick state with highest marginal likelihood
 results = asr_mk_model(tree, tip_states, Nstates, rate_model="ER", Ntrials=2)
 node_states = max.col(results$ancestral_likelihoods)
 

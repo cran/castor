@@ -4,7 +4,7 @@
 Find nearest tip to each tip & node of a tree.
 }
 \description{
-Given a rooted phylogenetic tree and a subset of potential target tips, for each tip and node in the clade find the nearest target tip. The set of target tips can also be taken as the whole set of tips in the tree.
+Given a rooted phylogenetic tree and a subset of potential target tips, for each tip and node in the tree find the nearest target tip. The set of target tips can also be taken as the whole set of tips in the tree.
 }
 \usage{
 find_nearest_tips(tree, 

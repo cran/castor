@@ -30,7 +30,7 @@ A non-negative number, specifying the maximum rate in off-diagonal entries of th
 
 
 \value{
-A real-valued quadratic matrix of size Nstates x Nstates, representing a transition matrix for an Mk model. Each row will sum to 1. The [r,c]-th entry represents the transition rate r-->c. The number of unique off-diagonal rates will depend on the \code{rate_model} chosen.
+A real-valued quadratic matrix of size Nstates x Nstates, representing a transition matrix for an Mk model. Each row will sum to 0. The [r,c]-th entry represents the transition rate r-->c. The number of unique off-diagonal rates will depend on the \code{rate_model} chosen.
 }
 
 \author{Stilianos Louca}

@@ -7,7 +7,7 @@
 #   To fit a parameter within specific lower and upper bounds (constraints), set its value to a 2-tuple (lower,upper)
 # The tree need not be ultrametric; any tips not extending all the way to the crown (tips with maximum distance from root), will be interpreted as extinct
 fit_tree_model = function(	tree, 
-							parameters				= list(),
+							parameters				= list(),	# NULL, or a named list of parameter values to be fixed or constrained within an interval. Parameters not included in this list are assumed "free" (non-fixed).
 							first_guess				= list(),	# NULL, or a named list of initial guesses for a subset of parameters
 							min_age					= 0,		# min distance from the tree tips, for a node/tip to be considered in the fitting. Set to NULL or <=0 for no constraint. Must be <=max_age.
 							max_age	 				= 0, 		# max distance from the tree tips, for a node/tip to be considered in the fitting. Set to NULL or <=0 or Inf for no constraint.
@@ -16,12 +16,12 @@ fit_tree_model = function(	tree,
 							Nthreads				= 1,
 							coalescent				= FALSE,
 							discovery_fraction		= NULL,		# optional functional mapping age --> discovery fraction (=probability of a lineage at age tau, that has an extant descendant today, being discovered today). For example, discovery_fraction(0) equals the fraction of extant lineages represented in the tree. If this is provided, then parameters$rarefaction is fixed to 1, and the dscovery_fraction is applied after simulation. Only relevant for coalescent trees.
-							fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max, rel.tol and max.eval)
+							fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 							min_R2					= -Inf,
 							min_wR2					= -Inf,
 							grid_size				= 100,
 							max_model_runtime		= NULL,		# maximum time (in seconds) to allocate for each evaluation of a model. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
-							objective				= 'LL'){ 	# either 'LL' (log-likelihood of waiting times) or 'R2' (R2 of diversity over time).
+							objective				= 'LL'){ 	# either 'LL' (log-likelihood of waiting times) or 'R2' (R2 of diversity over time) or 'wR2' (weighted R2), 'lR2' (R2 on a logarithmic scale), 'MRD' (mean relative deviation)
 	Ntips  				= length(tree$tip.label)
 	Nnodes 				= tree$Nnode
 	Nedges 				= nrow(tree$edge)
@@ -150,8 +150,8 @@ fit_tree_model = function(	tree,
 	guessed_birth_rate_exponent = (if(param_fixed$birth_rate_exponent) parameters$birth_rate_exponent else 1)
 	guessed_rarefaction = (if(param_fixed$rarefaction) parameters$rarefaction else 1)
 	guessed_extant_diversity = (Ntips/guessed_rarefaction)/(if(is.null(todays_discovery_fraction) || (!coalescent)) 1 else todays_discovery_fraction)
-	typical_params = list(	birth_rate_intercept 	= events$Nspeciations/speciation_time_range,
-							birth_rate_factor 		= (tree_diversities_on_grid[grid_size]-tree_diversities_on_grid[grid_size-1])/(guessed_rarefaction*(tree_diversities_on_grid[grid_size]**guessed_birth_rate_exponent)*(grid_times[grid_size]-grid_times[grid_size-1])),
+	start_params = list(	birth_rate_intercept 	= events$Nspeciations/speciation_time_range,
+							birth_rate_factor 		= (tree_diversities_on_grid[grid_size]-tree_diversities_on_grid[grid_size-2])/(guessed_rarefaction*(tree_diversities_on_grid[grid_size]**guessed_birth_rate_exponent)*(grid_times[grid_size]-grid_times[grid_size-2])),
 							birth_rate_exponent 	= guessed_birth_rate_exponent, 
 							death_rate_intercept	= (if(coalescent) events$Nspeciations/speciation_time_range else events$Nextinctions/extinction_time_range),
 							death_rate_factor		= (if(coalescent) log(events$Nspeciations)/speciation_time_range else log(events$Nextinctions)/extinction_time_range),
@@ -163,18 +163,18 @@ fit_tree_model = function(	tree,
 	if(!is.null(first_guess)){
 		for(param_name in parameter_names){
 			if(!is.null(first_guess[[param_name]])){
-				typical_params[[param_name]] = first_guess[[param_name]];
+				start_params[[param_name]] = first_guess[[param_name]];
 			}
 		}
 	}
 	# constrain first guesses if needed
 	for(param_name in parameter_names){
 		if(param_fixed[[param_name]]){
-			typical_params[[param_name]] = parameters[[param_name]]
-		}else if(is.na(typical_params[[param_name]])){
-			typical_params[[param_name]] = 0.5*(min_params[[param_name]]+max_params[[param_name]])
+			start_params[[param_name]] = parameters[[param_name]]
+		}else if(is.na(start_params[[param_name]])){
+			start_params[[param_name]] = 0.5*(min_params[[param_name]]+max_params[[param_name]])
 		}else{
-			typical_params[[param_name]] = max(min_params[[param_name]],min(max_params[[param_name]],typical_params[[param_name]]))
+			start_params[[param_name]] = max(min_params[[param_name]],min(max_params[[param_name]],start_params[[param_name]]))
 		}
 	}
 
@@ -292,7 +292,7 @@ fit_tree_model = function(	tree,
 		lower_bounds = unlist(min_params[fitted_parameter_names])
 		upper_bounds = unlist(max_params[fitted_parameter_names])
 		# randomly choose start values
-		initial_fitted_params = unlist(typical_params[fitted_parameter_names])
+		initial_fitted_params = unlist(start_params[fitted_parameter_names])
 		if(trial>1){
 			constrained  	= which(unlist(param_constrained[fitted_parameter_names]))
 			unconstrained  	= which(!unlist(param_constrained[fitted_parameter_names]))
@@ -329,7 +329,7 @@ fit_tree_model = function(	tree,
 	################################
 
 	# run one or more independent fitting trials
-    if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){ # debug
+    if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
 		# run trials in parallel using multiple forks
 		# Note: Forks (and hence shared memory) are not available on Windows
 		fits = parallel::mclapply(	1:Ntrials, 
@@ -348,6 +348,7 @@ fit_tree_model = function(	tree,
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
 	returned_value_on_error = list(	success					= FALSE, 
 									error					= "Fitting failed for all trials", 
+									start_parameters		= start_params,
 									Nspeciations			= events$Nspeciations, 
 									Nextinctions			= events$Nextinctions,
 									grid_times				= grid_times,
@@ -396,6 +397,7 @@ fit_tree_model = function(	tree,
 	return(list(success						= TRUE,
 				objective_value				= (if(objective=='MRD') -objective_value else objective_value), 
 				parameters					= parameters, 
+				start_parameters			= start_params,
 				R2							= fits[[best]]$R2,
 				wR2							= fits[[best]]$wR2,
 				lR2							= fits[[best]]$lR2,

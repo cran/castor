@@ -1,5 +1,5 @@
 /*
-This C++ code library includes routines for efficiently working with huge phylogenetic trees in R (using the Rcpp interface).
+This C++ code library includes routines for efficiently scratching with huge phylogenetic trees in R (using the Rcpp interface).
 
 Most code supports multifurcating trees, as well as trees containing monofurcations (i.e. some nodes having only one child).
 In most cases, the input tree must be rooted.
@@ -23,7 +23,6 @@ General terminology and indexing conventions for trees, as used below:
 
 
 Stilianos Louca
-February 13, 2017
 */
 
 #include <new>
@@ -48,7 +47,7 @@ February 13, 2017
 #endif
 
 #ifndef RELATIVE_EPSILON
-#define RELATIVE_EPSILON 1e-8
+#define RELATIVE_EPSILON 1e-10
 #endif
 
 #ifndef STRANDOM_EPSILON 
@@ -74,6 +73,8 @@ February 13, 2017
 
 
 typedef std::complex<double> cdouble;
+typedef std::vector<double> dvector;
+typedef std::vector<long> lvector;
 
 using namespace Rcpp;
 using namespace std;
@@ -104,12 +105,42 @@ typedef enum _MathError{
 } MathError;
 
 
+
+
+
 // ****************************************************** //
 // BASIC AUXILIARY FUNCTIONS
 
 #pragma mark -
 #pragma mark Auxiliary functions
 #pragma mark 
+
+
+
+// returns the number of seconds since an arbitrary (but consistent) point in the past
+// The timer is monotonic (i.e. not affected by manual changes in the system time), and is specific to the calling thread
+// Note that for Windows this function is not thread-specific 
+double get_thread_monotonic_walltime_seconds(){
+	#if __MACH__ 
+		mach_timebase_info_data_t info;
+		int error_code = mach_timebase_info(&info);
+		if (error_code != KERN_SUCCESS) return 0.0;
+		return 1e-9 * mach_absolute_time() * double(info.numer)/double(info.denom);
+	#elif defined(unix) || defined(__unix) || defined(__unix__) || defined(__linux__)
+		// POSIX code
+		// For details on clock_gettime() see: http://www.tin.org/bin/man.cgi?section=3&topic=clock_gettime
+		struct timespec T;
+		clock_gettime(CLOCK_MONOTONIC, &T); // Note that CLOCK_MONOTONIC_RAW is not available on all Linux distros
+		return double(T.tv_sec) + 1e-9*T.tv_nsec;
+	#elif defined(IS_WINDOWS)
+		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows. Update: It requires the windows.h library, which causes problems with Rcpp on CRAN.
+		return clock()/double(CLOCKS_PER_SEC);
+	#else
+		return 0; // not implemented for other systems
+	#endif
+}
+
+
 
 inline double string2Double(const string &number){
 	return strtod(number.c_str(), NULL);
@@ -121,6 +152,32 @@ string makeString(const TYPE &data){
 	stream << data;
 	return stream.str();
 }
+
+
+// Formated string creation
+string vstringprintf(const char *format, va_list args){
+	va_list temp;
+	va_copy(temp, args);
+	char *buffer = new char[vsnprintf(NULL, 0, format, temp) + 1];
+	va_end(temp);
+	
+	vsprintf(buffer, format, args);
+	string s(buffer);
+	delete [] buffer;
+	return s;
+}
+
+// Formated string creation
+string stringprintf(const char *format, ...){
+	string s;
+	va_list args;
+	va_start(args, format);
+	s = vstringprintf(format, args);
+	va_end(args);
+	return s;
+}
+
+
 
 string trim_whitespace(const std::string &haystack){
 	long right = haystack.length()-1;
@@ -154,8 +211,16 @@ inline TYPE QTR(TYPE value){
 }
 
 template<class TYPE>
-inline int sgn(TYPE value){
-	return ((value)>0 ? 1 : ((value)<0 ? -1 : 0));
+inline int sgn(const TYPE value){
+	return (value<0 ? -1 : 1);
+}
+
+
+// calculate result = a*X + b*Y, for vectors X & Y and scalars a & b
+template<class TYPE>
+inline void linear_combination(const double a, const std::vector<TYPE> &X, const double b, const std::vector<TYPE> &Y, std::vector<TYPE> &result){
+	result.resize(X.size());
+	for(long i=0; i<X.size(); ++i) result[i] = a*X[i] + b*Y[i];
 }
 
 
@@ -239,7 +304,7 @@ double get_array_min(const ARRAY_TYPE &X){
 
 
 template<class ARRAY_TYPE>
-double get_array_nonzero_min(const ARRAY_TYPE &X){
+inline double get_array_nonzero_min(const ARRAY_TYPE &X){
 	const long N = X.size();
 	double minX = NAN_D;
 	for(long n=0; n<N; ++n){
@@ -250,7 +315,7 @@ double get_array_nonzero_min(const ARRAY_TYPE &X){
 
 
 template<class ARRAY_TYPE>
-double get_array_max(const ARRAY_TYPE &X){
+inline double get_array_max(const ARRAY_TYPE &X){
 	const long N = X.size();
 	if(N==0) return NAN_D;
 	double maxX = X[0];
@@ -273,7 +338,7 @@ double get_array_min(const std::vector<double> &X, long start_index, long end_in
 
 
 template<class ARRAY_TYPE>
-bool arrays_are_equal(const ARRAY_TYPE &A, const ARRAY_TYPE &B){
+inline bool arrays_are_equal(const ARRAY_TYPE &A, const ARRAY_TYPE &B){
 	if(A.size()!=B.size()) return false;
 	for(long i=0; i<A.size(); ++i){
 		if(A[i]!=B[i]) return false;
@@ -282,21 +347,141 @@ bool arrays_are_equal(const ARRAY_TYPE &A, const ARRAY_TYPE &B){
 }
 
 
-long vector_sum(const std::vector<long> &values){
+template<class TYPE>
+inline TYPE vector_sum(const std::vector<TYPE> &values){
+	TYPE S = 0;
+	for(long i=0; i<values.size(); ++i) S += values[i];
+	return S;
+}
+
+
+inline long vector_sum(const std::vector<char> &values){
 	long S = 0;
 	for(long i=0; i<values.size(); ++i) S += values[i];
 	return S;
 }
 
 
-long vector_sum(const std::vector<char> &values){
-	long S = 0;
-	for(long i=0; i<values.size(); ++i) S += values[i];
+double smallest_nonzero_step(const std::vector<double> &times){
+	double S = INFTY_D;
+	for(long i=0; i<times.size(); ++i){
+		if(times[i+1]>times[i]){
+			S = min(S, times[i+1]-times[i]);
+		}
+	}
 	return S;
 }
 
 
-long vector_count_zeros(const std::vector<long> &values){
+inline double vector_mean(const std::vector<double> &values){
+	double S = 0;
+	for(long i=0; i<values.size(); ++i) S += values[i];
+	return (S/values.size());
+}
+
+
+inline double vector_abs_mean(const std::vector<double> &values){
+	double S = 0;
+	for(long i=0; i<values.size(); ++i) S += abs(values[i]);
+	return (S/values.size());
+}
+
+
+
+inline double vector_mean(const std::vector<double> &values, const long first, const long last){
+	double S = 0;
+	for(long i=first; i<=last; ++i) S += values[i];
+	return (S/(last-first+1.0));
+}
+
+
+// calculate sum of a single row in a 2D matrix of size NR x NC
+// matrix must be provided in row-major format, i.e. matrix[r*NC+c] is the entry in row r & column c
+inline double row_sum(const std::vector<double> &matrix, const long NC, const long row){
+	double S = 0;
+	for(long c=0; c<NC; ++c){
+		S += matrix[row*NC + c];
+	}
+	return S;
+}
+
+
+// make sure no entry is negative
+void make_vector_positive(std::vector<double> &values){
+	for(long i=0; i<values.size(); ++i) values[i] = max(0.0, values[i]);
+}
+
+// replace negative entries
+void replace_negatives(std::vector<double> &values, const double replacement){
+	for(long i=0; i<values.size(); ++i){
+		if(values[i]<0) values[i] = replacement;
+	}
+}
+
+// replace non-strictly positive entries
+void replace_non_positives(std::vector<double> &values, const double replacement){
+	for(long i=0; i<values.size(); ++i){
+		if(values[i]<=0) values[i] = replacement;
+	}
+}
+
+
+// make sure entries in a vector are within the specified limits [min_value:max_value]
+void cap_values(const double 		min_value,
+				const double 		max_value,
+				std::vector<double> &values){ // (INPUT/OUTPUT) the vector to be modified in-situ
+	for(long i=0; i<values.size(); ++i){
+		values[i] = max(min_value, min(max_value, values[i]));
+	}
+}
+
+
+// extract a specific row from a 2D matrix in row-major format
+template<class TYPE>
+void extract_row(const std::vector<TYPE> &matrix, const long NC, const long row, std::vector<TYPE> &extracted_row){
+	extracted_row.resize(NC);
+	for(long c=0; c<NC; ++c){
+		extracted_row[c] = matrix[row*NC+c];
+	}
+}
+
+
+template<class TYPE>
+void flatten_matrix(const std::vector<std::vector<TYPE> > 	&matrix,		// (INPUT) 2D matrix, where matrix[r][c] is the element in row r and column c. The number of rows is assumed to be matrix.size(). The number of columns is determined assumed to be matrix[0].size().
+					std::vector<TYPE> 						&flattened){	// (OUTPUT) Flattened 2D matrix in row-major format, where flattened[r*NC + c] is the element in row r and column c.
+	const long NR = matrix.size();
+	if(NR==0){
+		flattened.resize(0);
+		return;
+	}
+	const long NC = matrix[0].size();
+	flattened.resize(NR*NC);
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			flattened[r*NC + c] = matrix[r][c];
+		}
+	}		
+}
+
+
+template<class TYPE>
+inline bool contains_nan(const std::vector<TYPE> &values){
+	for(long i=0; i<values.size(); ++i){
+		if(std::isnan(values[i])) return true;
+	}
+	return false;
+}
+
+
+template<class TYPE>
+inline bool contains_inf(const std::vector<TYPE> &values){
+	for(long i=0; i<values.size(); ++i){
+		if(std::isinf(values[i])) return true;
+	}
+	return false;
+}
+
+inline long vector_count_zeros(const std::vector<long> &values){
 	long S = 0;
 	for(long i=0; i<values.size(); ++i) S += (values[i]==0 ? 1 : 0);
 	return S;
@@ -304,13 +489,29 @@ long vector_count_zeros(const std::vector<long> &values){
 
 
 template<class ARRAY_TYPE>
-long count_values_below_threshold(const ARRAY_TYPE &values, double threshold){
+inline long count_values_below_threshold(const ARRAY_TYPE &values, double threshold){
 	long N = 0;
 	for(long i=0; i<values.size(); ++i){
 		if(values[i]<=threshold) ++N;
 	}
 	return N;
 }
+
+
+// remove an item from a vector, by replacing it with the last item in the list and then removing the last item
+// if the order of items in the vector do not matter, then this is more efficient than removing an item from within a vector
+// index is assumed to be a valid location in the vector
+template<class TYPE>
+inline void remove_item_from_vector(std::vector<TYPE> &list, long index){
+	if(index==list.size()-1){
+		// the item is the last one in the list, or nothing else left in the list, so just remove item
+		list.pop_back();
+	}else{
+		list[index] = list.back();
+		list.pop_back();
+	}
+}
+
 
 
 template<class TIME_ARRAY>
@@ -496,15 +697,6 @@ inline double moduloInterval(double value, double intervalMin, double intervalMa
 }
 
 
-double smallest_nonzero_time_step(const std::vector<double> &times){
-	double S = INFTY_D;
-	for(long i=0; i<times.size(); ++i){
-		if(times[i+1]>times[i]){
-			S = min(S, times[i+1]-times[i]);
-		}
-	}
-	return S;
-}
 
 
 // inverse cumulative distribution function of the Student's t distribution with n degrees of freedom
@@ -527,6 +719,260 @@ double quantile_Students_t(double p, long n){
 }
 
 
+
+
+
+#pragma mark -
+#pragma mark Vectorized basic arithmetics
+#pragma mark
+
+
+template<class TYPE>
+inline vector<TYPE> operator*(vector<TYPE> x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] *= y[i];
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE>& operator*=(vector<TYPE> &x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] *= y[i];
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> operator*(vector<TYPE> x, double scalar){
+	for(long i=0; i<x.size(); ++i){
+		x[i] *= scalar;
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> operator*(double scalar, vector<TYPE> x){
+	for(long i=0; i<x.size(); ++i){
+		x[i] *= scalar;
+	}
+	return x;
+}
+
+
+template<class TYPE>
+vector<TYPE>& operator*=(vector<TYPE> &x, double scalar) {
+	for(long i=0; i<x.size(); ++i){
+		x[i] *= scalar;
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> operator+(vector<TYPE> x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] += y[i];
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> &operator+=(vector<TYPE> &x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] += y[i];
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> operator-(vector<TYPE> x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] -= y[i];
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> &operator-=(vector<TYPE> &x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] -= y[i];
+	}
+	return x;
+}
+
+
+
+
+template<class TYPE>
+inline vector<TYPE> operator/(vector<TYPE> x, const vector<TYPE> &y){
+	for(long i=0; i<x.size(); ++i){
+		x[i] /= y[i];
+	}
+	return x;
+}
+
+
+
+template<class TYPE>
+inline vector<TYPE> operator/(vector<TYPE> x, double scalar){
+	for(long i=0; i<x.size(); ++i){
+		x[i] /= scalar;
+	}
+	return x;
+}
+
+
+template<class TYPE>
+inline vector<TYPE> &operator/=(vector<TYPE> &x, double scalar){
+	for(long i=0; i<x.size(); ++i){
+		x[i] /= scalar;
+	}
+	return x;
+}
+
+
+
+
+
+#pragma mark -
+#pragma mark Random numbers
+#pragma mark 
+
+
+inline double uniformWithinInclusiveRight(double minimum, double maximum){
+	return minimum + STRANDOM_EPSILON + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
+}
+
+inline double uniformWithinInclusiveLeft(double minimum, double maximum){
+	return minimum + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
+}
+
+
+inline long uniformIntWithin(long minimum, long maximum){
+	//return min(maximum, (long) floor(minimum + (maximum-minimum+1)*(double(rand())/RAND_MAX))); // rand() is discouraged by R package builders
+	return min(maximum, (long) floor(minimum + (maximum-minimum+1) * R::runif(0.0,1.0)));
+}
+
+
+// draw a standard-normal random variable
+double random_standard_normal(){
+	return sqrt(-2.0*log(uniformWithinInclusiveRight(0, 1)))*cos(2.0*M_PI*uniformWithinInclusiveRight(0,1));
+}
+
+
+template<class TYPE>
+long random_int_from_distribution(const TYPE probabilities[], const long N){
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=probabilities[i]) return i;
+		p -= probabilities[i];
+	}
+	return N-1;
+}
+
+
+// pick an index within 0:(N-1) at probability proportional to weights[i]
+// for efficiency, the caller guarantees that total_weight = sum_i weights[i]
+long random_int_from_distribution(const std::vector<double> &weights, const double total_weight){
+	const long N = weights.size();
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=weights[i]/total_weight) return i;
+		p -= weights[i]/total_weight;
+	}
+	return N-1;
+}
+
+
+
+
+// pick an index within 0:(N-1) at probability proportional to weights[index_pool[i]]
+// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
+long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const double total_weight){
+	const long N = index_pool.size();
+	double p = R::runif(0.0,1.0);
+	for(long i=0; i<N; ++i){
+		if(p<=weights[index_pool[i]]/total_weight) return i;
+		p -= weights[index_pool[i]]/total_weight;
+	}
+	return N-1;
+}
+
+
+// pick an index within 0:(N-1) at probability proportional to weights[weight_indices[index_pool[i]]]
+// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
+long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const std::vector<long> &weight_indices, const double total_weight){
+	const long N = index_pool.size();
+	double probability = R::runif(0.0,1.0);
+	double dp;
+	for(long i=0; i<N; ++i){
+		dp = weights[weight_indices[index_pool[i]]]/total_weight;
+		if(probability<=dp) return i;
+		probability -= dp;
+	}
+	return N-1;
+}
+
+
+
+// given a list of index pools pool_1, pool_2, ..., pool_NP, and a probability weight associated with each pool (e.g. each item in pool_i has weight weight_i), pick a random item among all pools
+// for efficiency, the caller guarantees that total_weight = 1, where total_weight := sum_p weights[p] * pools[p].size()
+// The time complexity of this function is O(NP)
+// if the number items in each pool is much larger than the number of distinct pools, this function is much more efficient than considering all items within a single pool
+// this function guarantees that only non-empty pools are picked, or returns false if all pools are actually empty
+// returns true upon success (guaranteed, provided that at least one pooll is non-empty)
+bool random_int_from_pools(	const std::vector<lvector> 	&pools, 		// (INPUT) array of size NP, each element of which is a pool of integers (indices)
+							const std::vector<double> 	&weights, 		// (INPUT) array of size NP, listing probability weights associated with each pool. Hence, weights[p] is the weight assigned to each element in index_pools[p], and hence weights[p]*pools[p].size() is the probability weight of landing in pool p.
+							const double 				total_weight,	// (INPUT) the total weight across all items in all pools. Provided by the caller, for efficiency
+							long						&p,				// (OUTPUT) the random pool chosen, i.e. a random integer between 0,..,NP
+							long						&i){			// (OUTPUT) the random item in the chosen pool, i.e. a random integer between 0,...,pools[p].size()-1
+	const long NP = pools.size();
+	// step 1: choose a random pool based on their total probabilities
+	double probability = R::runif(0.0,1.0);
+	double dp;
+	p = 0;
+	long last_valid_p = -1; // keep track of the last non-empty pool
+	while(p<NP){
+		if(!pools[p].empty()) last_valid_p = p;
+		dp = weights[p]*pools[p].size()/total_weight;
+		if((probability<=dp) && (!pools[p].empty())) break; // pick this pool
+		probability -= dp;
+		++p; // try the next pool
+	}
+	if(last_valid_p<0){
+		// all pools were empty, so return failure code
+		p = -1; i = -1;
+		return false;
+	}
+	if(p>=NP) p = last_valid_p; // probability overflow, likely due to numerical rounding errors. So pick the last non-empty pool
+
+	// step 2: choose a random item in the chosen pool
+	// this step is efficient, because all items in this pool have the same probability weight
+	i = uniformIntWithin(0,pools[p].size()-1);
+	return true;
+}
+
+
+
+
+
+// generate exponentially distributed random variable, with PDF f(x) = lambda*exp(-lambda*x)
+double random_exponential_distribution(double lambda){
+	return -log(R::runif(0.0,1.0))/lambda;
+}
+
+
+inline bool random_bernoulli(double p){
+	//return ((double(rand())/RAND_MAX) <= p); // rand() is discouraged by R package builders
+	return (R::runif(0.0,1.0)<=p);
+}
 
 
 #pragma mark -
@@ -586,6 +1032,16 @@ void print_as_matrix(const long NR, const long NC, const TYPE A[]){
 }
 
 
+template<class ARRAY_TYPE>
+void print_as_matrix_column_major(const long NR, const long NC, const ARRAY_TYPE &A){
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			Rcout << (c>0 ? ", " : "") << A[r + c*NR];
+		}
+		Rcout << "\n";
+	}
+	Rcout << "\n";
+}
 
 
 // ##########################################################
@@ -595,6 +1051,658 @@ void print_as_matrix(const long NR, const long NC, const TYPE A[]){
 #pragma mark Matrix algebra
 #pragma mark 
 
+
+void get_identity_matrix(	const long 			NR,
+							std::vector<double>	&A){	// (INPUT/OUTPUT) will be the identity matrix of size NR x NR, in row-major format
+	A.assign(NR*NR,0);
+	for(long r=0; r<NR; ++r){
+		A[r*NR + r] = 1;
+	}
+}
+
+
+// calculate the dot-product between two vectors, as needed for QR decomposition
+double QR_dot_product(	const long 		N, 			 // (INPUT) the number of entries in the vectors
+						const double	X[], 		 // (INPUT) vector of size N
+						const long 		xincrement,  // (INPUT) the increment between successive entries in X
+						const double 	Y[], 		 // (INPUT) vector of size N
+						const long 		yincrement){ // (INPUT) the increment between successive entries in Y
+	long i, ix, iy, m;
+	if (N<=0) return 0;
+
+	double S = 0.0;
+	if(xincrement != 1 || yincrement != 1){
+		if(0 <= xincrement){
+			ix = 0;
+		}else{
+			ix = (-N + 1) * xincrement;
+		}
+
+		if(0 <= yincrement){
+			iy = 0;
+		}else{
+			iy = (-N + 1) * yincrement;
+		}
+
+		for(i = 0; i<N; i++){
+			S = S + X[ix] * Y[iy];
+			ix = ix + xincrement;
+			iy = iy + yincrement;
+		}
+	}else{
+		m = N % 5;
+		for (i = 0; i<m; i++){
+			S = S + X[i] * Y[i];
+		}
+		for(i = m; i<N; i = i + 5){
+			S = S + X[i] * Y[i] + X[i+1] * Y[i+1] + X[i+2] * Y[i+2] + X[i+3] * Y[i+3] + X[i+4] * Y[i+4];
+		}
+	}
+	return S;
+}
+
+
+// swap two vectors in-situ, as needed for QR decomposition
+void QR_swap_vectors(	const long 	N, 				// (INPUT) the length of the vectors
+						double 		x[],			// (INPUT/OUTPUT) one of the vectors to swap
+						const long 	xincrement, 	// (INPUT) increment between successive elements in Y
+						double 		y[], 			// (INPUT/OUTPUT) one of the vectors to swap
+						const long 	yincrement){	// (INPUT) increment between successive elements in Y
+	long i, ix, iy, m;
+	double temp;
+	if(N<=0) return;
+	
+	if((xincrement == 1) && (yincrement == 1)){
+		m = N % 3;
+		for(i = 0; i<m; i++){
+			temp = x[i];
+			x[i] = y[i];
+			y[i] = temp;
+		}
+
+		for(i = m; i<N; i = i + 3){
+			temp 	= x[i];
+			x[i] 	= y[i];
+			y[i] 	= temp;
+
+			temp 	= x[i+1];
+			x[i+1] 	= y[i+1];
+			y[i+1] 	= temp;
+
+			temp 	= x[i+2];
+			x[i+2] 	= y[i+2];
+			y[i+2] 	= temp;
+		}
+	}else{
+		if(0 <= xincrement){
+			ix = 0;
+		}else{
+			ix = (-N + 1) * xincrement;
+		}
+		if(0 <= yincrement){
+			iy = 0;
+		}else{
+			iy = (-N + 1) * yincrement;
+		}
+		for(i = 0; i<N; i++){
+			temp 	= x[ix];
+			x[ix] 	= y[iy];
+			y[iy] 	= temp;
+			ix 		= ix + xincrement;
+			iy 		= iy + yincrement;
+		}
+	}
+}
+
+
+// calculate euclidean norm of vector X
+double euclidean_norm(	const long 		N,				// (INPUT) the number of elements in the vector
+						const double	X[], 			// (INPUT) 1D vector of size N
+						const long 		xincrement){	// (INPUT) the increment between successive entries of X
+	long i, ix;
+	double absxi, norm, scale, sum_squares;
+
+	if((N<1) || (xincrement<1)){
+		norm = 0;
+	}else if(N== 1){
+		norm = abs(X[0]);
+	}else{
+		scale 	= 0.0;
+		sum_squares 	= 1.0;
+		ix 		= 0;
+		for(i = 0; i < N; i++){
+			if(X[ix] != 0.0){
+				absxi = abs(X[ix]);
+				if(scale < absxi){
+					sum_squares = 1.0 + sum_squares * (scale/absxi) * (scale/absxi);
+					scale = absxi;
+				}else{
+					sum_squares = sum_squares + (absxi/scale) * (absxi/scale);
+				}
+			}
+			ix = ix + xincrement;
+		}
+		norm  = scale * sqrt(sum_squares);
+	}
+	return norm;
+}
+
+
+
+void QR_scale_vector(	const long 	N, 				// (INPUT) the number of elements in the vector
+						double 		scaling_factor, // (INPUT) scaling factor
+						double 		X[], 			// (INPUT/OUTPUT) 1D vector of size N
+						const long	xincrement){			// (INPUT) the increment between successive entries of X.
+	long i, ix, m;
+	if(N<=0) return;
+
+	if(xincrement == 1){
+		m = N % 5;
+		for(i = 0; i < m; i++){
+			X[i] = scaling_factor * X[i];
+		}
+		for(i = m; i<N; i = i + 5){
+			X[i]   = scaling_factor * X[i];
+			X[i+1] = scaling_factor * X[i+1];
+			X[i+2] = scaling_factor * X[i+2];
+			X[i+3] = scaling_factor * X[i+3];
+			X[i+4] = scaling_factor * X[i+4];
+		}
+	}else{
+		if(0 <= xincrement){
+			ix = 0;
+		}else{
+			ix = (-N + 1) * xincrement;
+		}
+		for(i = 0; i < N; i++){
+			X[ix] = scaling_factor * X[ix];
+			ix = ix + xincrement;
+		}
+	}
+	return;
+}
+
+
+
+// add two vectors, as used for QR decomposition
+void QR_add_vectors(const long 		N, 				// (INPUT) the number of elements in the vectors
+					const double 	alpha, 			// (INPUT) an optional multiplicative factor for X
+					const double	X[], 			// (INPUT) 1D vector of size N
+					const long 		xincrement, 	// (INPUT) the increment between successive entries of X
+					double 			Y[], 			// (INPUT/OUTPUT) 1D vector of size N. Upon return, this will store the result alpha*X+Y
+					const long		yincrement){	// (INPUT) the increment between successive entries of Y
+  long i, ix, iy, m;
+  if(N<=0) return;
+  if(alpha==0) return;
+
+	if((xincrement != 1) || (yincrement != 1)){
+		if(0 <= xincrement){
+			ix = 0;
+		}else{
+			ix = (-N + 1) * xincrement;
+		}
+
+		if(0 <= yincrement){
+			iy = 0;
+		}else{
+			iy = (-N + 1) * yincrement;
+		}
+
+		for(i = 0; i<N; i++){
+			Y[iy] = Y[iy] + alpha * X[ix];
+			ix = ix + xincrement;
+			iy = iy + yincrement;
+		}
+	}else{
+		m = N % 4;
+
+		for(i = 0; i<m; i++){
+			Y[i] = Y[i] + alpha * X[i];
+		}
+
+		for(i = m; i<N; i = i + 4){
+			Y[i]   = Y[i]   + alpha * X[i];
+			Y[i+1] = Y[i+1] + alpha * X[i+1];
+			Y[i+2] = Y[i+2] + alpha * X[i+2];
+			Y[i+3] = Y[i+3] + alpha * X[i+3];
+		}
+	}
+	return;
+}
+
+
+// QR decomposition of a real 2D matrix of size NR x NC
+// code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/qr_solve/qr_solve.html
+void QR_decomposition (	double 			A[], 			// (INPUT/OUTPUT) on input, the matrix to be decomposed, in column-major format. On output, A contains in its upper triangle the upper triangular matrix R of the QR factorization.  Below its diagonal A contains information from which the orthogonal part of the decomposition can be recovered.
+						const long 		LDA, 			// (INPUT) the leading dimension of A, i.e. linear index periodicity between subsequent columns. Typically this will be equal to NR, but may also be larger (e.g. when processing a sub-matrix)
+						const long 		NR,				// (INPUT) the number of rows of A
+						const long 		NC,				// (INPUT) the number of columns of A
+						const bool 		pivoting,		// (INPUT) whether to perform pivoting
+						double 			scratch[], 		// (SCRATCH) pre-allocated scratch space of size >=NC. Only needed if pivoting=true.
+						double 			QRaux[], 		// (OUTPUT) 1D array of size NC, must be pre-allocated. Will contain information required to recover the orthogonal part of the decomposition.
+						long 			pivots[],		// (OUTPUT) 1D array of size NC, must be pre-allocated. pivots[k] specifies the index of the column of A that has been interchanged into the K-th column, if pivoting was requested.
+						long			&rank){			// (OUTPUT) the estimated rank of the matrix A
+	long j, jp, l, lup, maxj;
+	double maxnrm, nrmxl;
+	long pl, pu, swapj;
+	double t, tt;
+
+	// initialize pivots
+	if(pivoting){
+		for(long j = 0; j<NC; j++) pivots[j] = 0;
+	}
+
+	pl = 1;
+	pu = 0;
+	if(pivoting){	
+		for(j = 1; j <= NC; j++){
+			swapj = (0 < pivots[j-1]);
+			if(pivots[j-1] < 0){
+				pivots[j-1] = -j;
+			}else{
+				pivots[j-1] = j;
+			}
+
+			if(swapj){
+				if(j != pl) QR_swap_vectors(NR, A+0+(pl-1)*LDA, 1, A+0+(j-1), 1);
+				pivots[j-1] = pivots[pl-1];
+				pivots[pl-1] = j;
+				pl = pl + 1;
+			}
+		}
+		pu = NC;
+		
+		for(j = NC; 1<=j; j--){
+			if(pivots[j-1] < 0){
+				pivots[j-1] = -pivots[j-1];
+				if(j != pu){
+					QR_swap_vectors(NR, A+0+(pu-1)*LDA, 1, A+0+(j-1)*LDA, 1);
+					jp = pivots[pu-1];
+					pivots[pu-1] = pivots[j-1];
+					pivots[j-1] = jp;
+				}
+				pu = pu - 1;
+			}
+		}
+	}
+
+	// Compute column norms
+	for(j = pl; j<=pu; j++){
+		QRaux[j-1] = euclidean_norm(NR, A+0+(j-1)*LDA, 1);
+	}
+
+	for(j = pl; j<=pu; j++){
+		scratch[j-1] = QRaux[j-1];
+	}
+
+	// Householder reduction of A
+	lup = min(NR, NC);
+	for(l = 1; l<=lup; l++){
+		if(pl<=l && l<pu){
+			maxnrm = 0.0;
+			maxj = l;
+			for(j = l; j<=pu; j++){
+				if(maxnrm < QRaux[j-1]){
+					maxnrm 	= QRaux[j-1];
+					maxj 	= j;
+				}
+			}
+
+			if(maxj != l){
+				QR_swap_vectors(NR, A+0+(l-1)*LDA, 1, A+0+(maxj-1)*LDA, 1);
+				QRaux[maxj-1] 	= QRaux[l-1];
+				scratch[maxj-1] = scratch[l-1];
+				jp 				= pivots[maxj-1];
+				pivots[maxj-1] 	= pivots[l-1];
+				pivots[l-1] 	= jp;
+			}
+		}
+
+		// Householder transformation for column L.
+		QRaux[l-1] = 0.0;
+		if(l != NR){
+			nrmxl = euclidean_norm(NR-l+1, A+l-1+(l-1)*LDA, 1);
+			if(nrmxl != 0.0){
+				if(A[l-1+(l-1)*LDA] != 0.0){
+					nrmxl = nrmxl * (A[l-1+(l-1)*LDA]<0 ? -1 : +1);
+				}
+				QR_scale_vector(NR-l+1, 1.0 / nrmxl, A+l-1+(l-1)*LDA, 1);
+				A[l-1+(l-1)*LDA] = 1.0 + A[l-1+(l-1)*LDA];
+				for(j = l + 1; j <= NC; j++){
+					t = -QR_dot_product(NR-l+1, A+l-1+(l-1)*LDA, 1, A+l-1+(j-1)*LDA, 1)/A[l-1+(l-1)*LDA];
+					QR_add_vectors(NR-l+1, t, A+l-1+(l-1)*LDA, 1, A+l-1+(j-1)*LDA, 1);
+
+					if(pl <= j && j <= pu){
+						if(QRaux[j-1] != 0.0){
+							tt = 1.0 - pow(abs(A[l-1+(j-1)*LDA])/QRaux[j-1], 2);
+							tt = max(tt, 0.0);
+							t = tt;
+							tt = 1.0 + 0.05 * tt * pow(QRaux[j-1]/scratch[j-1], 2);
+
+							if(tt != 1.0){
+								QRaux[j-1] = QRaux[j-1] * sqrt(t);
+							}else{
+								QRaux[j-1] = euclidean_norm(NR-l, A+l+(j-1)*LDA, 1);
+								scratch[j-1] = QRaux[j-1];
+							}
+						}
+					}
+				}
+				// save transformation
+				QRaux[l-1] = A[l-1+(l-1)*LDA];
+				A[l-1+(l-1)*LDA] = -nrmxl;
+			}
+		}
+	}
+	
+	// compute the rank
+	const double tol = 1e-6;
+	rank = 0;
+  	long k = min(NR,NC);
+	for(j = 0; j < k; j++){
+		if(abs(A[j+j*LDA]) <= tol * abs(A[0+0*LDA])){
+			break;
+		}
+		rank = j + 1;
+	}	
+}
+
+
+
+// perform various operations using the QR-decomposition of some real 2D matrix A
+// this function does not actually use the matrix A, but instead its pre-computed QR-decomposition
+// code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/qr_solve/qr_solve.html
+long QR_operation(	double			QRA[], 		// (INPUT/OUTPUT) matrix of size LDA*NC, storing the QR-decomposition of A. Not actually modified permanently by this function, but used temporarily internally. So its output is the same as input.
+					const long		LDA, 		// (INPUT) the leading dimension of the matrix A
+					const long		NR, 		// (INPUT) number of rows in A
+					const long 		NK, 		// (INPUT) number of columns in the AK matrix, formed during QR decomposition. NK will always be <=min(NR,NC)
+					const double	QRaux[], 	// (INPUT) 1D array of size NC, containing information regarding the QR decomposition. Must be as calculated using QR_decomposition(..).
+					const double	Y[], 		// (INPUT) 1D vector of size NR, to be operated upon by the QR-decomposed A
+					double 			QY[], 		// (OUTPUT) the product Q*Y, if requested. In that case, must be preallocated of size NR.
+					double 			QTY[], 		// (OUTPUT) the product Q^T*Y, if requested. In that case, must be preallocated of size NR.
+					double 			X[], 		// (OUTPUT) the solution to the least squares problem: minimize ||AK*X - Y||_2, if requested. In that case, it must be preallocated of size NK
+					double 			residuals[], 	// (OUTPUT) the least-squares residuals Y - AK*X, if requested. In that case, must be preallocated of size NR.
+					double 			AX[], 			// (OUTPUT) the least-squares approximation AX:=AK*X, if requested. In that case, it must be preallocated of size NR.
+					const string 	&job){			// (INPUT) string of size 5 and of format ABCDE, where each character is either 1 or 0, specifying the various jobs to perform. For example, "00110" performs jobs C and D.
+	long i, info, j, jj, ju;
+	double t, temp;
+	info = 0;
+
+	// determine jobs
+	bool cQY 	= (job[0]!='0'); // compute QY
+	bool cQTY	= (job[1]!='0'); // compute QTY
+	bool cx 	= (job[2]!='0'); // compute QTY and X
+	bool cr 	= (job[3]!='0'); // compute QTY and RSD
+	bool cax 	= (job[4]!='0'); // compute QTY and AX
+	
+	cQTY = cQTY || cx || cr || cax; // always compute QTY if one of cx, cr, cax is requested
+
+	ju = min(NK, NR-1);
+	if(ju == 0){
+		if(cQY) QY[0] = Y[0];
+		if(cQTY) QTY[0] = Y[0];
+		if(cax) AX[0] = Y[0];
+		if(cx){
+			if(QRA[0+0*LDA] == 0.0){
+				info = 1;
+			}else{
+				X[0] = Y[0] / QRA[0+0*LDA];
+			}
+		}
+		if(cr) residuals[0] = 0.0;
+		return info;
+	}
+
+	// prepare computation of QY or QTY
+	if(cQY){
+		for(i = 1; i <= NR; i++){
+			QY[i-1] = Y[i-1];
+		}
+	}
+	if(cQTY){
+		for(i = 1; i <= NR; i++){
+			QTY[i-1] = Y[i-1];
+		}
+	}
+	
+	// compute QY
+	if(cQY){
+		for(jj = 1; jj <= ju; jj++){
+			j = ju - jj + 1;
+			if(QRaux[j-1] != 0.0){
+				temp = QRA[j-1+(j-1)*LDA];
+				QRA[j-1+(j-1)*LDA] = QRaux[j-1];
+				t = -QR_dot_product(NR-j+1, QRA+j-1+(j-1)*LDA, 1, QY+j-1, 1 ) / QRA[j-1+(j-1)*LDA];
+				QR_add_vectors(NR-j+1, t, QRA+j-1+(j-1)*LDA, 1, QY+j-1, 1 );
+				QRA[j-1+(j-1)*LDA] = temp;
+			}
+		}
+	}
+	
+	// compute Q'*Y.
+	if(cQTY){
+		for(j = 1; j <= ju; j++){
+			if(QRaux[j-1] != 0.0){
+				temp = QRA[j-1+(j-1)*LDA];
+				QRA[j-1+(j-1)*LDA] = QRaux[j-1];
+				t = -QR_dot_product(NR-j+1, QRA+j-1+(j-1)*LDA, 1, QTY+j-1, 1 ) / QRA[j-1+(j-1)*LDA];
+				QR_add_vectors(NR-j+1, t, QRA+j-1+(j-1)*LDA, 1, QTY+j-1, 1 );
+				QRA[j-1+(j-1)*LDA] = temp;
+			}
+		}
+	}
+
+	// prepare computation of X, RSD, or AX.
+	if(cx){
+		for(i = 1; i <= NK; i++){
+			X[i-1] = QTY[i-1];
+		}
+	}
+	if(cax){
+		for(i = 1; i <= NK; i++){
+			AX[i-1] = QTY[i-1];
+		}
+	}
+	if(cr && NK < NR){
+		for(i = NK+1; i <= NR; i++){
+			residuals[i-1] = QTY[i-1];
+		}
+	}
+	if(cax && NK+1 <= NR){
+		for(i = NK+1; i <= NR; i++){
+			AX[i-1] = 0.0;
+		}
+	}
+	if(cr){
+		for(i = 1; i <= NK; i++){
+			residuals[i-1] = 0.0;
+		}
+	}
+
+	// compute X
+	if(cx){
+		for(jj = 1; jj <= NK; jj++){
+			j = NK - jj + 1;
+			if(QRA[j-1+(j-1)*LDA] == 0.0){
+				info = j;
+				break;
+			}
+			X[j-1] = X[j-1] / QRA[j-1+(j-1)*LDA];
+			if(j != 1){
+				t = -X[j-1];
+				QR_add_vectors(j-1, t, QRA+0+(j-1)*LDA, 1, X, 1);
+			}
+		}
+	}
+
+	// compute residuals and AX, if needed
+	if(cr || cax){
+		for(jj = 1; jj <= ju; jj++){
+			j = ju - jj + 1;
+			if(QRaux[j-1] != 0.0){
+				temp = QRA[j-1+(j-1)*LDA];
+				QRA[j-1+(j-1)*LDA] = QRaux[j-1];
+				if(cr){
+					t = -QR_dot_product(NR-j+1, QRA+j-1+(j-1)*LDA, 1, residuals+j-1, 1) / QRA[j-1+(j-1)*LDA];
+					QR_add_vectors(NR-j+1, t, QRA+j-1+(j-1)*LDA, 1, residuals+j-1, 1);
+				}
+				if(cax){
+					t = -QR_dot_product(NR-j+1, QRA+j-1+(j-1)*LDA, 1, AX+j-1, 1) / QRA[j-1+(j-1)*LDA];
+					QR_add_vectors(NR-j+1, t, QRA+j-1+(j-1)*LDA, 1, AX+j-1, 1 );
+				}
+				QRA[j-1+(j-1)*LDA] = temp;
+			}
+		}
+	}
+
+	return info;
+}
+
+
+
+// solve a linear system of equations of the format:
+//	  A*X = B
+// in a least squares sence, i.e. minimize ||A*X - B||_2
+// Here, A is a real matrix of size NR x NC, and X is a 1D vector of size NC.
+// Uses QR-decomposition, which must be performed beforehand using the function QR_decomposition(..)
+// Hence, this function does not actually use the matrix A, but its QR decomposition QRA (and some other auxiliary variables).
+// Code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/qr_solve/qr_solve.html
+void QR_linear_least_squares( 	double			QRA[], 			// (INPUT/OUTPUT) array of size LDA*NC, containing the QR factorization, as computed using QR_decomposition(..).  Not actually modified permanently by this function, but used temporarily internally. So its output is the same as input.
+								const long 		LDA,			// (INPUT) the leading dimension of A, i.e. linear index periodicity between subsequent columns. Typically this will be equal to NR, but may also be larger (e.g. when processing a sub-matrix)
+								const long 		NR, 			// (INPUT) the number of rows of A
+								const long 		NC,				// (INPUT) the number of columns of A
+								const long		rank, 			// (INPUT) the rank of the matrix, for example estimated via QR_decomposition
+								const double	B[], 			// (INPUT) 1D vector of size NR
+								long 			pivots[],		// (INPUT) 1D array of size NC, specifying the index of the column of A that has been interchanged into the K-th column, if pivoting was requested during QR. Must be as calculated using QR_decomposition(..).
+								double 			QRaux[],		// (INPUT) 1D array of size NC, containing information regarding the QR decomposition. Must be as calculated using QR_decomposition(..).
+								double 			X[], 			// (OUTPUT) 1D vector of size NC, containing a least-squares solution. Must be preallocated.
+								double 			residuals[]){	// (OUTPUT) residuals, B - A*X
+	long i, info, j, k;
+	double t;
+	double *dummyAB=NULL, *dummyQY=NULL;
+
+	if(rank != 0){
+		info = QR_operation(QRA, LDA, NR, rank, QRaux, B, dummyQY, residuals, X, residuals, dummyAB, "00110");
+	}
+	for(i = 0; i<NC; i++){
+		pivots[i] = - pivots[i];
+	}
+	for(i = rank; i<NC; i++){
+		X[i] = 0.0;
+	}
+	for(j = 1; j<=NC; j++){
+		if(pivots[j-1] <= 0){
+			k = - pivots[j-1];
+			pivots[j-1] = k;
+
+			while(k != j){
+				t = X[j-1];
+				X[j-1] = X[k-1];
+				X[k-1] = t;
+				pivots[k-1] = -pivots[k-1];
+				k = pivots[k-1];
+			}
+		}
+	}
+	return;
+}
+
+
+
+// Solver the linear least squares problem:
+//	minimize ||A*X-B||_2
+// for some matrix A and some vector or matrix X, using QR-decomposition of A
+// If B (and thus X) has NCb columns, this corresponds to NCb independent least-squares problems, which are solved separately (but profiting from the same QR decomposition)
+// Most of the computation time goes into the QR-decomposition of the matrix A
+void QR_linear_least_squares(	const long		NRa,		// (INPUT) number of rows in A
+								const long 		NCa,		// (INPUT) number of columns in A, and number of rows in X
+								const long		NCb,		// (INPUT) number of columns in B. This is the number of independent problems to solve.
+								const std::vector<double> 	&A,			// (INPUT) 2D matrix of size NRa x NCa, in row-major or column-major format
+								const std::vector<double> 	&B,			// (INPUT) 1D column vector of length NRa = NRb, or a 2D matrix of size NRa x NCb, in row-major or column-major format
+								const bool					row_major,	// (INPUT) indicating whether A and B are stored in row-major format (instead of column-major). The same applies to the output X.
+								std::vector<double>			&QRA,		// (SCRATCH) scratch space for internal computations and for storing the QR-decomposition of A. Will be resized as needed up to size NRa x NCa
+								std::vector<double>			&scratch,	// (SCRATCH) scratch space for internal computations. Will be resized as needed up to size max(NCa,NRa)
+								std::vector<double>			&X,			// (OUTPUT) vector or matrix of size NCa x NCb, storing the solutitions to the least-squares problems. Will be in row-major format if row_major=true, otherwise it will be in column-major format.
+								long						&rank){		// (OUTPUT) the estimated rank of the matrix A
+	const long NRx = NCa;
+	const long NCx = NCb;
+	long r,c;
+
+	// prepare and work on a copy of A, in column-major format
+	const long LDA = NRa; // the leading dimension of A, i.e. linear index periodicity between subsequent columns. Here we assume that A is stored compactly in memory, i.e. LDA=NRa (after A is turned into column-major format, if needed).
+	std::vector<double> BCM(NRa*NCb); // store a copy of B in column-major format
+	if(row_major){
+		// transform A into column-major format and store result in QRA
+		QRA.resize(NRa*NCa);
+		for(r=0; r<NRa; ++r){
+			for(c=0; c<NCa; ++c){
+				QRA[c*NRa + r] = A[r*NCa + c];
+			}
+		}
+		// transform B into column-major format and store result in BCM
+		for(r=0; r<NRa; ++r){
+			for(c=0; c<NCb; ++c){
+				BCM[c*NRa + r] = B[r*NCb + c];
+			}
+		}
+	}else{
+		// A and B are already in column-major format
+		QRA = A;
+		BCM = B;
+	}
+						
+	// compute QR decomposition of A, and store results directly in QRA
+	scratch.resize(NCa);
+	std::vector<double> QRaux(NCa);
+	std::vector<long> pivots(NCa);
+	QR_decomposition (	&QRA[0],
+						LDA,
+						NRa,
+						NCa,
+						true, // pivoting
+						&scratch[0],
+						&QRaux[0],
+						&pivots[0],
+						rank);
+	
+	// use QR decomposition to minimize ||A*X - B||_2, separately for each column in X
+	// QRA, BCM, XCM are all treated in column-major format at this point
+	std::vector<double> XCM(NCa*NCb);
+	scratch.resize(NRa); // use to store residuals
+	for(long j=0; j<NCb; ++j){
+		QR_linear_least_squares(&QRA[0], LDA, NRa, NCa, rank, &BCM[j*NRa], &pivots[0], &QRaux[0], &XCM[j*NCa], &scratch[0]);
+	}
+		
+	// transform XCM to row-major format and store in X, if needed
+	if(row_major){
+		X.resize(NRx*NCx);
+		for(r=0; r<NRx; ++r){
+			for(c=0; c<NCx; ++c){
+				X[r*NCx + c] = XCM[c*NRx + r];
+			}
+		}
+	}else{
+		X = XCM;
+	}
+}
+
+
+
+// calculate the inverse of a square matrix A, using QR decomposition
+// A can be in row-major or column-major format; the internal computation is the same, because confusing majority is equivalernt to temporary transposing
+void QR_matrix_inverse(	const long					N,			// (INPUT) number of rows & columns in A
+						const std::vector<double> 	&A,			// (INPUT) 2D matrix of size N x N, in row-major or column-major format (which, does not matter)
+						std::vector<double>			&QRA,		// (SCRATCH) scratch space for internal computations and for storing the QR-decomposition of A. Will be resized as needed up to size N^2
+						std::vector<double>			&Ainv,		// (OUTPUT) 2D matrix of size N x N, storing the inverse of A (or an approximation thereof, if A is non-invertible). Ainv will be in row-major format iff A was in row-major format.
+						long						&rank){		// (OUTPUT) an estimate of the rank of A. If A is invertible, this will be equal to N.
+	dvector identity, scratch;
+	get_identity_matrix(N,identity);
+	// solve linear system A*Ainv = identity, in the least squares sense
+	// note that we pretent as if A was in column-major format for efficiency (QR would otherwise transform everything temporarily)
+	//   If A is actually in row-major format, then pretending as if it's column-major is equivalent to transposing A, 
+	//   hence the obtained Ainv will just be the inverse of A^T in column-major format, or equivalently, the inverse of A in row-major format.
+	QR_linear_least_squares(N,N,N,A,identity,false,QRA,scratch,Ainv,rank);
+}
 
 
 
@@ -742,7 +1850,7 @@ void LUImproveSolutionToLinearSystem(	const TYPE			matrix[], 	//original square 
 
 
 
-// Solve linear system Ax=b for vector x
+// Solve linear system Ax=b for vector x, using LU decomposition of the matrix A
 // scratchSpace[] is only needed for the internal calculations, and should be allocated prior to calling (size at least N*N).
 // maxError defines the maximum acceptable L2 norm E(X):=|AX-b|, where X is the approximate solution.
 // As long as E(X)>maxError, the solution X is improved iteratively.
@@ -751,13 +1859,13 @@ void LUImproveSolutionToLinearSystem(	const TYPE			matrix[], 	//original square 
 // x[] should be allocated prior to calling (size at least N).
 // Returns false on error (e.g. when matrix is singular).
 template<class TYPE>
-bool solveLinearSystem(	const TYPE 			matrix[], // in row major format
-						TYPE				scratchSpace[],
-						unsigned long 		N,
-						const TYPE 			b[],
-						double 				maxError, 			//max allowed L2 error |Ax-b|
-						unsigned int 		maxImprovements, 	//max allowed number of iterative improvements of solution. Use this to cap computing time if your matrices are unpredictably *pathological*
-						TYPE 				x[]){
+bool LUsolveLinearSystem(	const TYPE 			matrix[], 			// (INPUT) in row major format
+							TYPE				scratchSpace[],		// (SCRATCH) pre-allocated of size N*N
+							unsigned long 		N,
+							const TYPE 			b[],
+							double 				maxError, 			//max allowed L2 error |Ax-b|
+							unsigned int 		maxImprovements, 	//max allowed number of iterative improvements of solution. Use this to cap computing time if your matrices are unpredictably *pathological*
+							TYPE 				x[]){				// (OUTPUT) the solution vector x. Must be pre-allocated of size N.
 	if(N==0) return false;
 	int Psign;
 	long i,j;
@@ -790,16 +1898,110 @@ bool solveLinearSystem(	const TYPE 			matrix[], // in row major format
 }
 
 
-
-
-
-void get_identity_matrix(	const long 			NR,
-							std::vector<double>	&A){	// (INPUT/OUTPUT) will be the identity matrix of size NR x NR, in row-major format
-	A.assign(NR*NR,0);
-	for(long r=0; r<NR; ++r){
-		A[r*NR + r] = 1;
+// Calculate the inverse of a rectangular non-singular matrix.
+// Matrix needs to be in LU decomposition format (LUmatrix), as returned by the routine LUDecomposition(..) defined above.
+// IPIV[] should store the pivoting indices from the LU decomposition, as returned by LUDecomposition(..)
+// inverse[] (output) will contain the inverse matrix in row-major format, and should already be allocated before calling (size at least N*N).
+template<class TYPE>
+void LUInverse(	const TYPE			LUmatrix[], 
+				unsigned long 		N, 
+				const unsigned long IPIV[], 
+				TYPE				inverse[]){
+	TYPE *col = new TYPE[N];
+	long i,j;
+	for(i=0; i<N; ++i){
+		for(j=0; j<N; ++j){ col[j] = 0; }
+		col[i] = 1;
+		LUSolveLinearSystem(LUmatrix, N, IPIV, col);
+		for(j=0; j<N; ++j){ inverse[j*N+i] = col[j]; }
 	}
+	delete[] col;
 }
+
+
+
+// Calculate the inverse of a rectangular, non-singular matrix.
+// Uses LU decomposition, forward substitution and back substitution.
+// Merely a wrapper for the routines LUDecomposition() and LUInverse() defined above.
+// Returns false on error (e.g. if matrix is singular).
+// matrix[] (input) will be modified after this call (so back it up if you still need it).
+// inverse[] (output) should already be allocated before calling (at least size N*N).
+template<class TYPE>
+bool inverseMatrix(	TYPE 			matrix[], 
+					unsigned long 	N, 
+					TYPE			inverse[]){
+	if(N==0) return false;
+	unsigned long *IPIV = new unsigned long[N];
+	int Psign;
+	if(!LUDecomposition(matrix, N, IPIV, Psign)){
+		delete[] IPIV;
+		return false; // error on LU decomposition
+	}
+	LUInverse(matrix, N, IPIV, inverse);
+	delete[] IPIV;
+	return true;
+}
+
+
+
+// same as above, but LU decomposition method is supplemented by iterative improvement of solution
+template<class TYPE>
+bool inverseMatrix(	const TYPE			matrix[], // (input)
+					unsigned long 		N, 
+					TYPE		 		inverse[], // (output) should be allocated to size at least N*N
+					TYPE				scratchSpace[], // should be allocated to size at least N*N	
+					double 				maxError, //max allowed L2 error |Ax - b|, where x is any column of the inverse and b is the corresponding unit vector (0,..,1,..,0)
+					unsigned int 		maxImprovements){ //max allowed number of iterative improvements of inverse. Use this to cap computing time if your matrices are unpredictably *pathological*. Set to 0 for unlimited number of improvements.
+	if(N==0) return false;
+	unsigned long *IPIV = new unsigned long[N];
+	int Psign;
+	long i,j;
+	int impCount;	
+	
+	//scratch with a copy of the matrix
+	for(i=0; i<N*N; ++i){
+		scratchSpace[i] = matrix[i];
+	}
+	
+	if(!LUDecomposition(scratchSpace, N, IPIV, Psign)){
+		delete[] IPIV;
+		return false; // error on LU decomposition
+	}
+	
+	TYPE *b = new TYPE[N];
+	TYPE *x = new TYPE[N];
+	for(j=0; j<N; ++j){
+		for(i=0; i<N; ++i){ x[i] = b[i] = 0; }
+		x[j] = b[j] = 1;
+		LUSolveLinearSystem(scratchSpace, N, IPIV, x);
+		if((maxError>0) && (maxImprovements>0)){
+			impCount = 0;
+			while((errorInLinearSolution(matrix, N, b, x) > maxError) && ((impCount<maxImprovements) || (maxImprovements==0))){
+				LUImproveSolutionToLinearSystem(matrix, scratchSpace, N, IPIV, b, x);
+				++impCount;
+			}
+		}
+		for(i=0; i<N; ++i){ inverse[i*N+j] = x[i]; }
+	}
+	
+	
+	delete[] b;
+	delete[] x;
+	delete[] IPIV;
+	return true;
+}
+
+
+
+double get_matrix_trace(const long NR, const std::vector<double> &matrix){
+	double T = 0;
+	for(long r=0; r<NR; ++r){
+		T +=matrix[r*NR+r];
+	}
+	return T;
+}
+
+
 
 
 // calculate the Hilbert-Schmidt norm (L2-norm) of a matrix: ||A||_2 = SQRT(sum_{r,c}|A_rc|^2)
@@ -911,44 +2113,80 @@ void multiply_matrix_with_vector(	const long			NR,
 									TYPE1				A[],	// (INPUT) array of size NR*NC, in row-major format
 									TYPE2				X[],	// (INPUT) pre-allocated array of size NC or greater
 									std::vector<TYPE3>	&Y){	// (OUTPUT) product A*X, of size NR
-	Y.assign(NR,0);
-	for(long r=0; r<NR; ++r){
-		for(long c=0; c<NC; ++c){
-			Y[r] += A[r*NC+c] * X[c];
+	if((NR==2) && (NC==2)){
+		// 2 x 2 matrix, treat as special case for computational efficiency
+		// this is useful for example in BiSSE models, where a matrix is multiplied with a vector numerous times
+		Y.resize(NR);
+		Y[0] = A[0]*X[0] + A[1]*X[1];
+		Y[1] = A[2]*X[0] + A[3]*X[1];
+	}else{
+		Y.assign(NR,0);
+		for(long r=0; r<NR; ++r){
+			for(long c=0; c<NC; ++c){
+				Y[r] += A[r*NC+c] * X[c];
+			}
 		}
 	}
 }
-
-// Calculate the product Y = X^T * A
-template<class TYPE1,class TYPE2,class TYPE3>
-void multiply_vector_with_matrix(	const long			NR,
-									const long			NC,
-									TYPE1				A[],	// (INPUT) array of size NR*NC, in row-major format
-									TYPE2				X[],	// (INPUT) pre-allocated array of size NC or greater
-									std::vector<TYPE3>	&Y){	// (OUTPUT) product A*X, of size NR
-	Y.assign(NR,0);
-	for(long r=0; r<NR; ++r){
-		for(long c=0; c<NC; ++c){
-			Y[r] += X[c] * A[c*NC+r];
-		}
-	}
-}
-
-
 
 
 // multiply matrix A with column-vector X
 // matrix is assumed in row-major format
 template<class TYPE1, class TYPE2, class TYPE3>
-void multiply_matrix_with_vector(	const long					NR,
-									const long					NC,
-									const std::vector<TYPE1>	&A,		// (INPUT) matrix of size NR*NC, in row-major format
-									const std::vector<TYPE2>	&X,		// (INPUT) std::vector of size NC
-									std::vector<TYPE3>			&Y){	// (OUTPUT) product A*X, of size NR
-	Y.assign(NR,0);
+inline void multiply_matrix_with_vector(const long					NR,
+										const long					NC,
+										const std::vector<TYPE1>	&A,		// (INPUT) matrix of size NR*NC, in row-major format
+										const std::vector<TYPE2>	&X,		// (INPUT) std::vector of size NC
+										std::vector<TYPE3>			&Y){	// (OUTPUT) product A*X, of size NR
+	if((NR==2) && (NC==2)){
+		// 2 x 2 matrix, treat as special case for computational efficiency
+		// this is useful for example in BiSSE models, where a matrix is multiplied with a vector numerous times
+		Y.resize(NR);
+		Y[0] = A[0]*X[0] + A[1]*X[1];
+		Y[1] = A[2]*X[0] + A[3]*X[1];
+	}else{
+		Y.assign(NR,0);
+		long r, c;
+		for(r=0; r<NR; ++r){
+			for(c=0; c<NC; ++c){
+				Y[r] += A[r*NC+c] * X[c];
+			}
+		}
+	}
+}
+
+
+// Calculate the product Y = X^T * A
+template<class TYPE1,class TYPE2,class TYPE3>
+void multiply_vector_with_matrix(	const long			NR,
+									const long			NC,
+									TYPE2				X[],	// (INPUT) pre-allocated array of size NR or greater
+									TYPE1				A[],	// (INPUT) array of size NR*NC, in row-major format
+									std::vector<TYPE3>	&Y){	// (OUTPUT) product X^T*A, of size NC
+	Y.assign(NC,0);
 	for(long r=0; r<NR; ++r){
 		for(long c=0; c<NC; ++c){
-			Y[r] += A[r*NC+c] * X[c];
+			Y[c] += X[r] * A[r*NC+c];
+		}
+	}
+}
+
+
+
+
+// Calculate the product Y = X^T * A
+// matrix is assumed in row-major format
+template<class TYPE1, class TYPE2, class TYPE3>
+void multiply_vector_with_matrix(	const long					NR,
+									const long					NC,
+									const std::vector<TYPE2>	&X,		// (INPUT) std::vector of size NR
+									const std::vector<TYPE1>	&A,		// (INPUT) matrix of size NR*NC, in row-major format
+									std::vector<TYPE3>			&Y){	// (OUTPUT) product X^T*A, of size NC
+	Y.assign(NC,0);
+	long r,c;
+	for(r=0; r<NR; ++r){
+		for(c=0; c<NC; ++c){
+			Y[c] += X[r] * A[r*NC+c];
 		}
 	}
 }
@@ -966,11 +2204,11 @@ void multiply_matrices(	const long			NRa,	// (INPUT) number of rows in A
 						ARRAY_TYPE3			&AB){	// (OUTPUT) 2D matrix of size NRa x NCb, in row-major format, containing the product A*B.
 	const long NR = NRa;
 	const long NC = NCb;
-	AB.resize(NR*NC);
-	for(long r=0; r<NR; ++r){
-		for(long c=0; c<NC; ++c){
-			AB[r*NC + c] = 0;
-			for(long k=0; k<NCa; ++k){
+	AB.assign(NR*NC,0);
+	long r,c,k;
+	for(r=0; r<NR; ++r){
+		for(c=0; c<NC; ++c){
+			for(k=0; k<NCa; ++k){
 				AB[r*NC + c] += A[r*NCa + k] * B[k*NCb + c];
 			}
 		}
@@ -1455,15 +2693,22 @@ NumericVector exponentiate_matrix_for_multiple_scalings_CPP(const long	 			NR,		
 // wrapper class for preparing exponentation of a matrix A and exponentiating A using various scalar factors
 class matrix_exponentiator{
 private:
+	// variables for exponentiation using matrix polynomials
 	long 				NP;					// number of polynomials available for calculating the exponential of the input matrix
 	std::vector<double> polynomials;		// array of size NP x NR x NR, containing the pre-computed polynomials of matrix: Cp:=A^p/p! for p=0,..,NP-1. Polynomials are stored in layer-row-major format, polynomials[p*NR*NR + r*NR + c] is (r,c)-th-element of A^p/p!
 	std::vector<double>	polynomial_norms;	// array of size NP, containing the Hilbert-Schmidt L2 norm of each polynomial Cp, ||Cp||_2. Used to reduce the number of incorporated polynomials to the only the necessary number (for optimization reasons).
 	long				NPmin;
 	double				epsilon;
-
 	bool				balanced;			// whether the input matrix was balanced prior to calculating the polynomials
 	std::vector<double>	balances;			// 1D array of size NR, storing the diagonal elements of a diagonal matrix D that was applied for balancing A prior to polynomial calculation. This transformation will be reversed after exponentiation. Only relevant if balanced==true.
 	long				scaling_power;		// base-2 scaling power that was applied to the matrix prior to calculating the polynomials. This scaling will be reversed after exponentiation, via repeated squaring. Only relevant if balanced==true.
+	
+	// variables for exponentiation using eigendecomposition
+	bool					use_eigendecomposition;	// whether exponentiation should be performed using eigendecomposition
+	mutable std::vector<cdouble>	exponentiation_scratch;
+	std::vector<cdouble> 	eigenvalues;
+	std::vector<cdouble> 	EVmatrix;
+	std::vector<cdouble> 	inverse_EVmatrix;
 public:
 	bool				initialized;
 	long 				NR;					// number of rows & columns in the input matrix
@@ -1472,19 +2717,27 @@ public:
 	matrix_exponentiator(){ initialized = false; }
 	matrix_exponentiator(	const long 			_NR,
 							std::vector<double>	A,					// (INPUT) 2D array of size NR x NR, in row-major format
-							const double		rescaling,			// (INPUT) scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
+							const double		rescaling,			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
 							double				_epsilon,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
 							const long			_NPmin,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
 							const long			NPmax,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
 							bool				_balanced){
 		initialize(_NR, A, rescaling, _epsilon, _NPmin, NPmax, _balanced);
 	}
+	matrix_exponentiator(	const long 					_NR,
+							const std::vector<cdouble>	&_eigenvalues,
+							const std::vector<cdouble>	&_EVmatrix,
+							const std::vector<cdouble>	&_inverse_EVmatrix,
+							const double				rescaling){			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
+		initialize(_NR, _eigenvalues, _EVmatrix, _inverse_EVmatrix, rescaling);
+	}
+	
 	
 	// prepare exponentiation of matrix A, by pre-calculating polynomials of A
 	// if balanced==true then preps include balancing the matrix. This may be needed for some weird matrixes
 	void initialize(const long 			_NR,
 					std::vector<double>	A,					// (INPUT) 2D array of size NR x NR, in row-major format
-					const double		rescaling,			// (INPUT) scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
+					const double		rescaling,			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
 					double				_epsilon,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
 					const long			_NPmin,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
 					const long			NPmax,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
@@ -1494,6 +2747,7 @@ public:
 		NPmin 		= _NPmin;
 		epsilon 	= _epsilon;
 		initialized	= true;
+		use_eigendecomposition = false;
 		if(balanced){
 			calculate_balanced_matrix_polynomials(	NR,
 													A,
@@ -1519,45 +2773,1265 @@ public:
 		}
 	}
 	
+	// prepare exponentiation of matrix A based on eigendecomposition
+	void initialize(const long 					_NR,
+					const std::vector<cdouble>	&_eigenvalues,
+					const std::vector<cdouble>	&_EVmatrix,
+					const std::vector<cdouble>	&_inverse_EVmatrix,
+					const double				rescaling){			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
+		NR 						= _NR;
+		initialized				= true;
+		use_eigendecomposition 	= true;
+		eigenvalues 			= _eigenvalues;
+		EVmatrix 				= _EVmatrix;
+		inverse_EVmatrix 		= _inverse_EVmatrix;
+		if(rescaling!=1.0){
+			for(long r=0; r<eigenvalues.size(); ++r) eigenvalues[r] *= rescaling;
+		}
+	}
+	
 	
 	// calculate exp(tau*A)
 	void get_exponential(	double				tau,					// (INPUT) scaling factor in exponent
 							std::vector<double>	&exponential) const{	// (OUTPUT) array of size NR x NR, containing the exponentiated matrix exp(tau*A), in row-major format.
-		if(balanced){
+		if(use_eigendecomposition){
+			get_matrix_exponential_using_eigendecomposition(NR, eigenvalues, EVmatrix, inverse_EVmatrix, tau, exponentiation_scratch, exponential);
+		}else if(balanced){
 			get_matrix_exponential_using_balanced_polynomials(NR, NP, polynomials, polynomial_norms, tau, epsilon, NPmin, balances, scaling_power, exponential);
 		}else{
 			get_matrix_exponential_using_polynomials(NR, NP, polynomials, polynomial_norms, tau, epsilon, NPmin, exponential);
 		}
 	}
-
 };
 
 
 
+// get an approximation for the expression exp(scaling*A)*X, where A is a quadratic matrix of size NR x NR, and X is a vector or matrix of size NR x NC
+// the approximation is obtained using the expression sum_n=0^order (scaling*A)^n/n! * X
+void apply_approximate_matrix_exponential(	const long					NR, 		// (INPUT) number of rows and columns in A, also equal to the number of rows in X
+											const long					NC, 		// (INPUT) number of columns in X
+											const std::vector<double> 	&A, 		// (INPUT) 2D matrix of size NR x NR, in row-major format. The matrix to be exponentially applied.
+											const double				&scaling, 	// (INPUT) an optional multiplicative factor for A, i.e. compute exp(scaling*A) instead of exp(A)*X. Set this to 1 for no scaling.
+											const std::vector<double>	&X, 		// (INPUT) the vector or matrix to which exp(A) should be applied
+											const long					&order,		// (INPUT) how many polynomials to include in the expansion of exp(A), i.e. 1 + A + A^2/2! + A^3/3! ... A^order/order!
+											std::vector<double>			&scratch1,	// (SCRATCH) scratch space needed for internal computation
+											std::vector<double>			&scratch2,	// (SCRATCH) scratch space needed for internal computation
+											std::vector<double>			&Y){		// (OUTPUT) the resulting vector or matrix of size NR x NC, an approximation to Y=exp(scaling*A)*X
+	long n, r, c, k;
+	scratch1 = X;
+	scratch2.resize(NR*NC);
+	Y = X;
+	std::vector<double> *source, *target;
+	for(n=1; n<=order; ++n){
+		source = (n%2==1 ? &scratch1 : &scratch2);
+		target = (n%2==0 ? &scratch1 : &scratch2);
+		// compute the polynomial term of order n, i.e. ((scaling*A)^n/n!)*X
+		// store results in target matrix
+		target->assign(NR*NC,0);
+		for(r=0; r<NR; ++r){
+			for(c=0; c<NC; ++c){
+				// compute target := (scaling*A)/n * source
+				for(k=0; k<NR; ++k){
+					(*target)[r*NC+c] += (scaling/n)*A[r*NR+k]*(*source)[k*NC+c];
+				}
+			}
+		}
+		// add target to Y
+		for(r=0; r<NR; ++r){
+			for(c=0; c<NC; ++c){
+				Y[r*NC+c] += (*target)[r*NC+c];
+			}
+		}
+	}
+}
+
+
+
+
+// get an approximation for the expression [exp(scaling*A) - Id]*A^{-1}*X, where A is a quadratic matrix of size NR x NR, and X is a vector or matrix of size NR x NC
+// the approximation is obtained using the expression sum_n=0^order (scaling/(n+1)) * (scaling*A)^n/n! * X
+// This routine is mainly used for the Rosenbrock-Euler ODE solver
+void apply_approximate_RosenbrockEuler_exponential(	const long					NR, 		// (INPUT) number of rows and columns in A, also equal to the number of rows in X
+													const long					NC, 		// (INPUT) number of columns in X
+													const std::vector<double> 	&A, 		// (INPUT) 2D matrix of size NR x NR, in row-major format. The matrix to be exponentially applied.
+													const double				&scaling, 	// (INPUT) an optional multiplicative factor for A, i.e. compute exp(scaling*A) instead of exp(A)*X. Set this to 1 for no scaling.
+													const std::vector<double>	&X, 		// (INPUT) the vector or matrix to which exp(A) should be applied
+													const long					&order,		// (INPUT) how many polynomials to include in the expansion of exp(A), i.e. 1 + A + A^2/2! + A^3/3! ... A^order/order!
+													std::vector<double>			&scratch1,	// (SCRATCH) scratch space needed for internal computation
+													std::vector<double>			&scratch2,	// (SCRATCH) scratch space needed for internal computation
+													std::vector<double>			&Y){		// (OUTPUT) the resulting vector or matrix of size NR x NC, an approximation to Y=exp(scaling*A)*X
+	long n, r, c, k;
+	scratch1 = X;
+	scratch2.resize(NR*NC);
+	
+	// zeroth-order term
+	Y.resize(X.size());
+	for(k=0; k<Y.size(); ++k) Y[k] = scaling*X[k];
+	
+	double REfactor;
+	std::vector<double> *source, *target;
+	for(n=1; n<=order; ++n){
+		source = (n%2==1 ? &scratch1 : &scratch2);
+		target = (n%2==0 ? &scratch1 : &scratch2);
+		// compute the polynomial term of order n, i.e. ((scaling*A)^n/n!)*X
+		// store results in target matrix
+		target->assign(NR*NC,0);
+		for(r=0; r<NR; ++r){
+			for(c=0; c<NC; ++c){
+				// compute target := (scaling*A)/n * source
+				for(k=0; k<NR; ++k){
+					(*target)[r*NC+c] += (scaling/n)*A[r*NR+k]*(*source)[k*NC+c];
+				}
+			}
+		}
+		// add target to Y
+		REfactor =  (scaling/(n+1.0)); // modifying factor to get Rosenbrock-Euler form, instead of classical exponential
+		for(r=0; r<NR; ++r){
+			for(c=0; c<NC; ++c){
+				Y[r*NC+c] += REfactor * (*target)[r*NC+c];
+			}
+		}
+	}
+}
+
+
+
+inline double dot_product(const dvector &X, const dvector &Y){
+	double S = 0;
+	for(long i=0; i<X.size(); ++i) S += X[i]*Y[i];
+	return S;
+}
+
+
+
+// estimate the dominant eigenvalue and corresponding eigenvector of a square matrix, using power iteration
+// returns true if convergence was successful after two trials
+bool get_dominant_eigenvalue(	const long		N,				// (INPUT) the number of rows & columns in A
+								const dvector 	&A,				// (INPUT) square 2D matrix of size N x N, in row-major format
+								const long		max_iterations, // (INPUT) maximum number of iterations (matrix multiplications) to perform
+								const double	tolerance,		// (INPUT) relative error tolerance for detecting convergence of X (in terms of direction). This is the sine of the angle between two successive iterations of X; if the angle is small, it means the direction of X changes little. A tolerance = 1e-3 is usually sufficient.
+								dvector			&X,				// (OUTPUT) an estimate for the dominant eigenvector, normalized to norm 1. This vector is only uniquely defined in terms of direction and norm, but not sign.
+								double			&lambda){		// (OUTPUT) an estimate for the dominant eigenvalue
+	double XAX, error, best_lambda, best_error;
+	dvector AX, Xnew(N), best_X;
+	X.resize(N);
+	for(int trial=0; trial<min(3L,N); ++trial){ // perform multiple trials, in case the first happens to start with a "bad" direction X
+		if(trial==0){
+			// generate a random start vector X
+			for(long i=0; i<N; ++i) X[i] = R::runif(0.0,1.0);
+		}else{
+			// pick a new sart vector X that is perpendicular to the previous X
+			// step 1: find largest (in magnitude) element in X
+			long largest = 0;
+			for(long i=0; i<N; ++i){
+				if(abs(X[i])>abs(X[largest])) largest = i;
+			}
+			// step 2: generate N-1 random entries for Xnew, except at the position [largest]
+			for(long i=0; i<N; ++i) Xnew[i] = (i==largest ? 0.0 : R::runif(0.0,1.0));
+			// step 3: choose Xnew[largest] such that the dot-product X^T*Xnew is zero
+			Xnew[largest] = (-1/X[largest]) * dot_product(X,Xnew);
+			// step 4: adopt Xnew, and repeat power iteration below
+			X = Xnew;
+		}
+
+		// normalize X
+		double S = sqrt(dot_product(X,X));
+		for(long i=0; i<N; ++i) X[i] /= S;
+	
+		// iterate over X(i+1) = A*X(i)/lambda(i), where lambda(i):=X(i)^T*A*X(i)/||X(i)||_2
+		for(long n=0; n<max_iterations; ++n){
+			// compute A*X
+			AX.assign(N,0);
+			for(long r=0; r<N; ++r){
+				for(long c=0; c<N; ++c){
+					AX[r] += A[r*N+c]*X[c];	
+				}
+			}
+			// compute X^TX
+			S = dot_product(X,X);
+			// compute X^T*(A*X)
+			XAX = 0;
+			for(long i=0; i<N; ++i) XAX += X[i]*AX[i];
+			if(XAX==0){
+				// landed on the zero-eigenvalue, so we're stuck (converged) on this eigenspace
+				lambda = 0;
+				error  = 0;
+				break;
+			}
+			// compute lambda = X^T*A*X/(X^T*X), the current estimate of the dominant eigenvalue
+			lambda = XAX/S;
+			// compute next iteration, Xnext = A*X/lambda
+			for(long i=0; i<N; ++i) Xnew[i] = AX[i]/lambda;
+			// normalize Xnew, just in case
+			S = sqrt(dot_product(Xnew,Xnew));
+			for(long i=0; i<N; ++i) Xnew[i] /= S;
+			// compute error := sin(angle between X and Xnew)
+			// an error << 1 implies convergence
+			error = sqrt(1 - min(1.0,SQ(dot_product(X,Xnew)))); // this formula relies on the fact that X and Xnew are normalized
+			// adopt new X
+			X = Xnew;
+			if(error<tolerance) break; // reached convergence within relative tolerance
+		}
+		if((trial==0) || (abs(lambda)>abs(best_lambda))){
+			// record the outcome of this trial, regardless of convergence, if lambda is better than the previous ones
+			best_lambda = lambda;
+			best_error  = error;
+			best_X		= X;
+		}
+	}
+	lambda  = best_lambda;
+	X		= best_X;
+	return (best_error<tolerance);
+}
+
+
+
+
+// find the smallest eigenvalue (by magnitude) of a square matrix A
+// this method first inverts A using QR decomposition and then uses the power method to compute the dominant eigenvalue of A
+// if the matrix is non-invertible, its weakest eigenvalue is estimated to be 0
+bool get_weakest_eigenvalue(const long		N,				// (INPUT) the number of rows & columns in A
+							const dvector 	&A,				// (INPUT) square 2D matrix of size N x N, in row-major format
+							const long		max_iterations, // (INPUT) maximum number of iterations (matrix multiplications) to perform during the power method
+							const double	tolerance,		// (INPUT) relative error tolerance for detecting convergence during the power method
+							double			&lambda){
+	long rank;
+	dvector QRA,Ainv,X;
+	QR_matrix_inverse(N,A,QRA,Ainv,rank);
+	if(rank<N){
+		lambda = 0;
+		return true;
+	}
+	// get dominant eigenvalue of Ainv; this will be the inverse of the weakest eigenvalue of A
+	const bool converged = get_dominant_eigenvalue(N,Ainv,max_iterations, tolerance, X, lambda);
+	lambda = 1/lambda;
+	return converged;
+}
+
+
+
+
+
+// balance a square real matrix prior to eigendecomposition
+void EIG_balance_matrix(const long 	N, 			// (INPUT) the number of rows & columns in A
+						double 		A[], 		// (INPUT/OUTPUT) 2D matrix of size N x N, in column-major format. On input, the matrix to be balanced. On output, the matrix is modified (balanced) in situ.
+						long 		&low, 		// (OUTPUT) information on the location of zeros in A
+						long 		&igh,		// (OUTPUT) information on the location of zeros in A
+						double 		scale[]){	// (OUTPUT) technical information on the permutations and scalings used. Must be preallocated to size N
+	double b2, c, f, g, r, radix, s, t;
+	bool done, noconv, swap;
+	long i, j, k, l, m;
+
+	radix 	= 16.0;
+	b2 		= radix * radix;
+	j 		= -1;
+	m 		= -1;
+	k 		= 0;
+	l 		= N - 1;
+
+	done = false;
+	while(!done){
+		for(j = l; 0 <= j; j--){
+			swap = true;
+			for(i = 0; i <= l; i++){
+				if(i != j){
+					if(A[j+i*N] != 0.0){
+						swap = false;
+						break;
+					}
+				}
+			}
+			if(swap){
+				m = l;
+				scale[m] = (double) j;
+
+				if(j != m){
+					for(i=0; i <= l; i++){
+						t        = A[i+j*N];
+						A[i+j*N] = A[i+m*N];
+						A[i+m*N] = t;
+					}
+					for(i=k; i < N; i++){
+						t        = A[j+i*N];
+						A[j+i*N] = A[m+i*N];
+						A[m+i*N] = t;
+					}
+				}
+				if(l == 0){
+					low = k;
+					igh = l;
+					return;
+				}
+
+				l = l - 1;
+				if(l < 0){
+					done = true;
+				}
+				break;
+			}else if(j == 0){
+				done = true;
+				break;
+			}
+		}
+	}
+
+	done = false;
+	while(!done){
+		for(j = k; j <= l; j++){
+			swap = true;
+			for(i = k; i <= l; i++){
+				if(i != j){
+					if(A[i+j*N] != 0.0){
+						swap = false;
+						break;
+					}
+				}
+			}
+			if(swap){
+				m = k;
+				scale[m] = (double) j;
+				if(j != m){
+					for(i=0; i <= l; i++){
+						t        = A[i+j*N];
+						A[i+j*N] = A[i+m*N];
+						A[i+m*N] = t;
+					}
+					for(i=k; i < N; i++){
+						t        = A[j+i*N];
+						A[j+i*N] = A[m+i*N];
+						A[m+i*N] = t;
+					}
+				}
+				k = k + 1;
+				if(l < k){
+					done = true;
+				}
+				break;
+			}else{
+				if(j == l){
+					done = true;
+					break;
+				}
+			}
+		}
+	}
+
+	// balance submatrix in rows K to L.
+	for(i = k; i <= l; i++){
+		scale[i] = 1.0;
+	}
+
+	// norm reduction.
+	noconv = true;
+	while(noconv){
+		noconv = false;
+		for(i = k; i <= l; i++){
+			c = 0.0;
+			r = 0.0;
+			for(j = k; j <= l; j++){
+				if(j != i){
+					c = c + abs(A[j+i*N]);
+					r = r + abs(A[i+j*N]);
+				}
+			}
+	
+			// deal with zero C or R due to underflow.
+			if(c != 0.0 && r != 0.0){
+				g = r / radix;
+				f = 1.0;
+				s = c + r;
+				while(c < g){
+					f = f * radix;
+					c = c * b2;
+				}
+				g = r * radix;
+				while(g <= c){
+					f = f / radix;
+					c = c / b2;
+				}
+				if(( c + r ) / f < 0.95 * s){
+					g = 1.0 / f;
+					scale[i] = scale[i] * f;
+					noconv = true;
+
+					for(j = k; j < N; j++){
+						A[i+j*N] = A[i+j*N] * g;
+					}
+					for(j = 0; j <= l; j++){
+						A[j+i*N] = A[j+i*N] * f;
+					}
+				}
+			}
+		}
+	}
+
+	low = k;
+	igh = l;
+}
+
+
+
+
+void EIG_reverse_balancing(	const long 		N, 			// (INPUT) the number of rows & columns in the original matrix A
+							const long 		low, 		// (INPUT) the low index, as returned by EIG_balance_matrix
+							const long 		igh, 		// (INPUT) the igh index, as returned by EIG_balance_matrix
+							const double 	scale[], 	// (INPUT) the scale vector of size N, as returned by EIG_balance_matrix
+							const long 		M,			// (INPUT) the number of columns of Z to be back-transformed
+							double 			Z[]){		// (INPUT/OUTPUT) 2D matrix of size N x M, in column-major format, containing the real & imaginary parts of eigenvectors. Upon return, these will have been back-transformed
+	long i, ii, j, k;
+	double t;
+	if (M <= 0) return;
+
+	if(igh != low){
+		for(i = low; i <= igh; i++){
+			for(j = 0; j < M; j++){
+				Z[i+j*N] = Z[i+j*N] * scale[i];
+			}
+		}
+	}
+
+	for(ii = 0; ii < N; ii++){
+		i = ii;
+		if(i<low || igh<i){
+			if(i < low){
+				i = low - ii;
+			}
+			k = long(scale[i]);
+			if(k != i){
+				for(j=0; j < M; j++){
+					t        = Z[i+j*N];
+					Z[i+j*N] = Z[k+j*N];
+					Z[k+j*N] = t;
+				}
+			}
+		}
+	}
+}
+
+
+
+
+// auxiliary function used for EIG_eigendecomposition
+void EIG_accumulate_similarity(	const long 	N, 		// (INPUT) the number of rows & column in the original matrix
+								const long 	low, 	// (INPUT) The low index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 0, igh = N - 1.
+								const long 	igh, 	// (INPUT) The igh index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 0, igh = N - 1.
+								double 		H[], 	// (INPUT) 2D matrix of size N x N, in column-major format, containing HELMES multiplies
+								const long	ind[], 	// (INPUT) technical information on the ELMHES reduction
+								double 		Z[]){	// (OUTPUT) 2D matrix of size N x N, in column-major format, containing the transformation matrix produced by ELMHES. Must be preallocated to size N*N.
+	long i,j, mp;
+	
+	// initialize to the identity matrix
+	for(i=0; i<N; ++i){
+		for(long j=0; j<N; ++j){
+			Z[i + j*N] = 0;	
+		}
+		Z[i + i*N] = 1;
+	}
+
+	if(igh < low + 2){
+		return;
+	}
+	for(mp = igh - 1; low + 1 <= mp; mp--){
+		for(i = mp + 1; i <= igh; i++){
+			Z[i+mp*N] = H[i+(mp-1)*N];
+		}
+		i = ind[mp];
+
+		if(i != mp){
+			for(j = mp; j <= igh; j++){
+				Z[mp+j*N] = Z[i+j*N];
+			}
+			Z[i+mp*N] = 1.0;
+			for(j = mp + 1; j <= igh; j++){
+				Z[i+j*N] = 0.0;
+			}
+		}
+	}
+}
+
+
+
+
+// transform a real square matrix to upper Hessenberg form, e.g. for subsequent eigendecomposition
+// Code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+void EIG_ELMHES(const long 	N, 		// (INPUT) the number of rows & column in the original matrix
+				const long 	low, 	// (INPUT) The low index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 1, igh = N.
+				const long 	igh, 	// (INPUT) The igh index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 1, igh = N.
+				double 		A[], 	// (INPUT/OUTPUT) 2D matrix of size N x N, in column-major format. On input, the matrix to be reduced. On output, the Hessenberg matrix.
+				long 		ind[]){	// (OUTPUT) 1D array of size N, containing informationon the rows & columns interchanged. Must be preallocated to size N.
+	long i, j, m;
+	double t, x, y;
+
+	for(m = low + 1; m <= igh - 1; m++){
+		x = 0.0;
+		i = m;
+		for(j = m; j <= igh; j++){
+			if(abs(x) < abs(A[j+(m-1)*N] )){
+				x = A[j+(m-1)*N];
+				i = j;
+			}
+		}
+
+		ind[m] = i;
+		if(i != m){
+			for(j = m - 1; j < N; j++){
+				t        = A[i+j*N];
+				A[i+j*N] = A[m+j*N];
+				A[m+j*N] = t;
+			}
+			for(j = 0; j <= igh; j++){
+				t        = A[j+i*N];
+				A[j+i*N] = A[j+m*N];
+				A[j+m*N] = t;
+			}
+		}
+
+		if(x != 0.0){
+			for(i = m + 1; i <= igh; i++){
+				y = A[i+(m-1)*N];
+
+				if(y != 0.0){
+					y = y / x;
+					A[i+(m-1)*N] = y;
+					for(j = m; j < N; j++){
+						A[i+j*N] = A[i+j*N] - y * A[m+j*N];
+					}
+					for(j = 0; j <= igh; j++){
+						A[j+m*N] = A[j+m*N] + y * A[j+i*N];
+					}
+				}
+			}
+		}
+	}
+}
+
+
+
+
+// compute the eigenvalues of a a real square upper Hessenberg matrix, using the QR method
+// Returns 0 upon success, or J>0 if convergence was not reached at the J-th eigenvalue
+// Code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+long EIG_eigenvalues_RUH(	const long 	N, 			// (INPUT) the number of rows & columns in the matrix
+							const long 	low, 		// (INPUT) The low index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 0, igh = N-1
+							const long 	igh, 		// (INPUT) The igh index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 0, igh = N-1
+							double 		H[],		// (INPUT/OUTPUT) 2D matrix of size N x N, in column-major format, storing the upper Hessenberg matrix. On output, this matrix will be modified, to store information about internal transformations
+							double 		lambdaR[], 	// (OUTPUT) 1D array of size N, storing the real part of the eigenvalues. Conjugate pairs are listed consequitively, with the eigenvalue having positive imaginary part listed first. Must be preallocated to size N.
+							double		lambdaI[]){	// (OUTPUT) 1D array of size N, storing the imaginary part of the eigenvalues. Must be preallocated to size N.
+	long en, enm2, i, ierr, itn, its, j, k, l, m, na;
+	double norm, p, q, r, s, t, tst1, tst2, w, x, y, zz;
+	bool notlas;
+
+	ierr = 0;
+	norm = 0.0;
+	k 	 = 0;
+	for(i = 0; i < N; i++){
+		for(j = k; j < N; j++){
+			norm = norm + abs(H[i+j*N]);
+		}
+		k = i;
+		if((i<low) || (igh<i)){
+			lambdaR[i] = H[i+i*N];
+			lambdaI[i] = 0.0;
+		}
+	}
+
+	en 	= igh;
+	t 	= 0.0;
+	itn = 30 * N;
+
+	if(igh < low) return ierr;
+
+	its 	= 0;
+	na 		= igh - 1;
+	enm2 	= igh - 2;
+	while(true){
+		for(l = en; low <= l; l--){
+			if(l == low) break;
+			s = abs(H[l-1+(l-1)*N]) + abs(H[l+l*N]);
+			if(s == 0.0) s = norm;
+			tst1 = s;
+			tst2 = tst1 + abs(H[l+(l-1)*N]);
+			if(tst2 == tst1) break;
+		}
+		x = H[en+en*N];
+		if(l == en){
+			lambdaR[en] = x + t;
+			lambdaI[en] = 0.0;
+			en = na;
+			if(en < low){
+				return ierr;
+			}
+			its  = 0;
+			na   = en - 1;
+			enm2 = na - 1;
+			continue;
+		}
+		y = H[na+na*N];
+		w = H[en+na*N] * H[na+en*N];
+		if(l == na){
+			p = (y - x) / 2.0;
+			q = p * p + w;
+			zz = sqrt(abs(q));
+			x = x + t;
+			if(0.0 <= q){
+				zz = p + abs(zz ) * (p<0 ? -1 : 1);
+				lambdaR[na] = x + zz;
+				if(zz == 0.0){
+					lambdaR[en] = lambdaR[na];
+				}else{
+					lambdaR[en] = x - w / zz;
+				}
+				lambdaI[na] = 0.0;
+				lambdaI[en] = 0.0;
+			}else{
+				lambdaR[na] = x + p;
+				lambdaR[en] = x + p;
+				lambdaI[na] = zz;
+				lambdaI[en] = - zz;
+			}
+			en = enm2;
+			if(en < low) return ierr;
+			its = 0;
+			na = en - 1;
+			enm2 = na - 1;
+			continue;
+		}
+
+		if(itn == 0){
+			ierr = en;
+			return ierr;
+		}
+		// exceptional shift.
+		if(its == 10 || its == 20){
+			t = t + x;
+			for(i = low; i <= en; i++){
+				H[i+i*N] = H[i+i*N] - x;
+			}
+			s = abs(H[en+na*N] ) + abs(H[na+enm2*N] );
+			x = 0.75 * s;
+			y = x;
+			w = - 0.4375 * s * s;
+		}
+
+		its = its + 1;
+		itn = itn - 1;
+		for(m = enm2; l <= m; m--){
+			zz = H[m+m*N];
+			r = x - zz;
+			s = y - zz;
+			p = ( r * s - w ) / H[m+1+m*N] + H[m+(m+1)*N];
+			q = H[m+1+(m+1)*N] - zz - r - s;
+			r = H[m+2+(m+1)*N];
+			s = abs(p) + abs(q) + abs(r);
+			p = p / s;
+			q = q / s;
+			r = r / s;
+			if(m == l) break;
+			tst1 = abs(p) * (abs(H[m-1+(m-1)*N]) + abs(zz) + abs(H[m+1+(m+1)*N]));
+			tst2 = tst1 + abs(H[m+(m-1)*N]) * (abs(q) + abs(r));
+			if(tst2 == tst1) break;
+		}
+
+		for(i = m + 2; i <= en; i++){
+			H[i+(i-2)*N] = 0.0;
+			if(i != m + 2){
+				H[i+(i-3)*N] = 0.0;
+			}
+		}
+
+		// double QR step
+		for(k = m; k <= na; k++){
+			notlas = (k != na);
+			if(k != m){
+				p = H[k+(k-1)*N];
+				q = H[k+1+(k-1)*N];
+				if(notlas){
+					r = H[k+2+(k-1)*N];
+				}else{
+					r = 0.0;
+				}
+				x = abs(p) + abs(q) + abs(r);
+				if(x == 0.0) continue;
+				p = p / x;
+				q = q / x;
+				r = r / x;
+			}
+			s = sqrt( p * p + q * q + r * r ) * (p<0 ? -1 : 1);
+			if(k != m){
+				H[k+(k-1)*N] = - s * x;
+			}else if(l != m){
+				H[k+(k-1)*N] = - H[k+(k-1)*N];
+			}
+			p  = p + s;
+			x  = p / s;
+			y  = q / s;
+			zz = r / s;
+			q  = q / p;
+			r  = r / p;
+		
+			// row modification
+			if(! notlas){
+				for(j = k; j < N; j++){
+					p = H[k+j*N] + q * H[k+1+j*N];
+					H[k+j*N] = H[k+j*N] - p * x;
+					H[k+1+j*N] = H[k+1+j*N] - p * y;
+				}
+				j = min(en, k + 3);
+				// column modification
+				for(i = 0; i <= j; i++){
+					p = x * H[i+k*N] + y * H[i+(k+1)*N];
+					H[i+k*N] = H[i+k*N] - p;
+					H[i+(k+1)*N] = H[i+(k+1)*N] - p * q;
+				}
+			}else{
+				for(j = k; j < N; j++){
+					p = H[k+j*N] + q * H[k+1+j*N] + r * H[k+2+j*N];
+					H[k+j*N]   = H[k+j*N] - p * x;
+					H[k+1+j*N] = H[k+1+j*N] - p * y;
+					H[k+2+j*N] = H[k+2+j*N] - p * zz;
+				}
+				j = min(en, k + 3);
+				// column modification
+				for(i = 0; i <= j; i++){
+					p = x * H[i+k*N] + y * H[i+(k+1)*N] + zz * H[i+(k+2)*N];
+					H[i+k*N] 	 = H[i+k*N] - p;
+					H[i+(k+1)*N] = H[i+(k+1)*N] - p * q;
+					H[i+(k+2)*N] = H[i+(k+2)*N] - p * r;
+				}
+			}
+		}
+	}
+	return ierr;
+}
+
+
+
+// divide two complex numbers a and b, each represented as a real tuples (real & imaginary part)
+// the result, c:=a/b is also returned as a real tuple
+void divide_complex(const double ar, const double ai, const double br, const double bi, double &cr, double &ci){
+	double ais, ars, bis, brs, s;
+	s = abs(br) + abs(bi);
+
+	ars = ar / s;
+	ais = ai / s;
+	brs = br / s;
+	bis = bi / s;
+
+	s = brs * brs + bis * bis;
+	cr = (ars * brs + ais * bis) / s;
+	ci = (ais * brs - ars * bis) / s;
+}
+
+
+
+// calculate eigenvalues & eigenvectors of a square real upper Hessenberg matrix, using the QR method
+// returns 0 upon success, or an integer J>0 if convergence failed for the J-th eigenvalue.
+// Code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+long EIG_eigenvalues_RUH2(	const long 	N, 			// (INPUT) the number of rows & columns in the matrix
+							const long 	low, 		// (INPUT) The low index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 0, igh = N-1
+							const long 	igh, 		// (INPUT) The igh index, as returned by EIG_balance_matrix. If balancing was not performed, set low = 0, igh = N-1
+							double 		H[],		// (INPUT/OUTPUT) 2D matrix of size N x N, in column-major format, storing the upper Hessenberg matrix. On output, this matrix will be modified, to store information about internal transformations
+							double 		lambdaR[], 	// (OUTPUT) 1D array of size N, storing the real part of the eigenvalues. Conjugate pairs are listed consequitively, with the eigenvalue having positive imaginary part listed first. Must be preallocated to size N. If an error occurred (ierr>0), the eigenvalues will be correct for indices ierr+1, .., N.
+							double		lambdaI[],	// (OUTPUT) 1D array of size N, storing the imaginary part of the eigenvalues. Must be preallocated to size N.
+							double		Z[]){		// (INPUT/OUTPUT) 2D matrix of size N x N, in column-major format. On input, contains the ELTRAN or ORTRAN trasformation, if performed. If the eigenvectors of H are requested, this must be the identity matrix. On output, Z contains the real & imaginary part of the eigenvectors. If the function returns with an error code, none of the returned eigenvectors are valid.
+	long en, enm2, i, ierr, itn, its, j, k, l, m, na;
+	double norm, p, q, r, ra, s, sa, t, ti, tr, tst1, tst2, vi, vr, w, x, y, zz;
+	bool notlas;
+
+	ierr = 0;
+	norm = 0.0;
+	k = 0;
+
+	for(i = 0; i < N; i++){
+		for(j = k; j < N; j++){
+			norm = norm + abs(H[i+j*N]);
+		}
+		k = i;
+		if(i < low || igh < i){
+			lambdaR[i] = H[i+i*N];
+			lambdaI[i] = 0.0;
+		}
+	}
+
+	en = igh;
+	t = 0.0;
+	itn = 30 * N;
+	while(low <= en){
+		its = 0;
+		na = en - 1;
+		enm2 = na - 1;
+		while(true){
+			for(l = en; low <= l; l--){
+				if(l == low) break;
+				s = abs(H[l-1+(l-1)*N]) + abs(H[l+l*N]);
+				if(s == 0.0) s = norm;
+				tst1 = s;
+				tst2 = tst1 + abs(H[l+(l-1)*N] );
+				if(tst2 == tst1) break;
+			}
+
+			x = H[en+en*N];
+			// found one root
+			if(l == en){
+				H[en+en*N] = x + t;
+				lambdaR[en] = H[en+en*N];
+				lambdaI[en] = 0.0;
+				en = na;
+				break;
+			}
+			y = H[na+na*N];
+			w = H[en+na*N] * H[na+en*N];
+
+			// found 2 roots
+			if(l == na){
+				p = (y - x) / 2.0;
+				q = p * p + w;
+				zz = sqrt(abs(q ) );
+				H[en+en*N] = x + t;
+				x = H[en+en*N];
+				H[na+na*N] = y + t;
+
+				if(q < 0.0){
+					lambdaR[na] = x + p;
+					lambdaR[en] = x + p;
+					lambdaI[na] = zz;
+					lambdaI[en] = - zz;
+				}else{
+					zz = p + abs(zz ) * (p<0 ? -1 : 1);
+					lambdaR[na] = x + zz;
+					lambdaR[en] = lambdaR[na];
+					if(zz != 0.0 ){
+						lambdaR[en] = x - w / zz;
+					}
+					lambdaI[na] = 0.0;
+					lambdaI[en] = 0.0;
+					x = H[en+na*N];
+					s = abs(x ) + abs(zz );
+					p = x / s;
+					q = zz / s;
+					r = sqrt(p * p + q * q );
+					p = p / r;
+					q = q / r;
+					// row modification.
+					for(j = na; j < N; j++){
+						zz = H[na+j*N];
+						H[na+j*N] = q * zz + p * H[en+j*N];
+						H[en+j*N] = q * H[en+j*N] - p * zz;
+					}
+					// column modification.
+					for(i = 0; i <= en; i++){
+						zz = H[i+na*N];
+						H[i+na*N] = q * zz + p * H[i+en*N];
+						H[i+en*N] = q * H[i+en*N] - p * zz;
+					}
+					// accumulate transformations.
+					for(i = low; i <= igh; i++){
+						zz = Z[i+na*N];
+						Z[i+na*N] = q * zz + p * Z[i+en*N];
+						Z[i+en*N] = q * Z[i+en*N] - p * zz;
+					}
+				}
+				en = enm2;
+				break;
+			}
+
+			if(itn == 0 ){
+				ierr = en;
+				return ierr;
+			}
+
+			// exceptional shift.
+			if(its == 10 || its == 20){
+				t = t + x;
+				for(i = low; i <= en; i++){
+					H[i+i*N] = H[i+i*N] - x;
+				}
+				s = abs(H[en+na*N] ) + abs(H[na+enm2*N] );
+				x = 0.75 * s;
+				y = x;
+				w = - 0.4375 * s * s;
+			}
+
+			its = its + 1;
+			itn = itn - 1;
+			for(m = enm2; l <= m; m--){
+				zz = H[m+m*N];
+				r = x - zz;
+				s = y - zz;
+				p = ( r * s - w ) / H[m+1+m*N] + H[m+(m+1)*N];
+				q = H[m+1+(m+1)*N] - zz - r - s;
+				r = H[m+2+(m+1)*N];
+				s = abs(p ) + abs(q ) + abs(r );
+				p = p / s;
+				q = q / s;
+				r = r / s;
+				if(m == l) break;
+				tst1 = abs(p ) * ( abs(H[m-1+(m-1)*N] ) + abs(zz ) 
+				+ abs(H[m+1+(m+1)*N] ) );
+				tst2 = tst1 + abs(H[m+(m-1)*N] ) * ( abs(q ) + abs(r ) );
+				if(tst2 == tst1) break;
+			}
+
+			for(i = m + 2; i <= en; i++){
+				H[i+(i-2)*N] = 0.0;
+				if(i != m + 2 ){
+					H[i+(i-3)*N] = 0.0;
+				}
+			}
+
+			// double QR step
+			for(k = m; k <= na; k++){
+				notlas = (k != na);
+				if(k != m){
+					p = H[k+(k-1)*N];
+					q = H[k+1+(k-1)*N];
+					r = 0.0;
+					if(notlas) r = H[k+2+(k-1)*N];
+					x = abs(p ) + abs(q ) + abs(r );
+					if(x == 0.0) continue;
+					p = p / x;
+					q = q / x;
+					r = r / x;
+				}
+				s = sqrt(p * p + q * q + r * r) * (p<0 ? -1 : 1);
+				if(k != m){
+					H[k+(k-1)*N] = - s * x;
+				}else if(l != m){
+					H[k+(k-1)*N] = - H[k+(k-1)*N];
+				}
+
+				p = p + s;
+				x = p / s;
+				y = q / s;
+				zz = r / s;
+				q = q / p;
+				r = r / p;
+
+				if(!notlas){
+					// row modification
+					for(j = k; j < N; j++){
+						p = H[k+j*N] + q * H[k+1+j*N];
+						H[k+j*N] = H[k+j*N] - p * x;
+						H[k+1+j*N] = H[k+1+j*N] - p * y;
+					}
+					j = min(en, k + 3);
+					// column modification
+					for(i = 0; i <= j; i++){
+						p = x * H[i+k*N] + y * H[i+(k+1)*N];
+						H[i+k*N] = H[i+k*N] - p;
+						H[i+(k+1)*N] = H[i+(k+1)*N] - p * q;
+					}
+					// accumulate transformations
+					for(i = low; i <= igh; i++){
+						p = x * Z[i+k*N] + y * Z[i+(k+1)*N];
+						Z[i+k*N] = Z[i+k*N] - p;
+						Z[i+(k+1)*N] = Z[i+(k+1)*N] - p * q;
+					}
+				}else{
+					// row modification
+					for(j = k; j < N; j++){
+						p = H[k+j*N] + q * H[k+1+j*N] + r * H[k+2+j*N];
+						H[k+j*N] = H[k+j*N] - p * x;
+						H[k+1+j*N] = H[k+1+j*N] - p * y;
+						H[k+2+j*N] = H[k+2+j*N] - p * zz;
+					}
+					j = min(en, k + 3);
+					// column modification
+					for(i = 0; i <= j; i++){
+						p = x * H[i+k*N] + y * H[i+(k+1)*N] + zz * H[i+(k+2)*N];
+						H[i+k*N] = H[i+k*N] - p;
+						H[i+(k+1)*N] = H[i+(k+1)*N] - p * q;
+						H[i+(k+2)*N] = H[i+(k+2)*N] - p * r;
+					}
+					// accumulate transformations
+					for(i = low; i <= igh; i++){
+						p = x * Z[i+k*N] + y * Z[i+(k+1)*N] + zz * Z[i+(k+2)*N];
+						Z[i+k*N] = Z[i+k*N] - p;
+						Z[i+(k+1)*N] = Z[i+(k+1)*N] - p * q;
+						Z[i+(k+2)*N] = Z[i+(k+2)*N] - p * r;
+					}
+				}
+			}
+		}
+	}
+
+	// all roots found, now backsubstitute
+	if(norm == 0.0) return ierr;
+	for(en = N - 1; 0 <= en; en--){
+		p = lambdaR[en];
+		q = lambdaI[en];
+		na = en - 1;
+
+		if(0.0 < q ){
+			continue;
+		}else if(q == 0.0){
+			m = en;
+			H[en+en*N] = 1.0;
+
+			for(i = en - 1; en - na - 1 <= i; i--){
+				w = H[i+i*N] - p;
+				r = 0.0;
+				for(j = m; j <= en; j++){
+					r = r + H[i+j*N] * H[j+en*N];
+				}
+				if(lambdaI[i] < 0.0 ){
+					zz = w;
+					s = r;
+					continue;
+				}
+				m = i;
+				if(lambdaI[i] == 0.0){
+					t = w;
+					if(t == 0.0 ){
+						tst1 = norm;
+						t = tst1;
+						while(true){
+							t = 0.01 * t;
+							tst2 = norm + t;
+							if(tst2 <= tst1) break;
+						}
+					}
+					H[i+en*N] = - r / t;
+				}else{
+					x = H[i+(i+1)*N];
+					y = H[i+1+i*N];
+					q = (lambdaR[i] - p) * (lambdaR[i] - p) + lambdaI[i] * lambdaI[i];
+					t = (x * s - zz * r) / q;
+					H[i+en*N] = t;
+					if(abs(zz) < abs(x)){
+						H[i+1+en*N] = ( - r - w * t ) / x;
+					}else{
+						H[i+1+en*N] = ( - s - y * t ) / zz;
+					}
+				}
+				// overflow control
+				t = abs(H[i+en*N]);
+				if(t != 0.0 ){
+					tst1 = t;
+					tst2 = tst1 + 1.0 / tst1;
+					if(tst2 <= tst1){
+						for(j = i; j <= en; j++){
+							H[j+en*N] = H[j+en*N] / t;
+						}
+					}
+				}
+			}
+		}else if(q < 0.0){
+			// complex vector
+			m = na;
+			if(abs(H[na+en*N]) < abs(H[en+na*N])){
+				H[na+na*N] = q / H[en+na*N];
+				H[na+en*N] = - ( H[en+en*N] - p ) / H[en+na*N];
+			}else{
+				divide_complex(0.0, -H[na+en*N], H[na+na*N] - p, q, tr, ti);
+				H[na+na*N] = tr;
+				H[na+en*N] = ti;
+			}
+			H[en+na*N] = 0.0;
+			H[en+en*N] = 1.0;
+			enm2 = na - 1;
+			for(i = na - 1; na - enm2 <= i; i--){
+				w = H[i+i*N] - p;
+				ra = 0.0;
+				sa = 0.0;
+				for(j = m; j <= en; j++){
+					ra = ra + H[i+j*N] * H[j+na*N];
+					sa = sa + H[i+j*N] * H[j+en*N];
+				}
+				if(lambdaI[i] < 0.0 ){
+					zz = w;
+					r = ra;
+					s = sa;
+				}
+				m = i;
+				if(lambdaI[i] == 0.0 ){
+					divide_complex(-ra, -sa, w, q, tr, ti);
+					H[i+na*N] = tr;
+					H[i+en*N] = ti;
+				}else{
+					x = H[i+(i+1)*N];
+					y = H[i+1+i*N];
+					vr = (lambdaR[i] - p) * (lambdaR[i] - p) + lambdaI[i] * lambdaI[i] - q * q;
+					vi = (lambdaR[i] - p) * 2.0 * q;
+
+					if(vr == 0.0 && vi == 0.0){
+						tst1 = norm * (abs(w) + abs(q) + abs(x) + abs(y) + abs(zz));
+						vr = tst1;
+						while(true ){
+							vr = 0.01 * vr;
+							tst2 = tst1 + vr;
+							if(tst2 <= tst1) break;
+						}
+					}
+
+					divide_complex(x * r - zz * ra + q * sa, x * s - zz * sa - q * ra, vr, vi, tr, tr);
+					H[i+na*N] = tr;
+					H[i+en*N] = ti;
+					if(abs(zz) + abs(q) < abs(x)){
+						H[i+1+na*N] = (- ra - w * H[i+na*N] + q * H[i+en*N]) / x;
+						H[i+1+en*N] = (- sa - w * H[i+en*N] - q * H[i+na*N]) / x;
+					}else{
+						divide_complex(- r - y * H[i+na*N], - s - y * H[i+en*N], zz, q, tr, ti);
+						H[i+1+na*N] = tr;
+						H[i+1+en*N] = ti;
+					}
+				}
+				// overflow control.
+				t = max(abs(H[i+na*N]), abs(H[i+en*N]));
+
+				if(t != 0.0){
+					tst1 = t;
+					tst2 = tst1 + 1.0 / tst1;
+					if(tst2 <= tst1){
+						for(j = i; j <= en; j++){
+							H[j+na*N] = H[j+na*N] / t;
+							H[j+en*N] = H[j+en*N] / t;
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// end back substitution
+	for(i = 0; i < N; i++){
+		if(i < low || igh < i){
+			for(j = i; j < N; j++){
+				Z[i+j*N] = H[i+j*N];
+			}
+		}
+	}
+	
+	// multiply by transformation matrix to obtain vectors of original matrix
+	for(j = N - 1; low <= j; j--){
+		m = min(j, igh);
+		for(i = low; i <= igh; i++){
+			zz = 0.0;
+			for(k = low; k <= m; k++){
+				zz = zz + Z[i+k*N] * H[k+j*N];
+			}
+			Z[i+j*N] = zz;
+		}
+	}
+
+	return ierr;
+}
+
+
+
+
+
+
+// calculate eigenvalues and (optionally) eigenvectors of a real square matrix A
+// Internally, A is first transformed into upper Hessenberg form, and then eigenvalues & eigenvectors are computed using the QR method
+// returns 0 upon success, otherwise the error code is as returned by EIG_eigenvalues_RUH() or EIG_eigenvalues_RUH2()
+// Code adjusted from: https://people.sc.fsu.edu/~jburkardt/c_src/eispack/eispack.html
+long EIG_eigendecomposition(const long				N,						// (INPUT) the number of rows & columns in A
+							const dvector 			&A,						// (INPUT) 2D matrix of size N x N, in row-major or column-major format
+							const bool				row_major,				// (INPUT) whether the matrix A is in row-major or column-major format. The same formatting will also apply to the output. Note that internally this function transforms everything into column-major format if needed.
+							const bool				include_eigenvectors,	// (INPUT) whether to also compute eigenvectors
+							dvector					&scratchA,				// (SCRATCH) scratch space, will be resized to N x N
+							dvector					&scratchZ,				// (SCRATCH) scratch space for eigenvector computation, will be resized to N x N. Only relevant if include_eigenvectors==true.
+							dvector					&eigenvaluesR,			// (OUTPUT) the real part of the eigenvalues
+							dvector					&eigenvaluesI,			// (OUTPUT) the imaginary part of the eigenvalues
+							std::vector<cdouble>	&eigenvectors){			// (OUTPUT) 2D matrix of size N x N, containing the eigenvectors (one eigenvector per column). Only relevant if include_eigenvectors==true. Will be in row-major format iff row_major=true, otherwise it will be in column-major format.
+	if(row_major){
+		// transform A into column-major format and store result in scratchA
+		scratchA.resize(N*N);
+		for(long r=0; r<N; ++r){
+			for(long c=0; c<N; ++c){
+				scratchA[r + c*N] = A[r*N + c];
+			}
+		}
+	}else{
+		// A is already in column-major format
+		scratchA = A;
+	}
+	
+	int ierr;
+	long is1, is2;
+	dvector fv1(N);
+	lvector iv1(N);
+	eigenvaluesR.resize(N);
+	eigenvaluesI.resize(N);
+	EIG_balance_matrix(N, &scratchA[0], is1, is2, &fv1[0]);
+	EIG_ELMHES(N, is1, is2, &scratchA[0], &iv1[0]);
+
+	if(!include_eigenvectors){
+		ierr = EIG_eigenvalues_RUH(N, is1, is2, &scratchA[0], &eigenvaluesR[0], &eigenvaluesI[0]);
+		if(ierr!=0) return ierr;  // an error occurred during HQR
+	}else{
+		scratchZ.resize(N*N); // extra scratch space for eigenvectors
+		EIG_accumulate_similarity(N, is1, is2, &scratchA[0], &iv1[0], &scratchZ[0]);
+		ierr = EIG_eigenvalues_RUH2(N, is1, is2, &scratchA[0], &eigenvaluesR[0], &eigenvaluesI[0], &scratchZ[0]);
+		if(ierr!=0) return ierr; // an error occurred during HQR2
+		EIG_reverse_balancing(N, is1, is2, &fv1[0], N, &scratchZ[0]);
+		
+		// compactify eigenvectors to complex numbers
+		// note that scratchZ is structured in column-major format, and each column (or pair of columns) corresponds to an eigenvector
+		eigenvectors.resize(N*N);
+		for(long j=0; j<N; ++j){
+			if(eigenvaluesI[j]==0){
+				// this eigenvalue is real, so the eigenvector is stored in the j-th column of Z
+				for(long r=0; r<N; ++r){
+					eigenvectors[r+j*N] = complex<double>(scratchZ[r+j*N],0);
+				}
+			}else{
+				// this eigenvalue is complex, so the eigenvector is stored in the j-th and (j+1)-th columns of Z (real & imaginary part, respectively). 
+				// the conjugate of this eigenvector is the eigenvector for the conjugate eigenvalue
+				for(long r=0; r<N; ++r){
+					eigenvectors[r+j*N]		= complex<double>(scratchZ[r+j*N],+scratchZ[r+(j+1)*N]);
+					eigenvectors[r+(j+1)*N]	= complex<double>(scratchZ[r+j*N],-scratchZ[r+(j+1)*N]);
+				}				
+				++j; // skip next eigenvalue, since it is the complex-conjugate of the j-th eigenvalue
+			}
+		}
+	}
+	
+	// transform eigenvectors from column-major to row-major format if needed
+	// this basically means transposing the eigenvector matrix
+	if(include_eigenvectors && row_major){
+		cdouble temp;
+		for(long r=1; r<N; ++r){
+			for(long c=0; c<r; ++c){
+				temp = eigenvectors[r*N + c];
+				eigenvectors[r*N + c] = eigenvectors[r + c*N];
+				eigenvectors[r + c*N] = temp;
+			}
+		}
+	}
+	return ierr;
+}
+
+
+
+// get spectral range of a real square general matrix, i.e. the difference between the largest (most positive) real part of an eigenvalue and the smallest (most negative) real part of an eigenvalue
+// That is, if (R1,I1),...,(RN,IN) are the eigenvalues of the matrix (where Ri and Ii is the real & imaginary part of the i-th eigenvalue), calculate max_{i,j} (Ri-Rj).
+// The input matrix A can be in row-major or column-major format; the result is the same regardless (since confusing majority simply corresponds to transposing A)
+// returns NAN_D upon failure
+double get_spectral_range(	const long 		N,		// (INPUT) the number of rows & columns in A
+							const dvector	&A){	// (INPUT) 2D matrix of size N x N, in row-major or column-major format (it does not matter which)
+	// get all eigenvalues of A
+	std::vector<cdouble> eigenvectors;
+	dvector scratchA, scratchZ, eigenvaluesR, eigenvaluesI;
+	const long error = EIG_eigendecomposition(N, A, false, false, scratchA, scratchZ, eigenvaluesR, eigenvaluesI, eigenvectors);
+	if(error!=0) return NAN_D;
+	
+	// find most positive and most negative part of any eigenvalue
+	double maxR = eigenvaluesR[0], minR = eigenvaluesR[0];
+	for(long i=0; i<N; ++i){
+		maxR = max(maxR, eigenvaluesR[i]);
+		minR = min(minR, eigenvaluesR[i]);
+	}
+	
+	return (maxR-minR);
+}
+
+
+
 #pragma mark -
-#pragma mark Random numbers
+#pragma mark Stochastic processes
 #pragma mark 
-
-
-inline double uniformWithinInclusiveRight(double minimum, double maximum){
-	return minimum + STRANDOM_EPSILON + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
-}
-
-inline double uniformWithinInclusiveLeft(double minimum, double maximum){
-	return minimum + (maximum - minimum - STRANDOM_EPSILON)*R::runif(0.0,1.0);
-}
-
-
-inline long uniformIntWithin(long minimum, long maximum){
-	//return min(maximum, (long) floor(minimum + (maximum-minimum+1)*(double(rand())/RAND_MAX))); // rand() is discouraged by R package builders
-	return min(maximum, (long) floor(minimum + (maximum-minimum+1) * R::runif(0.0,1.0)));
-}
-
-
-// draw a standard-normal random variable
-double random_standard_normal(){
-	return sqrt(-2.0*log(uniformWithinInclusiveRight(0, 1)))*cos(2.0*PI*uniformWithinInclusiveRight(0,1));
-}
 
 
 
@@ -1608,57 +4082,6 @@ double get_next_bounded_BM_sample(	double	diffusivity,
 }
 
 
-template<class TYPE>
-long random_int_from_distribution(const TYPE probabilities[], const long N){
-	double p = R::runif(0.0,1.0);
-	for(long i=0; i<N; ++i){
-		if(p<=probabilities[i]) return i;
-		p -= probabilities[i];
-	}
-	return N-1;
-}
-
-
-// pick an index within 0:(N-1) at probability proportional to weights[i]
-// for efficiency, the caller guarantees that total_weight = sum_i weights[i]
-long random_int_from_distribution(const std::vector<double> &weights, const double total_weight){
-	const long N = weights.size();
-	double p = R::runif(0.0,1.0);
-	for(long i=0; i<N; ++i){
-		if(p<=weights[i]/total_weight) return i;
-		p -= weights[i]/total_weight;
-	}
-	return N-1;
-}
-
-
-
-
-// pick an index within 0:(N-1) at probability proportional to weights[index_pool[i]]
-// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
-long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const double total_weight){
-	const long N = index_pool.size();
-	double p = R::runif(0.0,1.0);
-	for(long i=0; i<N; ++i){
-		if(p<=weights[index_pool[i]]/total_weight) return i;
-		p -= weights[index_pool[i]]/total_weight;
-	}
-	return N-1;
-}
-
-
-// pick an index within 0:(N-1) at probability proportional to weights[weight_indices[index_pool[i]]]
-// for efficiency, the caller guarantees that total_weight = sum_i weights[index_pool[i]]
-long random_int_from_distribution(const std::vector<long> &index_pool, const std::vector<double> &weights, const std::vector<long> &weight_indices, const double total_weight){
-	const long N = index_pool.size();
-	double p = R::runif(0.0,1.0);
-	for(long i=0; i<N; ++i){
-		if(p<=weights[weight_indices[index_pool[i]]]/total_weight) return i;
-		p -= weights[weight_indices[index_pool[i]]]/total_weight;
-	}
-	return N-1;
-}
-
 
 
 long get_next_Mk_state(	const matrix_exponentiator 	&transition_matrix_exponentiator,
@@ -1687,44 +4110,6 @@ long get_next_Mk_state(	const long 					Nstates,					// (INPUT) number of discre
 	}
 	return Nstates-1;
 }
-
-
-// generate exponentially distributed random variable, with PDF f(x) = lambda*exp(-lambda*x)
-double random_exponential_distribution(double lambda){
-	return -log(R::runif(0.0,1.0))/lambda;
-}
-
-
-inline bool random_bernoulli(double p){
-	//return ((double(rand())/RAND_MAX) <= p); // rand() is discouraged by R package builders
-	return (R::runif(0.0,1.0)<=p);
-}
-
-
-
-// returns the number of seconds since an arbitrary (but consistent) point in the past
-// The timer is monotonic (i.e. not affected by manual changes in the system time), and is specific to the calling thread
-// Note that for Windows this function is not thread-specific 
-double get_thread_monotonic_walltime_seconds(){
-	#if __MACH__ 
-		mach_timebase_info_data_t info;
-		int error_code = mach_timebase_info(&info);
-		if (error_code != KERN_SUCCESS) return 0.0;
-		return 1e-9 * mach_absolute_time() * double(info.numer)/double(info.denom);
-	#elif defined(unix) || defined(__unix) || defined(__unix__) || defined(__linux__)
-		// POSIX code
-		// For details on clock_gettime() see: http://www.tin.org/bin/man.cgi?section=3&topic=clock_gettime
-		struct timespec T;
-		clock_gettime(CLOCK_MONOTONIC, &T); // Note that CLOCK_MONOTONIC_RAW is not available on all Linux distros
-		return double(T.tv_sec) + 1e-9*T.tv_nsec;
-	#elif defined(IS_WINDOWS)
-		//return GetTickCount()*1e-6; // note that this is not thread-specific, but it's the best you can get on Windows. Update: It requires the windows.h library, which causes problems with Rcpp on CRAN.
-		return clock()/double(CLOCKS_PER_SEC);
-	#else
-		return 0; // not implemented for other systems
-	#endif
-}
-
 
 
 
@@ -1792,7 +4177,7 @@ MathError fitLinearRegressionNANSensitive(double pointsX[], double pointsY[], lo
 
 
 template<class TYPE_X, class TYPE_Y>
-double interpolateBetween2PointsLinear(const TYPE_X &x1, const TYPE_Y &y1, const TYPE_X &x2, const TYPE_Y &y2, const TYPE_X &x){
+TYPE_Y interpolateBetween2PointsLinear(const TYPE_X &x1, const TYPE_Y &y1, const TYPE_X &x2, const TYPE_Y &y2, const TYPE_X &x){
 	if(x1 == x2){
 		return TYPE_Y(NAN_D);
 	}else{
@@ -1804,6 +4189,7 @@ double interpolateBetween2PointsLinear(const TYPE_X &x1, const TYPE_Y &y1, const
 
 
 // interpolates an 'old' time series at new time points
+// only values from includedNewTimesStart to includedNewTimesEnd (inclusive) will be well-defined; outside values are unpredictable
 template<class TYPE, class TIME_ARRAY_TYPE2>
 bool interpolateTimeSeriesAtTimes(	const std::vector<double> 	&oldTimes,					// (INPUT)
 									const std::vector<TYPE> 	&valuesAtOldTimes,			// (INPUT)
@@ -1831,7 +4217,7 @@ bool interpolateTimeSeriesAtTimes(	const std::vector<double> 	&oldTimes,					// 
 	if((tpLastNew<tpNew) || (newTimes[tpLastNew]<oldTimes[oldStart])) return true; // new time domain does not overlap with old time domain
 	includedNewTimesEnd = tpLastNew;
 	
-	valuesAtNewTimes.assign(newTimes.size(),NAN_D);
+	valuesAtNewTimes.resize(newTimes.size());
 	
 	long tpOld = oldStart;
 	double time;
@@ -1898,7 +4284,7 @@ bool fitLeastSquares_Quadratic(const std::vector<double> &x, const std::vector<d
 		matrix[2*3+2] += QTR(x[i]/scaleX);
 	}
 	
-	if(!solveLinearSystem(	&matrix[0],
+	if(!LUsolveLinearSystem(	&matrix[0],
 							&scratchSpace[0],
 							3,
 							&b[0],
@@ -1970,7 +4356,7 @@ bool fitLeastSquares_Qubic(const std::vector<double> &x, const std::vector<doubl
 		matrix[3*4+3] += SQ(x[i]/scaleX)*QTR(x[i]/scaleX);
 	}
 	
-	if(!solveLinearSystem(	&matrix[0],
+	if(!LUsolveLinearSystem(	&matrix[0],
 							&scratchSpace[0],
 							4,
 							&b[0],
@@ -2055,7 +4441,7 @@ bool fitLeastSquares_Quartic(const std::vector<double> &x, const std::vector<dou
 		matrix[4*5+4] += QTR(x[i]/scaleX)*QTR(x[i]/scaleX);
 	}
 	
-	if(!solveLinearSystem(	&matrix[0],
+	if(!LUsolveLinearSystem(	&matrix[0],
 							&scratchSpace[0],
 							5,
 							&b[0],
@@ -2222,7 +4608,7 @@ bool fitLeastLogSquares_exponential_real_scalar(const ARRAY_TYPE1	&x,					// (in
 
 
 // smoothen time series using Savitzky-Golay filtering (unweighted local least-squares polynomial fitting)
-// for details see: http://www.mathworks.com/help/curvefit/smoothing-data.html
+// for details see: http://www.mathscratchs.com/help/curvefit/smoothing-data.html
 // Note: If the sliding window does not cover enough time points, a lower-order filter may be applied (locally)
 // This function supports non-evenly spaced data, which means fitting a polynomial at each time point, making it computationally expensive
 // The time series is assumed to be sorted in time
@@ -2464,11 +4850,32 @@ bool derivativeOfTimeSeries_SavitzkyGolay(	const TIME_ARRAY	&times,				// time p
 #pragma mark -
 
 
-//Class for defining piecewiese linear function using a reference grid
+template<class TYPE>
+inline void convex_combination(const TYPE &y1, const TYPE &y2, const double lambda, TYPE &y){
+	y = (1-lambda)*y1 + lambda*y2;
+}
+
+
+// specialize for vector-valued y
+template<>
+inline void convex_combination(const std::vector<double> &y1, const std::vector<double> &y2, const double lambda, std::vector<double> &y){
+	const long N = y1.size();
+	y.resize(N);
+	for(long i=0; i<N; ++i){
+		y[i] = (1-lambda)*y1[i] + lambda*y2[i];
+	}
+}
+
+
+
+
+//Class for defining piecewiese linear function using a regular or irregular reference grid
+//In the case of a regular grid, value retrieval is of time complexity O(1)
+//In the case of an irregular grid, value retrieval is fastest when subsequent requested points are close to each other, because the search for the enclosing grid cell starts from the previous requested grid cell
 template<class VALUE_TYPE>
 class LinearInterpolationFunctor{
 private:
-	std::vector<double> 	referencePoints;
+	std::vector<double> 	referencePoints; // store reference points, in the case of an irregular grid. Will be empty iff the grid was regular during setup.
 	std::vector<VALUE_TYPE>	referenceValues;
 	
 	double		domain_min, domain_max;
@@ -2476,29 +4883,40 @@ private:
 	double		lengthScale;
 	
 	bool		periodic;
-	VALUE_TYPE	out_of_scope_value;
-	bool		is_zero, is_constant;
+	VALUE_TYPE	outlier_value_left, outlier_value_right;
+
+	// keep track of the referencePoint matched to the last requested time point
+	// This helps find the next reference point faster in the case of non-regular grids, 
+	//   assuming that adjacent requests are for times in close proximity (as is the case in ODE solvers)
+	// last_requested_reference will correspond to the referencePoint at or immediately to the left (i.e. below) the last requested time
+	mutable long last_requested_reference;
 	
-	void 	set_to_regular_grid_values(	long 				referenceCount, 
+	void 	set_to_regular_grid_values(	long 				referenceCount,
 										const double		domain_min, 
 										const double		domain_max, 
 										VALUE_TYPE 			referenceValues[],
 										bool				periodic,
-										const VALUE_TYPE	&out_of_scope_value);		// value to use for extending time series if needed, if periodic==false. Irrelevant if periodic==true.
+										const VALUE_TYPE	&outlier_value_left,	// value to use for extending time series to the left if needed, if periodic==false. Irrelevant if periodic==true.
+										const VALUE_TYPE	&outlier_value_right);	// value to use for extending time series to the right if needed, if periodic==false. Irrelevant if periodic==true.
 public:
 
-	LinearInterpolationFunctor(): domain_min(0), domain_max(0), domainStep(0), lengthScale(1), periodic(false), is_zero(true), is_constant(true) {}
+	LinearInterpolationFunctor(): domain_min(0), domain_max(0), domainStep(0), lengthScale(1), periodic(false), last_requested_reference(-1) {}
 	
-	//define piecewise linear function
-	//domain is assumed to span from lowest to highest referencePoints
-	//if coordinate is periodic, the last reference point is identified with the first one (its reference value is taken to be (referenceValues[0]+referenceValues[last])/2)
+	// define piecewise linear function, on a regular or irregular gird
+	// domain is assumed to span from lowest to highest referencePoints
+	// If coordinate is periodic, the last reference point is identified with the first one (its reference value is taken to be (referenceValues[0]+referenceValues[last])/2)
+	// Optionally, the function can be internally re-mapped onto a regular grid, for more efficient later value retrieval
+	// In the case of an irregular grid (preInterpolateOnRegularGrid=false), later value retrieval is fastest if sequentially requested points are close to each other, because the search starts from the last requested point
+	//   Hence, for example, if an ODE solver requests values at non-decreasing points, then value retrieval will be of time-complexity O(N/R) where N is the number of stored reference points and R is the total number of requested points
 	LinearInterpolationFunctor(	const std::vector<double> 		&referencePoints, // domain grid points, in ascending order
 								const std::vector<VALUE_TYPE> 	&referenceValues,
 								bool							periodic,	// if true, time series are extended periodically if needed (e.g. if the reference domain is too small). Otherwise they are extended with zeros.
-								const VALUE_TYPE				&out_of_scope_value,
-								bool							preInterpolateOnRegularGrid); // if true, then the function is internally pre-interpolated on a regular domain grid. In that case, value retrieval later on will be more efficient.
+								const VALUE_TYPE				&outlier_value_left,
+								const VALUE_TYPE				&outlier_value_right,
+								bool							preInterpolateOnRegularGrid, // if true, then the function is internally pre-interpolated on a regular domain grid. In that case, value retrieval later on will be more efficient.
+								double							regularGridStep);	// regular reference-grid step to use, if preInterpolateOnRegularGrid==true. If <=0, then the regular grid step is chosen as the mean step in the (irregular) input grid.
 	
-	//define piecewise linear function
+	//define piecewise linear function on a regular grid
 	//referenceValues[i] should correspond to domain_min + i * intervalWidth(domain)/(referenceCount-1)
 	//in particular, referenceValue[referenceCount-1] should correspond to domain_max
 	//if coordinate is periodic, the last reference point is identified with the first one (its reference value is taken to be (referenceValues[0]+referenceValues[last])/2)
@@ -2508,22 +4926,27 @@ public:
 								const double		domain_max, 
 								VALUE_TYPE 			referenceValues[],
 								bool				periodic,
-								const VALUE_TYPE	&out_of_scope_value);
+								const VALUE_TYPE	&outlier_value_left,
+								const VALUE_TYPE	&outlier_value_right);
 							
 	VALUE_TYPE operator()(double x) const;
+	void getValue(double x, VALUE_TYPE &y) const; // equivalent to operator(), but avoiding copy operators
 	
 	bool isNULL() const{ return referenceValues.empty(); }
 	bool isPeriodic() const{ return periodic; }
 	void getDomain(double &_domain_min, double &_domain_max) const{ _domain_min=domain_min; _domain_max=domain_max; }
 	long getReferenceCount() const{ return referenceValues.size(); }
-	bool isConstant() const{ return is_constant; }
-	bool isZero() const{ return is_zero; }
 	
 	void setTypicalLengthScale(double _lengthScale){ lengthScale = _lengthScale; } 
 	double typicalLengthScale() const{ return lengthScale; }
 	
 	const std::vector<double> &getReferencePoints() const{ return referencePoints; }
 	const std::vector<double> &getReferenceValues() const{ return referenceValues; }
+	
+	inline VALUE_TYPE getFirstReferenceValue() const{ return referenceValues[0]; }
+	inline VALUE_TYPE getLastReferenceValue() const{ return referenceValues.back(); }
+	inline const VALUE_TYPE* getFirstReferenceValuePointer() const{ return &referenceValues[0]; }
+	inline const VALUE_TYPE* getLastReferenceValuePointer() const{ return &referenceValues[referenceValues.size()-1]; }
 };
 
 
@@ -2534,68 +4957,59 @@ template<class VALUE_TYPE>
 LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	const std::vector<double> 		&_referencePoints, 
 																	const std::vector<VALUE_TYPE> 	&_referenceValues,
 																	bool							_periodic,
-																	const VALUE_TYPE				&_out_of_scope_value,
-																	bool							preInterpolateOnRegularGrid){
+																	const VALUE_TYPE				&_outlier_value_left,
+																	const VALUE_TYPE				&_outlier_value_right,
+																	bool							preInterpolateOnRegularGrid,
+																	double							regularGridStep){
 	periodic 			= _periodic;
-	is_zero 			= true;
-	is_constant 		= true;
-	out_of_scope_value 	= _out_of_scope_value;
+	outlier_value_left 	= _outlier_value_left;
+	outlier_value_right	= _outlier_value_right;
 	referencePoints.clear(); 
 	referenceValues.clear();
+	last_requested_reference = -1;
 	if(_referencePoints.empty()) return;
 
 	if(preInterpolateOnRegularGrid){
 		// pre-interpolate on regular domain grid, then setup interpolator functor
-		const double step 			= smallest_nonzero_time_step(_referencePoints);
-		const long NR 				= 1 + (_referencePoints.back() - _referencePoints.front())/step;
+		regularGridStep 			= (regularGridStep<=0 ? vector_mean(_referencePoints) : regularGridStep);
+		const long NR 				= 1 + (_referencePoints.back() - _referencePoints.front())/regularGridStep;
 		const double _domain_min 	= _referencePoints.front();
-		std::vector<double> regular_reference_points(NR), regular_reference_values;
-		for(long i=0; i<NR; ++i) regular_reference_points[i] = _domain_min + i*step;
+		std::vector<double> regular_reference_points(NR);
+		std::vector<VALUE_TYPE> regular_reference_values;
+		for(long i=0; i<NR; ++i) regular_reference_points[i] = _domain_min + i*regularGridStep;
 		long includedNewTimesStart, includedNewTimesEnd;
-		interpolateTimeSeriesAtTimes(	_referencePoints,
-										_referenceValues,
-										0,
-										_referencePoints.size()-1,
-										regular_reference_points,
-										0,
-										NR-1,
-										includedNewTimesStart,
-										includedNewTimesEnd,
-										regular_reference_values);
+		interpolateTimeSeriesAtTimes<VALUE_TYPE,vector<double> >(	_referencePoints,
+																	_referenceValues,
+																	0,
+																	_referencePoints.size()-1,
+																	regular_reference_points,
+																	0,
+																	NR-1,
+																	includedNewTimesStart,
+																	includedNewTimesEnd,
+																	regular_reference_values);
 		set_to_regular_grid_values(	1+includedNewTimesEnd-includedNewTimesStart, 
 									regular_reference_points[includedNewTimesStart], 
 									regular_reference_points[includedNewTimesEnd], 
 									&regular_reference_values[includedNewTimesStart], 
 									_periodic,
-									_out_of_scope_value);		
+									_outlier_value_left,
+									_outlier_value_right);
 		
 	}else{
 		// use provided irregular grid
 		referencePoints = _referencePoints;
 		referenceValues = _referenceValues;
 		const long referenceCount = referencePoints.size();
-	
-		// check if all values are zero
-		is_zero = true;
-		for(long i=0; i<referencePoints.size(); ++i){
-			if(referenceValues[i]!=0) is_zero = false;
-		}
-	
+		
 		// figure out domain
 		domain_min	= referencePoints.front();
 		domain_max	= referencePoints.back();
 		lengthScale	= domain_max - domain_min;
-	
-		// check constantness
-		is_constant = true;
-		for(long i=1; i<referenceCount; ++i){
-			if(referenceValues[i]!=referenceValues[i-1]){ is_constant = false; break; }
-		}
-	
+		
 		// force periodic boundaries if necessary
 		if(periodic){
-			double boundaryValue = (referenceValues[0] + referenceValues[referenceCount-1])/2.0;
-			referenceValues[0] = referenceValues[referenceCount-1] = boundaryValue;
+			referenceValues[0] = referenceValues[referenceCount-1] = 0.5*(referenceValues[0] + referenceValues[referenceCount-1]);
 		}
 	}
 }
@@ -2607,36 +5021,29 @@ void LinearInterpolationFunctor<VALUE_TYPE>::set_to_regular_grid_values(long 			
 																		const double 		_domain_max, 
 																		VALUE_TYPE 			*_referenceValues,
 																		bool				_periodic,
-																		const VALUE_TYPE	&_out_of_scope_value){
+																		const VALUE_TYPE	&_outlier_value_left,
+																		const VALUE_TYPE	&_outlier_value_right){
 
 	periodic			= _periodic;
 	domain_min			= _domain_min;
 	domain_max			= _domain_max;
 	lengthScale			= (domain_max-domain_min);
 	domainStep			= (domain_max-domain_min)/max(1.0, referenceCount-1.0);
-	is_zero 			= true;
-	is_constant 		= true;
-	out_of_scope_value 	= _out_of_scope_value;
+	outlier_value_left 	= _outlier_value_left;
+	outlier_value_right	= _outlier_value_right;
 	referencePoints.clear(); 
 	referenceValues.clear();
+	last_requested_reference = -1;
 	if(referenceCount == 0) return;
 		
 	referenceValues.resize(referenceCount);
 	for(long i=0; i<referenceCount; ++i){
 		referenceValues[i] = _referenceValues[i];
-		if(referenceValues[i] != 0) is_zero = false;
 	}
-	
-	// check constantness
-	is_constant = true;
-	for(long i=1; i<referenceCount; ++i){
-		if(referenceValues[i]!=referenceValues[i-1]){ is_constant = false; break; }
-	}
-	
+		
 	// enforce periodic boundary values if necessary
 	if(periodic){
-		double boundaryValue 	= (referenceValues[0] + referenceValues[referenceCount-1])/2.0;
-		referenceValues[0] 		= referenceValues[referenceCount-1] = boundaryValue;
+		referenceValues[0] = referenceValues[referenceCount-1] = (referenceValues[0] + referenceValues[referenceCount-1])/2.0;
 	}
 }
 
@@ -2647,59 +5054,1324 @@ LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	long 				ref
 																	const double 		_domain_max, 
 																	VALUE_TYPE 			_referenceValues[],
 																	bool				_periodic,
-																	const VALUE_TYPE	&_out_of_scope_value){
-	set_to_regular_grid_values(referenceCount, _domain_min, _domain_max, _referenceValues, _periodic, _out_of_scope_value);
+																	const VALUE_TYPE	&_outlier_value_left,
+																	const VALUE_TYPE	&_outlier_value_right){
+	set_to_regular_grid_values(referenceCount, _domain_min, _domain_max, _referenceValues, _periodic, _outlier_value_left, _outlier_value_right);
 }
-
 
 
 
 template<class VALUE_TYPE>
-VALUE_TYPE LinearInterpolationFunctor<VALUE_TYPE>::operator()(double x) const{
+void LinearInterpolationFunctor<VALUE_TYPE>::getValue(double x, VALUE_TYPE &y) const{
 	if(referenceValues.empty()){
 		//nothing available
-		return 0;
+		y = outlier_value_left;
+		return;
 	}
-	if(is_zero) return 0;
 	const long referenceCount = referenceValues.size();
 	if(periodic){
 		x = moduloInterval(x, domain_min, domain_max);
-	}else if((x < domain_min) || ( x > domain_max)){
-		// requested x is outside of the reference domain
-		return out_of_scope_value;
+	}else if(x < domain_min){
+		// requested x is outside (left) of the reference domain
+		y = outlier_value_left;
+		last_requested_reference = 0;
+		return;
+	}else if(x > domain_max){
+		// requested x is outside (right) of the reference domain
+		y = outlier_value_right;
+		last_requested_reference = referenceCount-1;
+		return;
 	}
 	if(referenceCount == 1){
-		return referenceValues[0];
+		y = referenceValues[0];
+		last_requested_reference = 0;
+		return;
 	}
 	
-	long j;
 	if(referencePoints.empty()){
-		j = floor((x - domain_min)/domainStep); //left border of relevant domain-interval
+		long j = floor((x - domain_min)/domainStep); //left border of relevant domain-interval
 		j = min(j, referenceCount - 1); //avoid out-of-bounds errors caused by numerical inaccuracies
+		last_requested_reference = j;
 		if(j == referenceCount - 1){
-			return referenceValues[referenceCount - 1];
+			y = referenceValues[referenceCount - 1];
 		}else{
-			return referenceValues[j] + (x - (domain_min + j*domainStep)) * (referenceValues[j+1] - referenceValues[j]) / domainStep; //linear interpolation between referenceValues
+			//linear interpolation between referenceValues
+			const double lambda = (x - (domain_min + j*domainStep))/domainStep;
+			convex_combination(referenceValues[j], referenceValues[j+1], lambda, y);
 		}
 	}else{
-		for(j=1; j<referenceCount; ++j){
-			if(referencePoints[j] > x){
-				return referenceValues[j-1] + (x - referencePoints[j-1]) * (referenceValues[j] - referenceValues[j-1]) / (referencePoints[j] - referencePoints[j-1]);
+		long j;
+		if(last_requested_reference<0) last_requested_reference = 0;
+		if(referencePoints[last_requested_reference]<=x){
+			// search for reference point, towards the right
+			for(j=last_requested_reference; j<referenceCount-1; ++j){
+				if(referencePoints[j+1] > x) break;
+			}
+		}else{
+			// search for reference point, towards the left
+			for(j=last_requested_reference; j>=0; --j){
+				if(referencePoints[j] <= x) break;
 			}
 		}
-		return referenceValues[referenceCount - 1];
+		if(j>=referenceCount-1){
+			y = referenceValues[referenceCount - 1];
+			last_requested_reference = referenceCount - 1;
+		}else if(j<=0){
+			y = referenceValues[0];
+			last_requested_reference = 0;			
+		}else{
+			const double lambda = (x - referencePoints[j])/(referencePoints[j+1] - referencePoints[j]);
+			convex_combination(referenceValues[j], referenceValues[j+1], lambda, y);
+			last_requested_reference = j;
+		}
 	}
 }
 
 
+template<class VALUE_TYPE>
+VALUE_TYPE LinearInterpolationFunctor<VALUE_TYPE>::operator()(double x) const{
+	VALUE_TYPE V;
+	getValue(x,V);
+	return V;
+}
 
 
 
 
 
 #pragma mark -
-#pragma mark Deterministic diversity dynamics
+#pragma mark Numerical solvers
 #pragma mark
+
+
+
+// RungeKutta2 integrator, handling:
+//    1. Suggestions by the model for temporarily refined time steps
+//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
+//    3. Requests by the model to jump discontinuously to another state
+// requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
+template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
+bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
+					double 						endTime, 						// (INPUT) simulation end time
+					double 						dt, 							// (INPUT) default integration time step
+					MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics, also handling time series storage
+					long						maxRecordedPoints, 				// (INPUT) if small, some intermediate trajectory points are skipped (i.e. not recorded). This might be useful if accurate integration requires a small time step, but would produce a needlesly large time series. If maxRecordedPoints==2, then only the start and end points are recorded. If maxRecordedPoints==1, then only the end point is recorded.
+					long						maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
+					const double				refinement_factor,				// (INPUT) factor by which to refine time steps. Typical values are 2-10.
+					const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
+					const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
+					string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
+	COORDINATE currentPoint, candidatePoint, point2, jumpPoint;
+	COORDINATE k1, k2, kConsensus;
+	double t=startTime, t2, current_dt1, current_dt2;
+	long recorded, iterations;
+	RequestedDynamics dynamics;
+	CrossedBoundary crossedBoundary;
+	const double simulationTime 	= endTime-startTime; // target duration of simulation
+	const double start_runtime  	= get_thread_monotonic_walltime_seconds();
+	const double min_dt 			= dt/pow(refinement_factor,maxTimeStepRefinements);
+	
+	// keep track of warnings
+	bool crossedBoundaryButFixedByReducingTimeStep = false;
+	bool crossedBoundaryYesButFixedBruteForce = false;
+	bool crossedBoundaryYesButFixedUsingEuler = false;
+
+	//preliminary error checking
+	warningMessage = "";
+	if(dt<simulationTime*RELATIVE_EPSILON){
+		warningMessage = "Time step too small";
+		return false;
+	}
+	if(simulationTime < dt){
+		warningMessage = "Time step exceeds simulation time";
+		return false;
+	}
+	if(maxRecordedPoints < 1){
+		warningMessage = "Requested zero recorded points";
+		return false;
+	}
+	
+	const double recordingTimeStep = simulationTime/max(1L,maxRecordedPoints-1);
+	model.reserveSpaceForTimeSeries(maxRecordedPoints);
+	bool k1AlreadyCalculated = false;
+	
+	//initialization
+	if(!model.getInitialState(t, currentPoint)){
+		warningMessage = "Failed to get initial state";
+		return false;
+	}
+	double lastRecordedTime = -INFTY_D;
+	if(maxRecordedPoints>1){
+		model.registerState(t, currentPoint);
+		lastRecordedTime = t;
+	}
+	
+	//run simulation
+	//default time step is dt, but temporarily dt might be reduced to a smaller value
+	for(recorded=1, current_dt1=current_dt2=dt, iterations=0; t<endTime; /* increment of t handled in loop */ ){
+		// at this stage currentPoint is guaranteed to be a valid state
+		// t should always correspond to currentPoint
+		// t2 should always correspond to point2
+		// current_dt1 is used for moving from currentPoint-->point2
+		// current_dt2 is used for moving from currentPoint-->candidatePoint (= potential next currentPoint)
+		++iterations;
+		
+		// check runtime-out
+		if((runtime_out_seconds>0) && (iterations%100==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely after "+makeString(iterations)+" iterations because it reached the maximum allowed processing time.";
+			return true;
+		}
+		
+		// reduce time step to not exceed end time, if needed
+		current_dt1 = min(min(current_dt1, current_dt2), endTime-t);
+				
+		// get dynamics (k1) at currentPoint if needed
+		if(!k1AlreadyCalculated){
+			dynamics = model.getRateOfChangeAtState(t, currentPoint, k1, jumpPoint);
+			if(dynamics==RequestedDynamicsForceJumpToState){
+				currentPoint = jumpPoint;
+				t = t + current_dt1;
+				goto RK2_REGISTER_STATE; 
+			}
+			k1AlreadyCalculated = true;
+		}
+		
+		// get point2 (in forward k1-direction)
+		point2 = currentPoint + k1*current_dt1;
+		t2 = t + current_dt1; // t2 should always correspond to point2
+		
+		// check if point2 crossed the boundary and move point2 backward as much as needed
+		// point2 and current_dt1 will be adjusted if this routine returns true
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentPoint, current_dt1, point2, true);
+		if(crossedBoundary == CrossedBoundaryYesButFixedBruteForce){ crossedBoundaryYesButFixedBruteForce = true; }
+		else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){ crossedBoundaryButFixedByReducingTimeStep = true; }
+		
+		// check if the time step should be reduced (as suggested by the model)
+		while((current_dt1>min_dt) && model.checkShouldRefineTimeStep(t, currentPoint, current_dt1, point2)){
+			current_dt1 /= refinement_factor;
+			point2 = currentPoint + k1*current_dt1;
+			t2 = t + current_dt1; // t2 should always correspond to point2
+		}
+		
+		// stage-2 time-step should not be larger than the stage-1 time-step, but also not below min_dt
+		current_dt2 = max(min(min_dt,endTime-t), min(current_dt1,current_dt2));
+		
+		// get dynamics (k2) at point2
+		dynamics = model.getRateOfChangeAtState(t2, point2, k2, jumpPoint);
+		if(dynamics==RequestedDynamicsForceJumpToState){
+			currentPoint = jumpPoint;
+			t = t2;
+			goto RK2_REGISTER_STATE; 
+		}
+
+		// use k1 & k2 to move the currentPoint forward, potentially after refining the time step multiple times
+		kConsensus 		= (k1+k2)*0.5;
+		candidatePoint 	= currentPoint + kConsensus*current_dt2;
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentPoint, current_dt2, candidatePoint, false);
+		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
+			if(current_dt2>min_dt){
+				current_dt2 /= refinement_factor;
+				crossedBoundaryButFixedByReducingTimeStep = true;
+				continue; // repeat the whole iteration with a smaller time step
+			}else{
+				// use simple Euler scheme for this time step, since kConsensus throws us out of the boundary at even arbitrarily small time steps
+				currentPoint = point2;
+				t 			 = t2;
+				crossedBoundaryYesButFixedUsingEuler = true;
+				goto RK2_REGISTER_STATE;
+			}
+		}
+				
+		// check if the time step should be reduced (as suggested by the model)
+		if((current_dt2>min_dt) && model.checkShouldRefineTimeStep(t, currentPoint, current_dt2, candidatePoint)){
+			current_dt2 /= refinement_factor; 
+			continue; // repeat the last part with a smaller time step
+		}
+		
+		// seems everything worked out as normal, so set the new currentPoint
+		currentPoint = candidatePoint;
+		t = t + current_dt2; // t should always correspond to currentPoint
+		goto RK2_REGISTER_STATE;
+		
+		// check and register new state if needed	
+		RK2_REGISTER_STATE:
+		// check sanity (some ODEs may explode)		
+		if(std::isnan(t) || model.stateIsNaN(currentPoint)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
+			return (recorded>1);
+		}
+		k1AlreadyCalculated = false;
+		if((t-lastRecordedTime > recordingTimeStep) && (recorded<maxRecordedPoints-1)){ // don't record if maxRecordedPoints has been almost exhausted (i.e. 1 remaining), since the final state will be recorded outside of the loop
+			model.registerState(t, currentPoint);
+			++recorded;
+			lastRecordedTime = t;
+			reporter(recorded, maxRecordedPoints, 1-(endTime-t)/simulationTime);
+		}
+		
+		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
+		// only gradually increase the time step, to avoid repeatedly wasting time in refinements
+		current_dt1  = min(refinement_factor*current_dt1,dt);
+		current_dt2  = min(refinement_factor*current_dt2,dt);
+	}
+	
+	// register final state if needed
+	if(t>lastRecordedTime){
+		model.registerState(t, currentPoint);
+	}
+	
+	// construct warnings message if needed
+	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
+	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
+	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
+
+	return true;
+}
+
+
+
+
+
+
+
+// RungeKutta2 integrator, handling:
+//    1. Suggestions by the model for temporarily refined time steps
+//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
+//    3. Requests by the model to jump discontinuously to another state
+// requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
+// This is similar to RungeKutta2 above, the difference being that here points are recorded when deemed appropriate based on the difference from the previous time point (or equivalently, the local rate of change)
+// Hence, instead of specifying the max number of recorded time points, the caller specifies the minRecordingTimeStep and the recordingRelValueStep
+template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
+bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
+					double 						endTime, 						// (INPUT) simulation end time
+					double 						dt, 							// (INPUT) default integration time step
+					MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics, also handling time series storage
+					double						minRecordingTimeStep, 			// (INPUT) the minimum time difference between subsequent recordings
+					double						recordingRelValueStep, 			// (INPUT) the minimum relative value difference to the previous recording, before triggering a new recording. This is sub-ordinate to minRecordingTimeStep, i.e. minRecordingTimeStep will never be violated (except perhaps at the end, because the last time point is always recorded). The "relative difference" between two states is defined by the model, not the solver. Typically this will be the maximum relative difference between components.
+					long						maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
+					const double				refinement_factor,				// (INPUT) factor by which to refine time steps. Typical values are 2-10.
+					const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
+					const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
+					string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
+	COORDINATE currentPoint, candidatePoint, point2, jumpPoint;
+	COORDINATE k1, k2, kConsensus;
+	double t, t2, current_dt1, current_dt2;
+	long recorded, iterations;
+	RequestedDynamics dynamics;
+	CrossedBoundary crossedBoundary;
+	const double simulationTime 	= endTime-startTime; // target duration of simulation
+	const double start_runtime  	= get_thread_monotonic_walltime_seconds();
+	const double min_dt 			= dt/pow(refinement_factor,maxTimeStepRefinements);
+	
+	// keep track of warnings
+	bool crossedBoundaryButFixedByReducingTimeStep = false;
+	bool crossedBoundaryYesButFixedBruteForce = false;
+	bool crossedBoundaryYesButFixedUsingEuler = false;
+
+	//preliminary error checking
+	warningMessage = "";
+	if(dt<simulationTime*RELATIVE_EPSILON){
+		warningMessage = "Time step too small";
+		return false;
+	}
+	if(simulationTime < dt){
+		warningMessage = "Time step exceeds simulation time";
+		return false;
+	}
+	if(recordingRelValueStep < 0){
+		warningMessage = "recordingRelValueStep is negative";
+		return false;
+	}
+	
+	model.reserveSpaceForTimeSeries(simulationTime,minRecordingTimeStep,recordingRelValueStep);
+	bool k1AlreadyCalculated = false;
+	
+	//initialization
+	t = startTime;
+	if(!model.getInitialState(t, currentPoint)){
+		warningMessage = "Failed to get initial state";
+		return false;
+	}
+	model.registerState(t, currentPoint);
+	COORDINATE lastRecordedPoint = currentPoint;
+	double lastRecordedTime = t;
+	
+	//run simulation
+	//default time step is dt, but temporarily dt might be reduced to a smaller value
+	for(recorded=1, current_dt1=current_dt2=dt, iterations=0; t<endTime; /* increment of t handled in loop */ ){
+		// at this stage currentPoint is guaranteed to be a valid state
+		// t should always correspond to currentPoint
+		// t2 should always correspond to point2
+		// lastRecordedTime should always correspond to lastRecordedPoint
+		// current_dt1 is used for moving from currentPoint-->point2
+		// current_dt2 is used for moving from currentPoint-->candidatePoint (= potential next currentPoint)
+		++iterations;
+		
+		// check runtime-out
+		if((runtime_out_seconds>0) && (iterations%100==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely after "+makeString(iterations)+" iterations because it reached the maximum allowed processing time.";
+			return true;
+		}
+		
+		// reduce time step to not exceed end time, if needed
+		current_dt1 = min(min(current_dt1, current_dt2), endTime-t);
+				
+		// get dynamics (k1) at currentPoint if needed
+		if(!k1AlreadyCalculated){
+			dynamics = model.getRateOfChangeAtState(t, currentPoint, k1, jumpPoint);
+			if(dynamics==RequestedDynamicsForceJumpToState){
+				currentPoint = jumpPoint;
+				t 			 = t + current_dt1;
+				goto ARK2_REGISTER_STATE; 
+			}
+			k1AlreadyCalculated = true;
+		}
+		
+		// get point2 (in forward k1-direction)
+		linear_combination(1.0,currentPoint,current_dt1,k1,point2); // point2 = currentPoint + k1*current_dt1;
+		t2 = t + current_dt1; // t2 should always correspond to point2
+		
+		// check if point2 crossed the boundary and move point2 backward as much as needed
+		// point2 and current_dt1 will be adjusted if this routine returns true
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentPoint, current_dt1, point2, true);
+		if(crossedBoundary == CrossedBoundaryYesButFixedBruteForce){ crossedBoundaryYesButFixedBruteForce = true; }
+		else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){ crossedBoundaryButFixedByReducingTimeStep = true; }
+		
+		// check if the time step should be reduced (as suggested by the model)
+		while((current_dt1>min_dt) && model.checkShouldRefineTimeStep(t, currentPoint, current_dt1, point2)){
+			current_dt1 /= refinement_factor;
+			linear_combination(1.0,currentPoint,current_dt1,k1,point2); // point2 = currentPoint + k1*current_dt1;
+			t2 = t + current_dt1; // t2 should always correspond to point2
+		}
+		
+		// stage-2 time-step should not be larger than the stage-1 time-step, but also not below min_dt
+		current_dt2 = max(min(min_dt,endTime-t), min(current_dt1,current_dt2));
+		
+		// get dynamics (k2) at point2
+		dynamics = model.getRateOfChangeAtState(t2, point2, k2, jumpPoint);
+		if(dynamics==RequestedDynamicsForceJumpToState){
+			currentPoint = jumpPoint;
+			t			 = t2;
+			goto ARK2_REGISTER_STATE; 
+		}
+
+		// use k1 & k2 to move the currentPoint forward, potentially after refining the time step multiple times
+		linear_combination(0.5, k1, 0.5, k2, kConsensus); // kConsensus = 0.5*(k1+k2)
+		linear_combination(1.0, currentPoint, current_dt2, kConsensus, candidatePoint); // candidatePoint 	= currentPoint + kConsensus*current_dt2
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentPoint, current_dt2, candidatePoint, false);
+		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
+			if(current_dt2>min_dt){
+				current_dt2 /= refinement_factor;
+				crossedBoundaryButFixedByReducingTimeStep = true;
+				continue; // repeat the whole iteration with a smaller time step
+			}else{
+				// use simple Euler scheme for this time step, since kConsensus throws us out of the boundary at even arbitrarily small time steps
+				currentPoint = point2;
+				t	 		 = t2;
+				crossedBoundaryYesButFixedUsingEuler = true;
+				goto ARK2_REGISTER_STATE;
+			}
+		}
+				
+		// check if the time step should be reduced (as suggested by the model)
+		if((current_dt2>min_dt) && model.checkShouldRefineTimeStep(t, currentPoint, current_dt2, candidatePoint)){
+			current_dt2 /= refinement_factor; 
+			continue; // repeat the last part with a smaller time step
+		}
+
+		// seems everything worked out as normal, so set the new currentPoint
+		currentPoint = candidatePoint;
+		t 			 = t + current_dt2; // t should always correspond to currentPoint
+				
+		// register new state if needed	
+		ARK2_REGISTER_STATE:
+				
+		// check sanity (some ODEs may explode)		
+		if(std::isnan(t) || model.stateIsNaN(currentPoint)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
+			return (recorded>1);
+		}
+		k1AlreadyCalculated = false;
+		if((t-lastRecordedTime >= minRecordingTimeStep) && (model.getRelativeChange(lastRecordedPoint,currentPoint)>recordingRelValueStep)){ // don't record if maxRecordedPoints has been almost exhausted (i.e. 1 remaining), since the final state will be recorded outside of the loop			
+			model.registerState(t, currentPoint);
+			++recorded;
+			lastRecordedTime  = t;
+			lastRecordedPoint = currentPoint;
+			reporter((t-startTime), simulationTime);
+		}
+		
+		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
+		// only gradually increase the time step, to avoid repeatedly wasting time in refinements
+		current_dt1  = min(refinement_factor*current_dt1,dt);
+		current_dt2  = min(refinement_factor*current_dt2,dt);
+	}
+	
+	// register final state if needed
+	if(t>lastRecordedTime){
+		model.registerState(t, currentPoint);
+	}
+	
+	// construct warnings message if needed
+	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
+	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
+	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
+
+	return true;
+}
+
+
+
+
+
+
+// Two-step Runge-Kutta solver for ODEs where the "scale" and the "shape" (rescaled-version) of the trajectory should be simulated instead.
+// Consider the following ODE:
+//    dX/dt = f(t,X)
+// Here, instead of directly solving the ODE for X(t), we solve two auxiliary ODEs for S(t) and Y(t), where S is the "scale" (in some abstract sense) of X, and Y is a rescaled version of X (i.e. the "shape" of X)
+// For example, if X is a classical vector, then S may be defined as log(mean(X)) and Y = X/S.
+// Hence, any current state X is represented by a tuple (S,Y), where S is scalar and Y is of similar nature as X (the exact format of Y is handled transparently by the model, not the solver).
+// A separation between "shape" Y and "scale" S may be especially useful if X(t) decays to zero exponentially, resulting in numerical underflow, or explodes to infinity exponentially, resulting in numerical overflow.
+//
+// The solver can handle:
+//    1. Suggestions by the model for temporarily refined time steps
+//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
+//    3. Requests by the model to jump discontinuously to another state
+//
+// The shape Y must be of type COORDINATE, and the scale S must be of type double.
+// The model must be able to provide initial conditions and the dynamics for S and Y at each time point, as well as storing of the computed trajectory (defined by S and Y).
+// Of course, the model may internally store the trajectory X instead of S and Y, but the integrator will always compute and provide S and Y.
+//
+// Requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
+template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
+bool ScaledRungeKutta(	const double				startTime,						// (INPUT) simulation start time
+						const double				endTime, 						// (INPUT) simulation end time
+						double 						dt, 							// (INPUT) default integration time step
+						MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics (rates of change of S & Y), and handling time series storage
+						long						maxRecordedPoints, 				// (INPUT) if small, some intermediate trajectory points are skipped (i.e. not recorded). This might be useful if accurate integration requires a small time step, but would produce a needlesly large time series. If maxRecordedPoints==2, then only the start and end points are recorded. If maxRecordedPoints==1, then only the end point is recorded.
+						long						maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
+						const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
+						const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
+						string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
+	COORDINATE currentY, candidateY, Y2, jumpY;
+	double currentS, candidateS, S2, jumpS;
+	COORDINATE kY1, kY2, kYConsensus;
+	double kS1, kS2, kSConsensus;
+	double t=startTime, t2, current_dt1, current_dt2;
+	long recorded, refinements, iterations;
+	RequestedDynamics dynamics;
+	CrossedBoundary crossedBoundary;
+	const double simulationTime = endTime-startTime; // target duration of simulation
+	const double start_runtime  = get_thread_monotonic_walltime_seconds();
+	
+	// keep track of warnings
+	bool crossedBoundaryButFixedByReducingTimeStep = false;
+	bool crossedBoundaryYesButFixedBruteForce = false;
+	bool crossedBoundaryYesButFixedUsingEuler = false;
+	
+	//preliminary error checking
+	warningMessage = "";
+	if(dt<simulationTime*RELATIVE_EPSILON){
+		warningMessage = "Time step too small";
+		return false;
+	}
+	if(simulationTime < dt){
+		warningMessage = "Time step exceeds simulation time";
+		return false;
+	}
+	if(maxRecordedPoints < 1){
+		warningMessage = "Requested zero recorded points";
+		return false;
+	}
+	
+	const double recordingTimeStep = simulationTime/maxRecordedPoints;
+	model.reserveSpaceForScaledTimeSeries(maxRecordedPoints);
+	bool k1AlreadyCalculated = false;
+	
+	// get initial state (shape and scale)
+	if(!model.getScaledInitialState(t, currentY, currentS)){
+		warningMessage = "Failed to get initial state";
+		return false;
+	}
+	
+	// record initial state
+	double lastRecordedTime = -INFTY_D;
+	if(maxRecordedPoints>1){
+		model.registerScaledState(t, currentY, currentS);
+		lastRecordedTime = t;
+	}
+	
+	//run simulation
+	//default time step is dt, but temporarily dt might be reduced to a smaller value
+	for(recorded=1, current_dt1=current_dt2=dt, refinements=0, iterations=0; t<endTime; /* increment of t handled in loop */ ){
+		// at this stage currentY is guaranteed to be a valid state
+		// t should always correspond to currentY
+		// t2 should always correspond to Y2
+		// current_dt1 is used for moving from currentY-->Y2
+		// current_dt2 is used for moving from currentY-->candidateY (= potential next currentY)
+		++iterations;
+		
+		// check runtime-out
+		if((runtime_out_seconds>0) && (iterations%100==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely after "+makeString(iterations)+"  because it reached the maximum allowed processing time.";
+			return true;
+		}
+		
+		// reduce time step to not exceed end time, if needed
+		current_dt1 = min(min(current_dt1, current_dt2), endTime-t);
+				
+		// get dynamics (k1) at the current state if needed
+		// the dynamics will be the rate of change for the "shape" Y and for the "scale" S, i.e. symbolically k1 = (dY/dt, dS/dt)
+		if(!k1AlreadyCalculated){
+			dynamics = model.getRateOfChangeAtScaledState(t, currentY, currentS, kY1, kS1, jumpY, jumpS);
+			if(dynamics==RequestedDynamicsForceJumpToState){
+				currentY = jumpY;
+				currentS = jumpS;
+				t = t + current_dt1;
+				goto SRK2_REGISTER_STATE; 
+			}
+			k1AlreadyCalculated = true;
+		}
+		
+		// get Y2 & S2 (in forward k1-direction)
+		Y2  = currentY + kY1*current_dt1;
+		S2  = currentS + kS1*current_dt1;
+		t2  = t + current_dt1; // t2 should always correspond to Y2
+		
+		// check if (Y2,S2) crossed the boundary and move (Y2,S2) backward as much as needed
+		// (Y2,S2) and current_dt1 will be adjusted if this routine returns true
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentY, currentS, current_dt1, Y2, S2);
+		if(crossedBoundary == CrossedBoundaryYesButFixedBruteForce){ crossedBoundaryYesButFixedBruteForce = true; }
+		else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){ crossedBoundaryButFixedByReducingTimeStep = true; }
+				
+		// check if the time step should be reduced (as suggested by the model)
+		while((refinements<maxTimeStepRefinements) && model.checkShouldRefineTimeStep(t, currentY, currentS, current_dt1, Y2, S2)){
+			current_dt1 /= 2;
+			++refinements;
+			Y2 = currentY + kY1*current_dt1;
+			S2 = currentS + kS1*current_dt1;
+			t2 = t + current_dt1; // t2 should always correspond to (Y2,S2)
+		}		
+		
+		// get dynamics (k2) at (Y2,S2)
+		dynamics = model.getRateOfChangeAtScaledState(t2, Y2, S2, kY2, kS2, jumpY, jumpS);
+		if(dynamics==RequestedDynamicsForceJumpToState){
+			currentY = jumpY;
+			currentS = jumpS;
+			t = t2;
+			goto SRK2_REGISTER_STATE; 
+		}
+
+		// use k1 & k2 to move the currentY forward, potentially after refining the time step multiple times
+		kYConsensus = (kY1+kY2)*0.5;
+		kSConsensus = (kS1+kS2)*0.5;
+		candidateY  = currentY + kYConsensus*current_dt2;
+		candidateS  = currentS + kSConsensus*current_dt2;
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentY, currentS, current_dt2, candidateY, candidateS);
+		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
+			if(refinements<maxTimeStepRefinements){
+				++refinements; 
+				current_dt2 /= 2;
+				crossedBoundaryButFixedByReducingTimeStep = true;
+				continue; // repeat the whole iteration with a smaller time step
+			}else{
+				// use simple Euler scheme for this time step, since kConsensus throws us out of the boundary at even arbitrarily small time steps
+				currentY = Y2;
+				currentS = S2;
+				t = t2;
+				crossedBoundaryYesButFixedUsingEuler = true;
+				goto SRK2_REGISTER_STATE;
+			}
+		}
+				
+		// check if the time step should be reduced (as suggested by the model)
+		if((refinements<maxTimeStepRefinements) && model.checkShouldRefineTimeStep(t, currentY, currentS, current_dt2, candidateY, candidateS)){
+			++refinements; 
+			current_dt2 /= 2; 
+			continue; // repeat the last part with a smaller time step
+		}
+		
+		// seems everything worked out as normal, so set the new (currentY, currentS)
+		currentY = candidateY;
+		currentS = candidateS;
+		t = t + current_dt2; // t should always correspond to (currentY, currentS)
+		goto SRK2_REGISTER_STATE;
+		
+		// check and register new state if needed	
+		SRK2_REGISTER_STATE:
+		// check sanity (some ODEs may explode)		
+		if(std::isnan(t) || model.scaledStateIsNaN(currentY,currentS)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
+			return (recorded>1);
+		}
+		k1AlreadyCalculated = false;
+		if((t-lastRecordedTime > recordingTimeStep) && (recorded<maxRecordedPoints-1)){ // don't record if maxRecordedPoints has been almost exhausted (i.e. 1 remaining), since the final state will be recorded outside of the loop
+			model.registerScaledState(t, currentY, currentS);
+			++recorded;
+			lastRecordedTime = t;
+			reporter(recorded, maxRecordedPoints, 1-(endTime-t)/simulationTime);
+		}
+		
+		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
+		current_dt1  = dt;
+		current_dt2  = dt;
+		refinements = 0;
+	}
+	
+	// register final state if needed
+	if(t>lastRecordedTime){
+		model.registerScaledState(t, currentY, currentS);
+	}
+	
+	// construct warnings message if needed
+	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
+	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
+	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
+
+	return true;
+}
+
+
+
+
+
+// Two-step Runge-Kutta solver for linear ODEs where the log-scale and a scaled-version of the trajectory should be simulated instead.
+// Consider the following linear ODE:
+//    dX/dt = A(t)*X(t),
+// where the dynamic variable X(t) is a vector or a matrix of size NR x NC, and where A(t) is an explicitly given matrix of size NR x NR.
+// Here, the variable X(t) is split into two auxiliary variables, the log-scale S (S=log(mean(X))) and the "shape" Y=X/exp(S).
+// Hence, any current state X is represented by a tuple (S,Y), where S is scalar and Y is of similar nature as X.
+// A separation between "shape" Y and "scale" S may be especially useful if X(t) decays to zero exponentially, resulting in numerical underflow, or explodes to infinity exponentially, resulting in numerical overflow.
+//
+// The solver can handle:
+//    1. Suggestions by the model for temporarily refined time steps
+//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
+//
+// The shape Y must be of type COORDINATE (either a vector or matrix in row-major format), and the scale S will be of type double.
+// The model must be able to provide initial conditions for X, the dynamics for X in the form of A(t) at each time point, as well as storing of the computed trajectory (defined by S and Y).
+// Of course, the model may internally store the trajectory X instead of S and Y, but the integrator will always compute and provide S and Y.
+//
+// Requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
+template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
+bool LinearScaledRungeKutta(const long					NR,								// (INPUT) number of rows in A and X
+							const long					NC,								// (INPUT) number of columns in X
+							const double				startTime,						// (INPUT) simulation start time
+							const double				endTime, 						// (INPUT) simulation end time
+							const double 				dt, 							// (INPUT) default integration time step
+							MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics (via the matrix A), and handling time series storage
+							const long					maxRecordedPoints, 				// (INPUT) if small, some intermediate trajectory points are skipped (i.e. not recorded). This might be useful if accurate integration requires a small time step, but would produce a needlesly large time series. If maxRecordedPoints==2, then only the start and end points are recorded. If maxRecordedPoints==1, then only the end point is recorded.
+							const long					maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
+							const double				refinement_factor,				// (INPUT) factor by which to refine time steps. Typical values are 2-10.
+							const long 					max_exp_order,					// (INPUT) maximum polynomial order for approximating exponentials (short-term propagators). Typical values are 2-5
+							const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
+							const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
+							string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
+	COORDINATE currentY, candidateY, Y2, initialX;
+	double currentS, candidateS, S2, rescaling;
+	std::vector<double> A1, A2, Aconsensus, scratch1, scratch2;
+	double t=0, t2, current_dt1, current_dt2, original_dt2;
+	long recorded, iterations;
+	CrossedBoundary crossedBoundary;
+	const double DeltaTime 			= endTime-startTime; // target duration of simulation
+	const double start_runtime  	= get_thread_monotonic_walltime_seconds();
+	const double min_dt 			= dt/pow(refinement_factor,maxTimeStepRefinements);
+	
+	// note that we internally measure time in relative time "t", i.e. starting at 0 until DeltaTime
+	// this is needed to avoid floating point rounding errors when DeltaT is much smaller than startTime
+	// whenever we "speak" to the model (e.g. requesting dynamics or recording a trajectory point), we transform it to real time
+	
+	
+	// keep track of warnings
+	bool crossedBoundaryButFixedByReducingTimeStep = false;
+	bool crossedBoundaryYesButFixedBruteForce = false;
+	bool crossedBoundaryYesButFixedUsingEuler = false;
+		
+	//preliminary error checking
+	warningMessage = "";
+	if(dt<DeltaTime*RELATIVE_EPSILON){
+		warningMessage = "Time step too small";
+		return false;
+	}
+	if(DeltaTime < dt){
+		warningMessage = "Time step exceeds simulation time";
+		return false;
+	}
+	if(maxRecordedPoints < 1){
+		warningMessage = "Requested zero recorded points";
+		return false;
+	}
+	
+	const double recordingTimeStep = DeltaTime/max(1L,maxRecordedPoints-1);
+	model.reserveSpaceForScaledTimeSeries(maxRecordedPoints);
+	bool k1AlreadyCalculated = false;
+	
+	// get initial state (shape and scale)
+	if(!model.getInitialState(startTime+t, initialX)){
+		warningMessage = "Failed to get initial state";
+		return false;
+	}
+	
+	// create scaled version of initial state
+	const double initial_mean = vector_mean(initialX);
+	if(initial_mean<=0){
+		warningMessage = "Initial state as negative or zero scale";
+		return false;
+	}
+	currentY = initialX/initial_mean;
+	currentS = log(initial_mean);
+	
+	// record initial state
+	double lastRecordedTime = -INFTY_D;
+	if(maxRecordedPoints>1){
+		model.registerScaledState(startTime+t, currentY, currentS);
+		lastRecordedTime = t;
+	}
+		
+	//run simulation
+	//default time step is dt, but temporarily dt might be reduced to a smaller value
+	for(recorded=1, current_dt1=current_dt2=dt, iterations=0; t<DeltaTime; /* increment of t handled in loop */ ){
+		// at this stage currentY is guaranteed to be a valid state
+		// t should always correspond to currentY
+		// t2 should always correspond to Y2
+		// current_dt1 is used for moving from currentY-->Y2
+		// current_dt2 is used for moving from currentY-->candidateY (= potential next currentY)
+		++iterations;
+		
+		// check runtime-out
+		if((runtime_out_seconds>0) && (iterations%100==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+			warningMessage += string(warningMessage=="" ? "" : "; ") + "Simulation was aborted prematurely after "+makeString(iterations)+" iterations because it reached the maximum allowed processing time.";
+			return true;
+		}
+		
+		// reduce time step dt1 to not exceed end time nor dt2, if needed
+		current_dt1 = min(min(current_dt1,current_dt2), DeltaTime-t);
+				
+		// get dynamics at the current time t, in the form of the matrix A(t)
+		if(!k1AlreadyCalculated){
+			model.getLinearDynamics(startTime+t, A1);
+			k1AlreadyCalculated = true;
+		}
+		
+		// get Y2 by applying the dynamics A: Y2 = exp(current_dt1*A)*currentY
+		// don't update S yet, do so at the end of this iteration
+		apply_approximate_matrix_exponential(NR, NC, A1, current_dt1, currentY, max_exp_order, scratch1, scratch2, Y2);
+		S2  = currentS; // don't change scale until later
+		t2  = t + current_dt1; // t2 should always correspond to Y2
+
+		// check if Y2 crossed the boundary and move Y2 backward as much as needed
+		// (Y2,S2) and current_dt1 will be adjusted if this routine returns true
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(startTime+t, currentY, currentS, current_dt1, Y2, S2, true);
+		if(crossedBoundary == CrossedBoundaryYesButFixedBruteForce){ crossedBoundaryYesButFixedBruteForce = true; }
+		else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){ crossedBoundaryButFixedByReducingTimeStep = true; }
+						
+		// check if the time step should be reduced (as suggested by the model)
+		while((current_dt1>min_dt) && model.checkShouldRefineTimeStep(startTime+t, currentY, currentS, current_dt1, Y2, S2)){
+			// recalculate currentY --> Y2 with a smaller time step
+			current_dt1 /= refinement_factor;
+			apply_approximate_matrix_exponential(NR, NC, A1, current_dt1, currentY, max_exp_order, scratch1, scratch2, Y2);
+			S2 = currentS;
+			t2 = t + current_dt1; // t2 should always correspond to (Y2,S2)
+		}
+		
+		// stage-2 time-step should not be larger than the stage-1 time-step, but also not below min_dt
+		current_dt2 = max(min(min_dt,endTime-t), min(current_dt1,current_dt2));
+		
+		// get dynamics (matrix A) at t2
+		model.getLinearDynamics(startTime+t2, A2);
+
+		// use A1 & A2 to move the currentY forward (t --> t+current_dt2), and check if time step was sufficiently small
+		linear_combination(0.5, A1, 0.5, A2, Aconsensus);
+		apply_approximate_matrix_exponential(NR, NC, Aconsensus, current_dt2, currentY, max_exp_order, scratch1, scratch2, candidateY);
+		candidateS = currentS; // increment scale later on
+
+		// check if we crossed the domain boundary, and correct if needed		
+		original_dt2 = current_dt2;
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(startTime+t, currentY, currentS, current_dt2, candidateY, candidateS, true);
+		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
+			if(current_dt2>min_dt){
+				current_dt2 /= refinement_factor;
+				crossedBoundaryButFixedByReducingTimeStep = true;
+				continue; // repeat the whole iteration with a smaller time step
+			}else{
+				// use simple Euler scheme for this time step, since kConsensus throws us out of the boundary at even arbitrarily small time steps
+				rescaling 	= vector_mean(Y2);
+				currentY 	= Y2/rescaling;
+				currentS 	= S2+log(rescaling); // since we are rescaling Y2, correct for this rescaling in currentS		
+				t 			= t2;
+				crossedBoundaryYesButFixedUsingEuler = true;
+				goto SRK2_REGISTER_STATE;
+			}
+		}else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){
+			crossedBoundaryButFixedByReducingTimeStep = true;
+		}
+
+		// check if the time step should be reduced (as suggested by the model)
+		if((current_dt2>min_dt) && model.checkShouldRefineTimeStep(startTime+t, currentY, currentS, current_dt2, candidateY, candidateS)){
+			current_dt2 /= refinement_factor;
+			continue; // repeat this iteration with a smaller time step, forget about the current candidateY
+		}
+		
+		// seems everything worked out as normal, so set the new (currentY, currentS)
+		rescaling = vector_mean(candidateY);
+		currentY = candidateY/rescaling;
+		currentS = candidateS + log(rescaling); // since we are rescaling currentY, correct the scale for this rescaling
+		t = t + current_dt2; // t should always correspond to (currentY, currentS)
+		goto SRK2_REGISTER_STATE;
+		
+		// check and register new state if needed	
+		SRK2_REGISTER_STATE:
+		// check sanity (some ODEs may explode)		
+		if(std::isnan(t) || model.scaledStateIsNaN(currentY,currentS)){
+			warningMessage += string(warningMessage=="" ? "" : "; ") + "Simulation reached NaN.";
+			return (recorded>1);
+		}
+		k1AlreadyCalculated = false;
+		if((t-lastRecordedTime > recordingTimeStep) && (recorded<maxRecordedPoints-1)){ // don't record if maxRecordedPoints has been almost exhausted (i.e. 1 remaining), since the final state will be recorded outside of the loop
+			model.registerScaledState(startTime+t, currentY, currentS);
+			++recorded;
+			lastRecordedTime = t;
+			reporter(recorded, maxRecordedPoints, 1-(DeltaTime-t)/DeltaTime);
+		}
+		
+		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
+		// only gradually increase the time step, to avoid repeatedly wasting time in refinements
+		current_dt1  = min(refinement_factor*current_dt1,dt);
+		current_dt2  = min(refinement_factor*current_dt2,dt);
+	}
+	
+	// register final state if needed
+	if(t>lastRecordedTime){
+		model.registerScaledState(startTime+t, currentY, currentS);
+	}
+
+	// construct warnings message if needed
+	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "; ") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
+	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "; ") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
+	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "; ") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
+	
+	return true;
+}
+
+
+
+
+
+
+// Rosenbrock-Euler order-2 ODE solver for equations of the form:
+//    dX/dt = f(t,X) = A(t)*X(t) + N(t,X(t)),
+// where the dynamic variable X(t) is a vector or a matrix of size NR x NC, and where A(t) ("linearity") is an explicitly given matrix of size NR x NR and N(t,X(t)) is the non-linear residual.
+// This is of the simplest exponential integrators. Exponential integrators are particularly suited for stiff problems, when the stiffness is caused by the linear dynamics.
+// At each iteration, the integration proceeds with the following step:
+//	 X(t+eps) = X(t) + [exp(eps*A(t)) - Id] * A(t)^{-1} * f(t,X(t))
+// where:
+//   f(t,X(t)) = [A(t)*X(t) + N(t,X(t))]
+// The exponential * inverse_A term can be approximated as:
+//   [exp(eps*A(t)) - Id] * A(t)^{-1} = sum_{k=0}^n (eps/(k+1)) * (eps*A(t))^k/k!
+//  Here, we shall call this the Rosenbrock-Euler propagator.
+//
+// The solver can handle:
+//    1. Suggestions by the model for temporarily refined time steps
+//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
+//
+// The model must be able to provide initial conditions for X, the linearity A(t) and the nonlinearity N(t,X(t)) at each time point, as well as storing of the computed trajectory
+// For a quick derivation of the Rosenbrock-Euler scheme see: 
+//   Chen et al (2018). Exponential Rosenbrock-Euler integrators for elastodynamic simulation. IEEE transactions on visualization and computer graphics. 24:2702-2713
+//
+// Requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
+template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
+bool RosenbrockEuler(	const long					NR,								// (INPUT) number of rows in A and X
+						const long					NC,								// (INPUT) number of columns in X
+						const double				startTime,						// (INPUT) simulation start time
+						const double				endTime, 						// (INPUT) simulation end time
+						const double 				dt, 							// (INPUT) default integration time step
+						MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics (via the matrix A), and handling time series storage
+						const long					maxRecordedPoints, 				// (INPUT) if small, some intermediate trajectory points are skipped (i.e. not recorded). This might be useful if accurate integration requires a small time step, but would produce a needlesly large time series. If maxRecordedPoints==2, then only the start and end points are recorded. If maxRecordedPoints==1, then only the end point is recorded.
+						const long					maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
+						const long 					max_exp_order,					// (INPUT) maximum polynomial order for approximating exponentials (short-term propagators). Typical values are 2-5
+						const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
+						const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
+						string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
+	COORDINATE currentX, candidateX, X2, nonlinearity, rate;
+	std::vector<double> linearity, scratch1, scratch2, default_RE_propagator;
+	double t=startTime, t2, current_dt, candidate_dt;
+	long recorded;
+	CrossedBoundary crossedBoundary;
+	const double simulationTime = endTime-startTime; // target duration of simulation
+	const double start_runtime  = get_thread_monotonic_walltime_seconds();
+	const double min_dt = dt/pow(2.0,maxTimeStepRefinements);
+	const bool constant_linearity = model.linearDynamicsAreConstant();
+	
+	// keep track of warnings
+	bool crossedBoundaryButFixedByReducingTimeStep = false;
+	bool crossedBoundaryYesButFixedBruteForce = false;
+	bool crossedBoundaryYesButFixedUsingEuler = false;
+		
+	//preliminary error checking
+	warningMessage = "";
+	if(dt<simulationTime*RELATIVE_EPSILON){
+		warningMessage = "Time step too small";
+		return false;
+	}
+	if(simulationTime < dt){
+		warningMessage = "Time step exceeds simulation time";
+		return false;
+	}
+	if(maxRecordedPoints < 1){
+		warningMessage = "Requested zero recorded points";
+		return false;
+	}
+	
+	const double recordingTimeStep = simulationTime/max(1L,maxRecordedPoints-1);
+	model.reserveSpaceForTimeSeries(maxRecordedPoints);
+	bool k1AlreadyCalculated = false;
+	
+	// get initial state (shape and scale)
+	if(!model.getInitialState(t, currentX)){
+		warningMessage = "Failed to get initial state";
+		return false;
+	}
+		
+	// record initial state
+	double lastRecordedTime = -INFTY_D;
+	if(maxRecordedPoints>1){
+		model.registerState(t, currentX);
+		lastRecordedTime = t;
+	}
+	
+	if(constant_linearity){
+		// since linearity is always the same, precompute the default Rosenbrock-Euler propagator (i.e. for the default time step)
+		model.getLinearAndNonlinearDynamics(t, currentX, linearity, nonlinearity);
+		std::vector<double> identity;
+		get_identity_matrix(NR,identity);
+		apply_approximate_RosenbrockEuler_exponential(NR, NR, linearity, dt, identity, max_exp_order, scratch1, scratch2, default_RE_propagator);
+	}
+	
+	//run simulation
+	//default time step is dt, but temporarily dt might be reduced to a smaller value
+	for(recorded=1, current_dt=dt; t<endTime; /* increment of t handled in loop */ ){
+		// at this stage currentY is guaranteed to be a valid state
+		// t should always correspond to currentY
+		
+		// check runtime-out
+		if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely because it reached the maximum allowed processing time.";
+			return true;
+		}
+		
+		// reduce time step to not exceed end time, if needed
+		current_dt = min(current_dt, endTime-t);
+						
+		// get dynamics at the current time t, in the form of the linearity (matrix) and nonlinearity
+		if(!k1AlreadyCalculated){
+			model.getLinearAndNonlinearDynamics(t, currentX, linearity, nonlinearity);
+			k1AlreadyCalculated = true;
+		}
+		
+		// get rate of change: rate = linearity*currentX + nonlinearity
+		multiply_matrices(NR,NR,NC,linearity,currentX,rate);
+		rate += nonlinearity;
+		
+		// get X2 by applying the Rosenbrock-Euler propagator
+		// X2 = currentX + [exp(current_dt*linearity)-Id]*linearity^{-1}*rate
+		// t2 should always correspond to X2
+		if(constant_linearity && (abs(current_dt-dt)<RELATIVE_EPSILON*dt)){
+			multiply_matrices(NR,NR,NC,default_RE_propagator,rate,X2);
+		}else{
+			apply_approximate_RosenbrockEuler_exponential(NR, NC, linearity, current_dt, rate, max_exp_order, scratch1, scratch2, X2);
+		}
+		X2 += currentX;
+		t2  = t + current_dt; 
+						
+		// check if the time step should be reduced (as suggested by the model)
+		while((current_dt>min_dt) && model.checkShouldRefineTimeStep(t, currentX, current_dt, X2)){
+			// recalculate currentX --> X2 with a smaller time step
+			current_dt /= 2;
+			apply_approximate_RosenbrockEuler_exponential(NR, NC, linearity, current_dt, rate, max_exp_order, scratch1, scratch2, X2);
+			X2 += currentX;
+			t2  = t + current_dt; // t2 should always correspond to X2
+		}
+		
+		// check if we crossed the domain boundary, and correct if needed
+		// candidate_dt should always correspond to candidateX
+		candidateX 		= X2; // candidateX and current_dt may be modified by the model below
+		candidate_dt 	= current_dt;
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentX, candidate_dt, candidateX);
+		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
+			if(current_dt>min_dt){
+				current_dt /= 2;
+				crossedBoundaryButFixedByReducingTimeStep = true;
+				continue; // repeat the whole iteration with a smaller time step
+			}else{
+				// no more time step refinements allowed, and crossing the boundary at even infinitesimal step, so just register candidateX
+				currentX 	= candidateX;
+				t 			= t2;
+				crossedBoundaryYesButFixedUsingEuler = true;
+				goto RBE_REGISTER_STATE;
+			}
+		}else if(crossedBoundary==CrossedBoundaryYesButFixedByReducingTimeStep){
+		}
+		
+		// seems everything worked out as normal, so set the new currentX
+		// t should always correspond to currentX
+		currentX = candidateX;
+		t = t + candidate_dt;
+		
+		// check and register new state if needed	
+		RBE_REGISTER_STATE:
+		// check sanity (some ODEs may explode)		
+		if(std::isnan(t) || model.stateIsNaN(currentX)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
+			return (recorded>1);
+		}
+		k1AlreadyCalculated = false;
+		if((t-lastRecordedTime > recordingTimeStep) && (recorded<maxRecordedPoints-1)){ // don't record if maxRecordedPoints has been almost exhausted (i.e. 1 remaining), since the final state will be recorded outside of the loop
+			model.registerState(t, currentX);
+			++recorded;
+			lastRecordedTime = t;
+			reporter(recorded, maxRecordedPoints, 1-(endTime-t)/simulationTime);
+		}
+		
+		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
+		current_dt  = dt;
+	}
+	
+	// register final state if needed
+	if(t>lastRecordedTime){
+		model.registerState(t, currentX);
+	}
+
+	// construct warnings message if needed
+	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
+	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
+	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
+	
+	return true;
+}
+
+
+
+
+
+
+// Rosenbrock-Euler integrator nested into two-stage Runge-Kutta scheme for solving ODEs of the format:
+//    dX/dt = f(t,X) = A(t)*X(t) + N(t,X(t)),
+// where the dynamic variable X(t) is a vector or a matrix of size NR x NC, and where A(t) ("linearity") is an explicitly given matrix of size NR x NR and N(t,X(t)) is the non-linear residual.
+// This solver uses an exponential integrator for each stage, and includes two stages per iteration. 
+// Exponential integrators are particularly suited for stiff problems, when the stiffness is caused by the linear dynamics.
+// At each stage, the integration proceeds with the following step:
+//	 X(t+eps) = X(t) + [exp(eps*A(t)) - Id] * A(t)^{-1} * f(t,X(t))
+// where:
+//   f(t,X(t)) = [A(t)*X(t) + N(t,X(t))]
+// The exponential * inverse_A term can be approximated as:
+//   [exp(eps*A(t)) - Id] * A(t)^{-1} = sum_{k=0}^n (eps/(k+1)) * (eps*A(t))^k/k!
+//  Here, we shall call this the Rosenbrock-Euler propagator.
+//
+// The solver can handle:
+//    1. Suggestions by the model for temporarily refined time steps
+//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
+//
+// The model must be able to provide initial conditions for X, the linearity A(t) and the nonlinearity N(t,X(t)) at each time point, as well as storing of the computed trajectory
+// For a quick derivation of the Rosenbrock-Euler scheme see: 
+//   Chen et al (2018). Exponential Rosenbrock-Euler integrators for elastodynamic simulation. IEEE transactions on visualization and computer graphics. 24:2702-2713
+//
+// Requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
+template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
+bool RosenbrockEulerRungeKutta2(	const long					NR,								// (INPUT) number of rows in A and X
+									const long					NC,								// (INPUT) number of columns in X
+									const double				startTime,						// (INPUT) simulation start time
+									const double				endTime, 						// (INPUT) simulation end time
+									const double 				dt, 							// (INPUT) default integration time step
+									MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics (via the matrix A), and handling time series storage
+									const long					maxRecordedPoints, 				// (INPUT) if small, some intermediate trajectory points are skipped (i.e. not recorded). This might be useful if accurate integration requires a small time step, but would produce a needlesly large time series. If maxRecordedPoints==2, then only the start and end points are recorded. If maxRecordedPoints==1, then only the end point is recorded.
+									const long					maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
+									const double				refinement_factor,				// (INPUT) factr by which to refine time steps
+									const long 					max_exp_order,					// (INPUT) maximum polynomial order for approximating exponentials (short-term propagators). Typical values are 2-5
+									const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
+									const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
+									string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
+	COORDINATE currentX, candidateX, X2, NL1, NL2, rate1, rate2, Rconsensus;
+	std::vector<double> A1, A2, Aconsensus, scratch1, scratch2, default_RE_propagator;
+	double t=startTime, t2, current_dt1, current_dt2;
+	long recorded;
+	CrossedBoundary crossedBoundary;
+	const double simulationTime 	= endTime-startTime; // target duration of simulation
+	const double start_runtime  	= get_thread_monotonic_walltime_seconds();
+	const double min_dt 			= dt/pow(refinement_factor,maxTimeStepRefinements);
+	const bool constant_linearity 	= model.linearDynamicsAreConstant();
+	
+	// keep track of warnings
+	bool crossedBoundaryButFixedByReducingTimeStep = false;
+	bool crossedBoundaryYesButFixedBruteForce = false;
+	bool crossedBoundaryYesButFixedUsingEuler = false;
+		
+	//preliminary error checking
+	warningMessage = "";
+	if(dt<simulationTime*RELATIVE_EPSILON){
+		warningMessage = "Time step too small";
+		return false;
+	}
+	if(simulationTime < dt){
+		warningMessage = "Time step exceeds simulation time";
+		return false;
+	}
+	if(maxRecordedPoints < 1){
+		warningMessage = "Requested zero recorded points";
+		return false;
+	}
+	
+	const double recordingTimeStep = simulationTime/max(1L,maxRecordedPoints-1);
+	model.reserveSpaceForTimeSeries(maxRecordedPoints);
+	bool k1AlreadyCalculated = false;
+	
+	// get initial state (shape and scale)
+	if(!model.getInitialState(t, currentX)){
+		warningMessage = "Failed to get initial state";
+		return false;
+	}
+		
+	// record initial state
+	double lastRecordedTime = -INFTY_D;
+	if(maxRecordedPoints>1){
+		model.registerState(t, currentX);
+		lastRecordedTime = t;
+	}
+	
+	if(constant_linearity){
+		// since linearity is always the same, precompute the default Rosenbrock-Euler propagator (i.e. for the default time step)
+		model.getLinearAndNonlinearDynamics(t, currentX, A1, NL1);
+		std::vector<double> identity;
+		get_identity_matrix(NR,identity);
+		apply_approximate_RosenbrockEuler_exponential(NR, NR, A1, dt, identity, max_exp_order, scratch1, scratch2, default_RE_propagator);
+	}
+	
+	//run simulation
+	//default time step is dt, but temporarily dt might be reduced to a smaller value
+	for(recorded=1, current_dt1=current_dt2=dt; t<endTime; /* increment of t handled in loop */ ){
+		// at this stage currentY is guaranteed to be a valid state
+		// t should always correspond to currentY
+		// t2 should always correspond to X2
+		// current_dt1 is used for moving from currentX-->X2, which is an intermediate point for obtaining a second "take" on the local dynamics
+		// current_dt2 is used for moving from currentX-->candidateX (= potential next currentX), based on the dynamics averaged between currentX and X2
+		
+		// check runtime-out
+		if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely because it reached the maximum allowed processing time.";
+			return true;
+		}
+		
+		// reduce time step dt1 to not exceed dt2, nor overshoot past endTime
+		current_dt1 = min(min(current_dt1,current_dt2), endTime-t);
+		
+		// get dynamics at the current time t, in the form of the linearity (matrix) and nonlinearity
+		// the rate of change will be: rate = linearity*currentX + nonlinearity
+		if(!k1AlreadyCalculated){
+			model.getLinearAndNonlinearDynamics(t, currentX, A1, NL1);
+			k1AlreadyCalculated = true;
+			multiply_matrices(NR,NR,NC,A1,currentX,rate1);
+			rate1 += NL1;
+		}
+		
+		// get X2 by applying the Rosenbrock-Euler propagator
+		if(constant_linearity && (abs(current_dt1-dt)<RELATIVE_EPSILON*dt)){
+			multiply_matrices(NR,NR,NC,default_RE_propagator,rate1,X2);
+		}else{
+			apply_approximate_RosenbrockEuler_exponential(NR, NC, A1, current_dt1, rate1, max_exp_order, scratch1, scratch2, X2);
+		}
+		X2 += currentX;
+		t2  = t + current_dt1; // t2 should always correspond to X2
+
+		// check if X2 crossed the boundary and move X2 backward as much as needed
+		// X2 and current_dt1 may be adjusted if this routine returns something other than CrossedBoundaryNo
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentX, current_dt1, X2);
+		if(crossedBoundary == CrossedBoundaryYesButFixedBruteForce){ crossedBoundaryYesButFixedBruteForce = true; }
+		else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){ crossedBoundaryButFixedByReducingTimeStep = true; }
+						
+		// check if the time step should be reduced (as suggested by the model)
+		while((current_dt1>min_dt) && model.checkShouldRefineTimeStep(t, currentX, current_dt1, X2)){
+			// recalculate currentX --> X2 with a smaller time step
+			current_dt1 /= refinement_factor;
+			apply_approximate_RosenbrockEuler_exponential(NR, NC, A1, current_dt1, rate1, max_exp_order, scratch1, scratch2, X2);
+			X2 += currentX;
+			t2  = t + current_dt1; // t2 should always correspond to X2
+		}
+		
+		// stage-2 time-step should not be larger than the stage-1 time-step, but also not below min_dt
+		current_dt2 = max(min(min_dt,endTime-t), min(current_dt1,current_dt2));
+				
+		// get dynamics at t2
+		model.getLinearAndNonlinearDynamics(t2, X2, A2, NL2);
+		multiply_matrices(NR,NR,NC,A2,X2,rate2);
+		rate2 += NL2;
+
+		// use rate1 & rate2 to move the currentX forward, and check if time step was sufficiently small
+		linear_combination(0.5, A1, 0.5, A2, Aconsensus);
+		linear_combination(0.5, rate1, 0.5, rate2, Rconsensus);
+		if(constant_linearity && (abs(current_dt2-dt)<RELATIVE_EPSILON*dt)){
+			multiply_matrices(NR,NR,NC,default_RE_propagator,Rconsensus,candidateX);
+		}else{
+			apply_approximate_RosenbrockEuler_exponential(NR, NC, Aconsensus, current_dt2, Rconsensus, max_exp_order, scratch1, scratch2, candidateX);
+		}
+		candidateX += currentX;
+
+		// check if we crossed the domain boundary, and correct if needed
+		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentX, current_dt2, candidateX);
+		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
+			if(current_dt2>min_dt){
+				current_dt2 /= refinement_factor;
+				crossedBoundaryButFixedByReducingTimeStep = true;
+				continue; // repeat the whole iteration with a smaller time step
+			}else{
+				// use prediction from 1-stage Rosenbrock-Euler scheme for this time step, since kConsensus throws us out of the boundary at even arbitrarily small time steps
+				currentX	= X2;
+				t 			= t2;
+				crossedBoundaryYesButFixedUsingEuler = true;
+				goto SRERK2_REGISTER_STATE;
+			}
+		}
+
+		// check if the time step should be reduced (as suggested by the model)
+		if((current_dt2>min_dt) && model.checkShouldRefineTimeStep(t, currentX, current_dt2, candidateX)){
+			current_dt2 /= refinement_factor;
+			continue; // repeat this iteration with a smaller time step, forget about the current candidateX
+		}
+		
+		// seems everything worked out as normal, so set the new currentX
+		currentX = candidateX;
+		t = t + current_dt2; // t should always correspond to (currentX, currentS)
+		goto SRERK2_REGISTER_STATE;
+		
+		// check and register new state if needed	
+		SRERK2_REGISTER_STATE:
+		// check sanity (some ODEs may explode)		
+		if(std::isnan(t) || model.stateIsNaN(currentX)){
+			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
+			return (recorded>1);
+		}
+		k1AlreadyCalculated = false;
+		if((t-lastRecordedTime > recordingTimeStep) && (recorded<maxRecordedPoints-1)){ // don't record if maxRecordedPoints has been almost exhausted (i.e. 1 remaining), since the final state will be recorded outside of the loop
+			model.registerState(t, currentX);
+			++recorded;
+			lastRecordedTime = t;
+			reporter(recorded, maxRecordedPoints, 1-(endTime-t)/simulationTime);
+		}
+		
+		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
+		current_dt1  = dt;
+		current_dt2  = dt;
+	}
+	
+	// register final state if needed
+	if(t>lastRecordedTime){
+		model.registerState(t, currentX);
+	}
+
+	// construct warnings message if needed
+	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using 1-stage Rosenbrock-Euler.";
+	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
+	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
+	
+	return true;
+}
+
+
 
 
 
@@ -2709,17 +6381,18 @@ private:
 	string prefix, suffix;
 	bool asPercentage;
 	mutable long lastReportedCase;
+	mutable double lastReportedFraction;
 	bool silent;
 public:
-	ProgressReporter(const bool _silent){ reportCount = 10; lastReportedCase=-1; silent = _silent; }
-	ProgressReporter(long _reportCount){ reportCount = _reportCount; lastReportedCase=-1; }
-	ProgressReporter(long _reportCount, const string &_prefix, const string &_suffix, bool _asPercentage){ reportCount = _reportCount; prefix = _prefix; suffix = _suffix; asPercentage = _asPercentage; lastReportedCase = -1; }
+	ProgressReporter(const bool _silent){ reportCount = 10; lastReportedCase=-1; lastReportedFraction = 0; silent = _silent; }
+	ProgressReporter(long _reportCount){ reportCount = _reportCount; lastReportedCase=-1; lastReportedFraction=0; }
+	ProgressReporter(long _reportCount, const string &_prefix, const string &_suffix, bool _asPercentage){ reportCount = _reportCount; prefix = _prefix; suffix = _suffix; asPercentage = _asPercentage; lastReportedCase = -1; lastReportedFraction = 0; }
 	
 	void setReportCount(long count){ reportCount = count; }
 	void setPrefix(const string &_prefix){ prefix = _prefix; }
 	void setSuffix(const string &_suffix){ suffix = _suffix; }
 	void setAsPercentage(bool _asPercentage){ asPercentage = _asPercentage; }
-	void reset(){ lastReportedCase = -1; }
+	void reset(){ lastReportedCase = -1; lastReportedFraction = 0; }
 	
 	void operator()(long casesFinished, long totalCases, double exactFraction) const{
 		if(reportCount<=0) return;
@@ -2729,14 +6402,38 @@ public:
 		const double dp = 1.0/reportCount;
 		if((lastReportedCase>=0) && (floor(p/dp)<=floor(last_p/dp))) return; //don't report this case
 		if(floor(p/dp)==0) return;
-		lastReportedCase = casesFinished;
+		lastReportedCase 	 = casesFinished;
+		lastReportedFraction = exactFraction;
 		const long rounder = pow(10.0,1+log10(max(reportCount,1l)));
 		Rcout << prefix;
 		if(asPercentage){ Rcout << long(rounder*100.0*exactFraction)/rounder << " %"; }
 		else{ Rcout << long(floor(exactFraction*totalCases)) << " out of " << totalCases; }
 		Rcout << suffix;
 	}
+	
+	
+	void operator()(double rangeFinished, double totalRange) const{
+		if(reportCount<=0) return;
+		if(silent) return;
+		const double fractionFinished = rangeFinished/totalRange;
+		const double dfraction = 1.0/reportCount; // targetted fraction step between recordings
+		if((floor(fractionFinished/dfraction)<=floor(lastReportedFraction/dfraction))) return; //don't report this case
+		if(floor(fractionFinished/dfraction)==0) return;
+		lastReportedFraction = fractionFinished;
+		const long rounder = pow(10.0,1+log10(max(reportCount,1l))); // auxiliary factor for rounding reported fractions on printout
+		Rcout << prefix;
+		if(asPercentage){ Rcout << long(rounder*100.0*fractionFinished)/rounder << " %"; }
+		else{ Rcout << rangeFinished << " out of " << totalRange; }
+		Rcout << suffix;
+	}
 };
+
+
+
+
+#pragma mark -
+#pragma mark Deterministic diversity dynamics
+#pragma mark
 
 
 
@@ -3060,41 +6757,42 @@ public:
 		}
 	}
 	
-	// check if candidateState is outside of the domain boundaries.
-	// In that case, tries to correct the candidateState to be the "last" valid state on the linear trajectory
-	// If this is not possible (e.g. because previousState was already on the boundary), the problematic components are brute-force adjusted to be within the domain. In this case, the routine returns CrossedBoundaryYesButFixedBruteForce.
-	CrossedBoundary checkCrossedDomainBoundaryAndFix(	double					previousTime,
-														const TreeStateHistory	&previousState,					// previous state (assumed to be valid!)
-														double 					&dt,							// (INPUT/OUTPUT) will be adjusted (reduced) if candidateState crossed the boundary. The modified value is guaranteed to be within (0,dt]
-														TreeStateHistory		&candidateState) const{			// (INPUT/OUTPUT) if candidateState is outside of domain boundaries, then this may become the "last" state (on the linear trajectory from previousState to candidateState) within the domain (if possible).
-		if(candidateState.diversity>=min_valid_diversity){
+	// check if candidate_state is outside of the domain boundaries.
+	// In that case, tries to correct the candidate_state to be the "last" valid state on the linear trajectory
+	// If this is not possible (e.g. because previous_state was already on the boundary), the problematic components are brute-force adjusted to be within the domain. In this case, the routine returns CrossedBoundaryYesButFixedBruteForce.
+	CrossedBoundary checkCrossedDomainBoundaryAndFix(	double					previous_time,
+														const TreeStateHistory	&previous_state,		// previous state (assumed to be valid!)
+														double 					&dt,					// (INPUT/OUTPUT) will be adjusted (reduced) if candidate_state crossed the boundary. The modified value is guaranteed to be within (0,dt]
+														TreeStateHistory		&candidate_state,		// (INPUT/OUTPUT) if candidate_state is outside of domain boundaries, then this may become the "last" state (on the linear trajectory from previous_state to candidate_state) within the domain (if possible).
+														const bool				intermediate) const{	// (INPUT) is the candidate point an intermediate point (i.e. as used in Runge-Kutta schemes), or a final point (i.e., the final prediction for the candidate time)
+		if(candidate_state.diversity>=min_valid_diversity){
 			return CrossedBoundaryNo;
-		}else if(previousState.diversity>min_valid_diversity){
+		}else if(previous_state.diversity>min_valid_diversity){
 			double lambda = 1;
-			if(candidateState.diversity<min_valid_diversity) lambda = min(lambda,(previousState.diversity-min_valid_diversity)/(previousState.diversity-candidateState.diversity));
-			candidateState = previousState*(1-lambda) + candidateState*lambda;
+			if(candidate_state.diversity<min_valid_diversity) lambda = min(lambda,(previous_state.diversity-min_valid_diversity)/(previous_state.diversity-candidate_state.diversity));
+			candidate_state = previous_state*(1-lambda) + candidate_state*lambda;
 			dt *= lambda;
 			return CrossedBoundaryYesButFixedByReducingTimeStep;
 		}else{
-			candidateState.diversity 	= max(min_valid_diversity,candidateState.diversity);
-			candidateState.Pextinction 	= min(1.0,max(0.0,candidateState.Pextinction));
-			candidateState.Pmissing 	= min(1.0,max(0.0,candidateState.Pmissing));
+			candidate_state.diversity 	= max(min_valid_diversity,candidate_state.diversity);
+			candidate_state.Pextinction 	= min(1.0,max(0.0,candidate_state.Pextinction));
+			candidate_state.Pmissing 	= min(1.0,max(0.0,candidate_state.Pmissing));
 			return CrossedBoundaryYesButFixedBruteForce;
 		}
 		/*
-		if((candidateState.diversity>=min_valid_diversity) && ((!reverse) || ((candidateState.Pextinction>=0) && (candidateState.Pextinction<=1)))){
+		if((candidate_state.diversity>=min_valid_diversity) && ((!reverse) || ((candidate_state.Pextinction>=0) && (candidate_state.Pextinction<=1)))){
 			return CrossedBoundaryNo;
-		}else if((previousState.diversity>min_valid_diversity) && ((!reverse) || ((previousState.Pextinction>=0) && (previousState.Pextinction<=1)))){
+		}else if((previous_state.diversity>min_valid_diversity) && ((!reverse) || ((previous_state.Pextinction>=0) && (previous_state.Pextinction<=1)))){
 			double lambda = 1;
-			if(candidateState.diversity<min_valid_diversity) lambda = min(lambda,(previousState.diversity-min_valid_diversity)/(previousState.diversity-candidateState.diversity));
-			if(reverse && (candidateState.Pextinction<0)) lambda = min(lambda,(previousState.Pextinction-0)/(previousState.Pextinction-candidateState.Pextinction));
-			if(reverse && (candidateState.Pextinction>1)) lambda = min(lambda,(1-previousState.Pextinction)/(candidateState.Pextinction-previousState.Pextinction));
-			candidateState = previousState*(1-lambda) + candidateState*lambda;
+			if(candidate_state.diversity<min_valid_diversity) lambda = min(lambda,(previous_state.diversity-min_valid_diversity)/(previous_state.diversity-candidate_state.diversity));
+			if(reverse && (candidate_state.Pextinction<0)) lambda = min(lambda,(previous_state.Pextinction-0)/(previous_state.Pextinction-candidate_state.Pextinction));
+			if(reverse && (candidate_state.Pextinction>1)) lambda = min(lambda,(1-previous_state.Pextinction)/(candidate_state.Pextinction-previous_state.Pextinction));
+			candidate_state = previous_state*(1-lambda) + candidate_state*lambda;
 			dt *= lambda;
 			return CrossedBoundaryYesButFixedByReducingTimeStep;
 		}else{
-			candidateState.diversity 	= max(min_valid_diversity,candidateState.diversity);
-			candidateState.Pextinction 	= min(1.0,max(0.0,candidateState.Pextinction));
+			candidate_state.diversity 	= max(min_valid_diversity,candidate_state.diversity);
+			candidate_state.Pextinction 	= min(1.0,max(0.0,candidate_state.Pextinction));
 			return CrossedBoundaryYesButFixedBruteForce;
 		}
 		*/
@@ -3119,188 +6817,7 @@ public:
 		const double R3 = abs((Nsplits-1)*get_speciation_rate_at_state(max_time,0) - get_extinction_rate_at_state(max_time,0));
 		return max(R1, max(R2, R3));
 	}
-	
 };
-
-
-
-// RungeKutta2 integrator, handling:
-//    1. Suggestions by the model for temporarily refined time steps
-//    2. Situations where the domain boundary is crossed during an iteration (in which case the time step is temporarily decreased as needed in order to not overshoot)
-//    3. Requests by the model to jump discontinuously to another state
-// requested times might reverse (i.e. times at which model dynamics are requested might not be strictly increasing), but recorded time series will be strictly forward in time
-template<class COORDINATE, class MODEL, class PROGRESS_REPORTER>
-bool RungeKutta2(	double						startTime,						// (INPUT) simulation start time
-					double 						endTime, 						// (INPUT) simulation end time
-					double 						dt, 							// (INPUT) default integration time step
-					MODEL 						&model,							// (INPUT/OUTPUT) object defining model dynamics, also handling time series storage
-					long						maxRecordedPoints, 				// (INPUT) if small, some intermediate trajectory points are skipped (i.e. not recorded). This might be useful if accurate integration requires a small time step, but would produce to large of a time series.
-					long						maxTimeStepRefinements,			// (INPUT) max allowed number of refinements of local time step when encountering invalid states. Only relevant if abortOnInvalidState==false.
-					const PROGRESS_REPORTER		&reporter,						// (INPUT) callback functor to handle progress reporting during simulation
-					const double				runtime_out_seconds,			// (INPUT) max allowed runtime in seconds. If <=0, this is ignored.
-					string						&warningMessage){				// (OUTPUT) will be non-empty in case of error, or if non-fatal problems occurred
-	COORDINATE currentPoint, candidatePoint, point2, jumpPoint;
-	COORDINATE k1, k2, kConsensus;
-	double t=startTime, t2, current_dt1, current_dt2;
-	long recorded, refinements;
-	RequestedDynamics dynamics;
-	CrossedBoundary crossedBoundary;
-	const double simulationTime = endTime-startTime; // target duration of simulation
-	const double start_runtime  = get_thread_monotonic_walltime_seconds();
-	
-	// keep track of warnings
-	bool crossedBoundaryButFixedByReducingTimeStep = false;
-	bool crossedBoundaryYesButFixedBruteForce = false;
-	bool crossedBoundaryYesButFixedUsingEuler = false;
-
-	//preliminary error checking
-	if(dt<simulationTime*RELATIVE_EPSILON){
-		warningMessage = "Time step too small";
-		return false;
-	}
-	if(simulationTime < dt){
-		warningMessage = "Time step exceeds simulation time";
-		return false;
-	}
-	if(maxRecordedPoints < 1){
-		warningMessage = "Requested zero recorded points";
-		return false;
-	}
-	
-	const double recordingTimeStep = simulationTime/maxRecordedPoints;
-	model.reserveSpaceForTimeSeries(maxRecordedPoints);
-	bool k1AlreadyCalculated = false;
-	
-	//initialization
-	if(!model.getInitialState(t, currentPoint)){
-		warningMessage = "Failed to get initial state";
-		return false;
-	}
-	model.registerState(t, currentPoint);
-	double lastRecordedTime = t;	
-	
-	//run simulation
-	//default time step is dt, but temporarily dt might be reduced to a smaller value
-	for(recorded=1, current_dt1=current_dt2=dt, refinements=0; t<endTime; /* increment of t handled in loop */ ){
-		// at this stage currentPoint is guaranteed to be a valid state
-		// t should always correspond to currentPoint
-		// t2 should always correspond to point2
-		// current_dt1 is used for moving from currentPoint-->point2
-		// current_dt2 is used for moving from currentPoint-->candidatePoint (= potential next currentPoint)
-		
-		// check runtime-out
-		if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
-			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation was aborted prematurely because it reached the maximum allowed processing time.";
-			return true;
-		}
-		
-		// reduce time step to not exceed end time, if needed
-		current_dt1 = min(current_dt1, endTime-t);
-				
-		// get dynamics (k1) at currentPoint if needed
-		if(!k1AlreadyCalculated){
-			dynamics = model.getRateOfChangeAtState(t, currentPoint, k1, jumpPoint);
-			if(dynamics==RequestedDynamicsForceJumpToState){
-				currentPoint = jumpPoint;
-				t = t + current_dt1;
-				goto RK2_REGISTER_STATE; 
-			}
-			k1AlreadyCalculated = true;
-		}
-		
-		// get point2 (in forward k1-direction)
-		point2 = currentPoint + k1*current_dt1;
-		t2 = t + current_dt1; // t2 should always correspond to point2
-		
-		// check if point2 crossed the boundary and move point2 backward as much as needed
-		// point2 and current_dt1 will be adjusted if this routine returns true
-		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentPoint, current_dt1, point2);
-		if(crossedBoundary == CrossedBoundaryYesButFixedBruteForce){ crossedBoundaryYesButFixedBruteForce = true; }
-		else if(crossedBoundary == CrossedBoundaryYesButFixedByReducingTimeStep){ crossedBoundaryButFixedByReducingTimeStep = true; }
-		
-		// check if the time step should be reduced (as suggested by the model)
-		while(model.checkShouldRefineTimeStep(t, currentPoint, current_dt1, point2) && (refinements<maxTimeStepRefinements)){
-			current_dt1 /= 2;
-			++refinements;
-			point2 = currentPoint + k1*current_dt1;
-			t2 = t + current_dt1; // t2 should always correspond to point2
-		}		
-		
-		// get dynamics (k2) at point2
-		dynamics = model.getRateOfChangeAtState(t2, point2, k2, jumpPoint);
-		if(dynamics==RequestedDynamicsForceJumpToState){
-			currentPoint = jumpPoint;
-			t = t2;
-			goto RK2_REGISTER_STATE; 
-		}
-
-		// use k1 & k2 to move the currentPoint forward, potentially after refining the time step multiple times
-		kConsensus = (k1+k2)*0.5;
-		candidatePoint = currentPoint + kConsensus*current_dt2;
-		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(t, currentPoint, current_dt2, candidatePoint);
-		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
-			if(refinements<maxTimeStepRefinements){
-				++refinements; 
-				current_dt2 /= 2;
-				crossedBoundaryButFixedByReducingTimeStep = true;
-				continue; // repeat the whole iteration with a smaller time step
-			}else{
-				// use simple Euler scheme for this time step, since kConsensus throws us out of the boundary at even arbitrarily small time steps
-				currentPoint = point2;
-				t = t2;
-				crossedBoundaryYesButFixedUsingEuler = true;
-				goto RK2_REGISTER_STATE;
-			}
-		}
-				
-		// check if the time step should be reduced (as suggested by the model)
-		if(model.checkShouldRefineTimeStep(t, currentPoint, current_dt2, candidatePoint) && (refinements<maxTimeStepRefinements)){
-			++refinements; 
-			current_dt2 /= 2; 
-			continue; // repeat the last part with a smaller time step
-		}
-		
-		// seems everything worked out as normal, so set the new currentPoint
-		currentPoint = candidatePoint;
-		t = t + current_dt2; // t should always correspond to currentPoint
-		goto RK2_REGISTER_STATE;
-		
-		// check and register new state if needed	
-		RK2_REGISTER_STATE:
-		// check sanity (some ODEs may explode)		
-		if(std::isnan(t) || model.stateIsNaN(currentPoint)){
-			warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation reached NaN.";
-			return (recorded>1);
-		}
-		k1AlreadyCalculated = false;
-		if(t-lastRecordedTime > recordingTimeStep){
-			model.registerState(t, currentPoint);
-			++recorded;
-			lastRecordedTime = t;
-			reporter(recorded, maxRecordedPoints, 1-(endTime-t)/simulationTime);
-		}
-		
-		// initialize counters for next iteration (note: this step may be skipped by a 'continue' statement)
-		current_dt1  = dt;
-		current_dt2  = dt;
-		refinements = 0;
-	}
-	
-	// register final state if needed
-	if(t>lastRecordedTime){
-		model.registerState(t, currentPoint);
-	}
-	
-	// construct warnings message if needed
-	if(crossedBoundaryYesButFixedUsingEuler) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally using forward Euler.";
-	if(crossedBoundaryYesButFixedBruteForce) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by brute-force adjusting the trajectory.";
-	if(crossedBoundaryButFixedByReducingTimeStep) warningMessage += string(warningMessage=="" ? "" : "\n") + "Simulation crossed domain boundary and was fixed by locally reducing the time step.";
-
-	return true;
-}
-
-
-
 
 
 
@@ -3435,7 +6952,8 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 										min(resolution/100, 1e-1*final_diversity/model.estimate_max_rate_of_change(final_time, final_diversity,false)),
 										model,
 										3, // number of points to record
-										2l,
+										2,
+										2, // refinement_factor
 										ProgressReporter(true),
 										runtime_out_seconds,
 										warningMessage);
@@ -3457,7 +6975,8 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 										default_dt,
 										model2,
 										10*times.size(),
-										2l,
+										2,
+										2, // refinement_factor
 										ProgressReporter(true),
 										runtime_out_seconds,
 										warningMessage);
@@ -3504,7 +7023,8 @@ Rcpp::List simulate_deterministic_diversity_growth_CPP(	const double 		birth_rat
 										default_dt,
 										model,
 										10*times.size(),
-										2l,
+										2,
+										2, // refinement_factor
 										ProgressReporter(true),
 										runtime_out_seconds,
 										warningMessage);
@@ -5527,11 +9047,7 @@ Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 												double				max_time,			// (INPUT) maximum time (distance from root) to consider. If Infinite, will be set to the maximum possible.
 												const bool			include_slopes){	// (INPUT) if true, slopes of the clades_per_time_point curve are also returned	
 	// calculate clade distances from root
-	const NumericVector clade_times = get_distances_from_root_CPP(	Ntips,
-																	Nnodes,
-																	Nedges,
-																	tree_edge,
-																	edge_length);
+	const NumericVector clade_times = get_distances_from_root_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length);
 	max_time = min(max_time, get_array_max(clade_times));
 	min_time = max(0.0, min_time);
 	
@@ -5597,12 +9113,7 @@ IntegerVector count_clades_at_times_CPP(const long			Ntips,
 	
 	// calculate distances from root
 	std::vector<double> distances_from_root(Nclades);
-	get_distances_from_root(Ntips,
-							Nnodes,
-							Nedges,
-							tree_edge,
-							edge_length,
-							distances_from_root);
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, distances_from_root);
 	
 	const long Ntimes = times.size();
 	std::vector<long> diversities(Ntimes,0);
@@ -10616,8 +14127,7 @@ NumericMatrix WMPR_ASR_CPP(	const long			Ntips,
 // A major computational bottleneck is the exponentiation of the transition matrix along each edge, i.e. exp(edge_length*transition_matrix)
 // Exponentiation of the transition matrix can happen in one of 3 ways:
 //    1. By providing all pre-calculated exponentials, via expQ_per_edge. This uses more RAM, but is much faster than the other methods below.
-//    2. By providing an eigendecomposition of the transition_matrix, via eigenvalues, EVmatrix and inverse_EVmatrix. This is slower than 1 and similarly fast as 3. Uses lower RAM than the other options, but an accurate eigendecomposition may not alwasy be available.
-//	  3. By providing polynomials of the transition matrix, via transition_polynomials, transition_polynomial_norms, exponentiation_balances & exponentiation_scaling_power. Slowest, but works well and can always be used as a last resort.
+//	  2. By providing a transition_exponentiator object.
 // The above options are checked and utilized in the listed order. Whenever the associated arrays of an option are empty, the next option is checked.
 void aux_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 											const long 					Nnodes,
@@ -10627,28 +14137,22 @@ void aux_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 											const IntegerVector			&tree_edge,							// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
 											const NumericVector 		&edge_length, 						// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 											const NumericVector			&prior_probabilities_per_tip, 		// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
-											const NumericVector			&prior_probabilities_for_root,		// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
+											const NumericVector			&prior_probabilities_for_root,		// (INPUT) 1D array of size Nstates, listing prior probability distribution for root, to be used for combining the root's probabilities into a single likelihood. Which prior you use for the root is often a matter of choice.
 											const matrix_exponentiator	&transition_exponentiator,			// (INPUT) initialized exponentiator object for transition matrix
-											const std::vector<cdouble>	&eigenvalues,						// (INPUT) Optional 1D vector of size Nstates, listing the eigenvalues of the transition_matrix (corresponding to some diagonalization). Can also be an empty vector if eigendecomposition not available.
-											const std::vector<cdouble>	&EVmatrix,							// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, whose columns are the eigenvectors of the transition_matrix. Can also be an empty vector if eigendecomposition not available.
-											const std::vector<cdouble>	&inverse_EVmatrix,					// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
 											const std::vector<double>	&expQ_per_edge,						// (INPUT) 3D array of size Nedges x Nstates x Nstates, in layer-row-major format, listing the exponentiated transition matrix along each edge. Only relevant if use_precalculated_expQ==true.
-											const std::vector<long>		&traversal_queue,					// (INPUT) 1D array of size Nnodes, with values in Ntips:(Nclades-1). Traversal queue root-->tips (not including tips). Generated using the function get_tree_traversal_root_to_tips(include_tips=true).
+											const std::vector<long>		&traversal_queue,					// (INPUT) 1D array of size Nnodes, with values in Ntips:(Nclades-1). Traversal queue root-->tips (not including tips). Generated using the function get_tree_traversal_root_to_tips(include_tips=false).
 											const std::vector<long>		&traversal_node2first_edge,			// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1). Generated using the function get_tree_traversal_root_to_tips().
 											const std::vector<long>		&traversal_node2last_edge,			// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1). Generated using the function get_tree_traversal_root_to_tips().
 											const std::vector<long>		&traversal_edges,					// (INPUT) 1D array of size Nedges, with values in 0:(Nedges-1). Generated using the function get_tree_traversal_root_to_tips().
-											std::vector<double>			&posteriors,						// (OUTPUT) 1D array of size Nnodes x Nstates, listing the posterior probabilities at each node. This is used both as internal scratch space as well as to return the final posteriors.
+											std::vector<double>			&posteriors,						// (OUTPUT) 1D array of size Nnodes x Nstates, listing the posterior likelihoods at each node (rescaled to sum to 1 for each node). This is used both as internal scratch space as well as to return the final posteriors.
 											double						&loglikelihood){					// (OUTPUT) log-likelihood for the full tree
 	long clade, edge, child, node;
-	const bool has_eigendecomposition = (eigenvalues.size()>0 && EVmatrix.size()>0 && inverse_EVmatrix.size()>0);
 	const bool use_precalculated_expQ = (expQ_per_edge.size()>0);
 	const double max_edge_length 	  = (edge_length.size()==0 ? 1.0 : get_array_max(edge_length));
-							
 							
 	// calculate probability distribution on each node (traverse tips-->root)
 	posteriors.assign(Nnodes*Nstates,1.0);
 	std::vector<double> Y, expQ;
-	std::vector<cdouble> exponentiation_scratch;
 	double const *expQ_pointer;
 	loglikelihood = 0;
 	for(long q=traversal_queue.size()-1; q>=0; --q){
@@ -10660,39 +14164,34 @@ void aux_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 			child = tree_edge[2*edge+1];
 			if(use_precalculated_expQ){
 				expQ_pointer = &expQ_per_edge[edge*Nstates*Nstates];
-			}else if(has_eigendecomposition){
-				get_matrix_exponential_using_eigendecomposition(Nstates,
-																eigenvalues,
-																EVmatrix,
-																inverse_EVmatrix,
-																(edge_length.size()==0 ? 1.0 : edge_length[edge]),
-																exponentiation_scratch,
-																expQ);
-				expQ_pointer = &expQ[0];
 			}else{
 				// calculate exponential of transition matrix along edge
 				transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
 				expQ_pointer = &expQ[0];
 			}
 						
-			// use exponentiated transition matrix to propagate probabilities from children to parent
-			// probabilities[parent] = product_{child in children} exp(edge_length * Q^T) * probabilities[child]
+			// use exponentiated transition matrix to propagate likelihoods ("posteriors") from child to parent
+			// posteriors[parent] = product_{child in children} exp(edge_length * Q) * posteriors[child]
+			// this corresponds to solving the Kolmogorov backward equation along each child-edge in backward-time direction, with initial condition the likelihoods at the child
 			if(child<Ntips) multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &prior_probabilities_per_tip[child*Nstates], Y);
 			else multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &posteriors[(child-Ntips)*Nstates], Y);
-			for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] *= max(0.0,Y[s]); // factor Y into the posterior of this node. Avoid negative values from rounding errors			
+			for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] *= max(0.0,Y[s]); // factor Y into the posterior likelihoods of this node. Avoid negative values from rounding errors			
 		}
-	
-		// multiply root's probability distribution with its prior
-		if(clade==root){
-			for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] *= prior_probabilities_for_root[s];
-		}
-	
-		// normalize clade's probability distribution
+						
+		// rescale (normalize) clade's posterior likelihoods
+		// this is necessary due to scaling issues for very large trees; the non-normalized posterior likelihoods tend to 0 for older nodes
+		// note that since the Mk propagator (exp(t*Q)) is linear, rescaling just rescales the overall likelihood (this is corrected for below)
 		double S = 0;
 		for(long s=0; s<Nstates; ++s) S += posteriors[node*Nstates+s];
 		for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] /= S;
+		
+		// incorporate rescaling factor (used to normalize this node's posterior) into tree's loglikelihood
+		// if we weren't rescaling each node's posterior, this would not be necessary
 		loglikelihood += log(S);
 	}
+	
+	// use root's posterior (combined with it's prior) to calculate the model's loglikelihood
+	for(long s=0; s<Nstates; ++s) loglikelihood += log(posteriors[(root-Ntips)*Nstates+s]*prior_probabilities_for_root[s]);
 }
 
 
@@ -10706,8 +14205,7 @@ void aux_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 // Note: This algorithm cannot easily be generalized to rerooting at tips, because this would change the total number of tips & nodes and hence mess up the indexing of tips {0,..,Ntips-1} and nodes {Ntips,...,Ntips+Nnodes-1}.
 // Exponentiation of the transition matrix can happen in one of 3 ways:
 //    1. By providing all pre-calculated exponentials, via expQ_per_edge. This uses more RAM, but is much faster than the other methods below.
-//    2. By providing an eigendecomposition of the transition_matrix, via eigenvalues, EVmatrix and inverse_EVmatrix. This is slower than 1 but faster than 3. Uses lower RAM than the other options, but an accurate eigendecomposition may not alwasy be available.
-//	  3. By providing polynomials of the transition matrix, via transition_polynomials, transition_polynomial_norms, exponentiation_balances & exponentiation_scaling_power. Slowest, but works well and can always be used as a last resort.
+//	  2. By providing a transition_exponentiator object.
 // The above options are checked and utilized in the listed order. Whenever the associated arrays of an option are empty, the next option is checked.
 void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Ntips,
 																const long 					Nnodes,
@@ -10721,46 +14219,31 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 																const std::vector<long>		&clade2last_inout_edge,				// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1), mapping clades to their last incoming or outgoing edge.
 																const std::vector<long>		&inout_edges,						// (INPUT) 1D array of size 2*Nedges, with values in 0:(Nedges-1). Maps internal edge indices (i.e. as listed in clade2first_inout_edge[] and clade2last_inout_edge[]) to original edge indices.
 																const NumericVector			&prior_probabilities_per_tip, 		// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
-																const NumericVector			&prior_probabilities_for_root,		// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
 																const matrix_exponentiator	&transition_exponentiator,			// (INPUT) initialized exponentiator object for transition matrix
-																const std::vector<cdouble>	&eigenvalues,						// (INPUT) Optional 1D vector of size Nstates, listing the eigenvalues of the transition_matrix (corresponding to some diagonalization). Can also be an empty vector if eigendecomposition not available.
-																const std::vector<cdouble>	&EVmatrix,							// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, whose columns are the eigenvectors of the transition_matrix. Can also be an empty vector if eigendecomposition not available.
-																const std::vector<cdouble>	&inverse_EVmatrix,					// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
 																const std::vector<double>	&expQ_per_edge,						// (INPUT) Optional 3D array of size Nedges x Nstates x Nstates, in layer-row-major format, listing the exponentiated transition matrix along each edge. Only relevant if use_precalculated_expQ==true. Can be empty, if exp(Q) is to be calculated using eigendecomposition or polynomials.
-																std::vector<long> 			&tree_edge,							// (INPUT/OUTPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1). Will be updated after the rerooting.		
-																std::vector<long>			&incoming_edge_per_clade,			// (INPUT/OUTPUT) 1D array of size Nclades, with elements in 0,..,Nedges-1. Will be updated after the rerooting.
+																std::vector<long> 			&current_tree_edge,					// (INPUT/OUTPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1). Will be updated after the rerooting.		
+																std::vector<long>			&current_incoming_edge_per_clade,	// (INPUT/OUTPUT) 1D array of size Nclades, with elements in 0,..,Nedges-1. Will be updated after the rerooting.
 																std::vector<double>			&posteriors){						// (INPUT/OUTPUT) 1D array of size Nnodes x Nstates, listing the posterior probabilities at each node. Should be pre-computed for the current tree, and will be updated after the rerooting.
-	const bool has_eigendecomposition = (eigenvalues.size()>0 && EVmatrix.size()>0 && inverse_EVmatrix.size()>0);
 	const bool use_precalculated_expQ = (expQ_per_edge.size()>0);
 	if(new_root==old_root) return; // nothing to do
 	
 	// reroot (this changes edge directions, but keeps tip/node/edge indices the same)
-	reroot_tree_at_node(Ntips, Nnodes, Nedges, old_root, new_root, tree_edge, incoming_edge_per_clade);
+	reroot_tree_at_node(Ntips, Nnodes, Nedges, old_root, new_root, current_tree_edge, current_incoming_edge_per_clade);
 	
 	// update posteriors of nodes that have been traversed by the rerooting
 	std::vector<double> Y, expQ;
-	std::vector<cdouble> exponentiation_scratch;
 	double const *expQ_pointer; // will point to the location of the exponentiated transition matrix (which may be different for each edge)
 	long clade = old_root;
 	while(true){
-		// re-calculate posterior for this clade (based on the posteriors of its children)
+		// re-calculate posterior for the currently focal clade (based on the posteriors of its children)
 		const long node = clade-Ntips;
 		for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] = 1.0; // initialize posteriors for this node, repopulate below based on children
 		for(long e=clade2first_inout_edge[clade], edge, child; e<=clade2last_inout_edge[clade]; ++e){
 			edge  = inout_edges[e];
-			if(tree_edge[2*edge+0]!=clade) continue; // this edge is not outgoing from this clade
-			child = tree_edge[2*edge+1];
+			if(current_tree_edge[2*edge+0]!=clade) continue; // this edge is not outgoing from this clade (in the rerooted tree)
+			child = current_tree_edge[2*edge+1];
 			if(use_precalculated_expQ){
 				expQ_pointer = &expQ_per_edge[edge*Nstates*Nstates];
-			}else if(has_eigendecomposition){
-				get_matrix_exponential_using_eigendecomposition(Nstates,
-																eigenvalues,
-																EVmatrix,
-																inverse_EVmatrix,
-																(edge_length.size()==0 ? 1.0 : edge_length[edge]),
-																exponentiation_scratch,
-																expQ);
-				expQ_pointer = &expQ[0];
 			}else{
 				// calculate exponential of transition matrix along edge
 				transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
@@ -10772,19 +14255,14 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 			else multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &posteriors[(child-Ntips)*Nstates], Y);
 			for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] *= max(0.0,Y[s]); // factor Y into the posterior of this node. Avoid negative values from rounding errors
 		}
-	
-		// multiply root's probability distribution with its prior
-		if(clade==new_root){
-			for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] *= prior_probabilities_for_root[s];
-		}
 			
-		// normalize clade's probability distribution
+		// rescale (normalize) clade's probability distribution
 		double S = 0;
 		for(long s=0; s<Nstates; ++s) S += posteriors[node*Nstates+s];
 		for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] /= S;
 		
 		// move on to parent
-		if(clade!=new_root) clade = tree_edge[incoming_edge_per_clade[clade]*2+0];
+		if(clade!=new_root) clade = current_tree_edge[current_incoming_edge_per_clade[clade]*2+0];
 		else break;
 	}
 }
@@ -10793,10 +14271,10 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 
 
 // calculate the loglikelihood of a fixed-rates Markov model for discrete character evolution on a phylogenetic tree, provided a fixed transition matrix
-// Optionally, the marginal ancestral states (likelihoods) can be computed for all nodes, using the rerooting algorithm by [Yang et al. (1995). Genetics 141:1641-1650]
-// Reconstructing marginal ancestral states substantially increases computation time, so don't request this if you only care about the loglikelihood (e.g. for fitting purposes)
-// Optionally, the eigendecomposition of the transition matrix (eigenvalues & eigenvectors) can be provided to speed up exponentiations. If provided, this is used blindly for all exponentiations.
-// If an eigendecomposition for the transition_matrix is not provided, then a Taylor series (polynomials) approximation is used instead. This includes preconditioning steps and seems to work quite well, and is similarly fast as using an eigendecomposition.
+// Optionally, the marginal ancestral likelihoods can be computed for all nodes, using the rerooting algorithm by [Yang et al. (1995). Genetics 141:1641-1650]
+// Calculating marginal ancestral likelihoods substantially increases computation time, so don't request this if you only care about the loglikelihood (e.g. for fitting purposes)
+// Optionally, the eigendecomposition of the transition matrix (eigenvalues & eigenvectors) can be provided to potentially speed up exponentiations. If provided, this is used blindly for all exponentiations.
+// If an eigendecomposition for the transition_matrix is not provided, then a Taylor series (matrix polynomials) approximation is used instead. This includes preconditioning steps and seems to scratch quite well, and is similarly fast as using an eigendecomposition.
 // Requirements:
 //   Tree can include multi- and mono-furcations.
 //   Tree must be rooted. Root will be determined automatically as the node with no parent.
@@ -10813,16 +14291,16 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long					Ntips,
 													const ComplexVector			&inverse_EVmatrix,				// (INPUT) Optional 2D array of size Nstates x Nstates, in row-major format, the inverse of EVmatrix. Can also be an empty vector if eigendecomposition not available.
 													const NumericVector			&prior_probabilities_per_tip, 	// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
 													const NumericVector			&prior_probabilities_for_root,	// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Which prior you use for the root is often a matter of choice.
-													bool						include_ancestral_likelihoods,	// (INPUT) if true, then the marginal ancestral states estimates (conditional scaled likelihoods as if each node was a root) of all nodes are also returned as an array of size Nnodes x Nstates. Only use if needed, since it's computationally expensive.
+													bool						include_ancestral_likelihoods,	// (INPUT) whether to include ancestral likelihoods in return variables
+													bool						reroot,							// (INPUT) if true, then the marginal ancestral states estimates (conditional scaled likelihoods as if each node was a root) of all nodes are also returned as an array of size Nnodes x Nstates. Only use if needed, since it's computationally expensive.
 													const double				exponentiation_accuracy,		// (INPUT) maximum allowed error when exponentiating the transition matrix via polynomials, in terms of the Hilbert-Schmidt L2 norm. Only relevant if exponentiation is done using the polynomials.
 													const long					max_polynomials,				// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix via polynomials, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
-													const bool					store_exponentials){			// (INPUT) if True, then exponentials are pre-calculated and stored for the calculation of ancestral_likelihoods. This may save time because each exponential is only calculated once, but will use up more memory since all exponentials are stored. Only relevant if include_ancestral_likelihoods==TRUE, otherwise exponentials are never stored.
+													const bool					store_exponentials){			// (INPUT) if True, then exponentials are pre-calculated and stored for the calculation of ancestral_likelihoods. This may save time because each exponential is only calculated once, but will use up more memory since all exponentials are stored. Only relevant if reroot==TRUE, otherwise exponentials are never stored.
 	const long Nclades 					= Ntips + Nnodes;
-	const bool use_precalculated_expQ 	= (include_ancestral_likelihoods && store_exponentials);
+	const bool use_precalculated_expQ 	= (reroot && store_exponentials);
 	const bool has_eigendecomposition	= (eigenvalues.size()>0 && EVmatrix.size()>0 && inverse_EVmatrix.size()>0);
 	const double max_edge_length 		= (edge_length.size()==0 ? 1.0 : get_array_max(edge_length));
 	const long root 					= get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-
 
 	// transform some of the R vectors to C++ vectors
 	std::vector<cdouble> eigenvaluesCPP, EVmatrixCPP, inverse_EVmatrixCPP;
@@ -10848,30 +14326,23 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long					Ntips,
 
 	// prepare data structure for exponentiations of transition matrix, if needed
 	matrix_exponentiator transition_exponentiator;
-	if(!has_eigendecomposition){
+	if(has_eigendecomposition){
+		// prepare exponentiator using eigen-decomposition
+		transition_exponentiator.initialize(Nstates, eigenvaluesCPP, EVmatrixCPP, inverse_EVmatrixCPP, max_edge_length);
+	}else{
+		// prepare exponentiator using matrix polynomials
 		const long min_polynomials = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
-		transition_exponentiator.initialize(Nstates, transition_matrix, max_edge_length, 1e-4, min_polynomials, 1000, true);
+		transition_exponentiator.initialize(Nstates, transition_matrix, max_edge_length, 1e-4, min_polynomials, max_polynomials, true);
 	}
 											
 	// pre-calculate exponentials of transition_matrix along edges if needed
 	// This is faster because it avoids repeated calculations of the same exponential, but needs more RAM if Nedges is large
 	std::vector<double> expQ_per_edge;
 	if(use_precalculated_expQ){
-		std::vector<cdouble> exponentiation_scratch;
 		std::vector<double> scratch_expQ;
 		expQ_per_edge.resize(Nedges*Nstates*Nstates);
 		for(long edge=0; edge<Nedges; ++edge){
-			if(has_eigendecomposition){
-				get_matrix_exponential_using_eigendecomposition(Nstates,
-																eigenvaluesCPP,
-																EVmatrixCPP,
-																inverse_EVmatrixCPP,
-																(edge_length.size()==0 ? 1.0 : edge_length[edge]),
-																exponentiation_scratch,
-																scratch_expQ);
-			}else{
-				transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, scratch_expQ);
-			}
+			transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, scratch_expQ);
 			for(long r=0; r<Nstates; ++r){
 				for(long c=0; c<Nstates; ++c){
 					expQ_per_edge[edge*Nstates*Nstates + r*Nstates + c] = scratch_expQ[r*Nstates + c];
@@ -10894,9 +14365,6 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long					Ntips,
 											prior_probabilities_per_tip,
 											prior_probabilities_for_root,
 											transition_exponentiator,
-											eigenvaluesCPP,
-											EVmatrixCPP,
-											inverse_EVmatrixCPP,
 											expQ_per_edge,
 											traversal_queue,
 											traversal_node2first_edge,
@@ -10904,75 +14372,70 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long					Ntips,
 											traversal_edges,
 											posteriors,
 											loglikelihood);
-
+	if(!include_ancestral_likelihoods){
+		return Rcpp::List::create(	Rcpp::Named("loglikelihood") = loglikelihood);
+	}else if(!reroot){
+		return Rcpp::List::create(	Rcpp::Named("loglikelihood") = loglikelihood,
+									Rcpp::Named("ancestral_likelihoods") = Rcpp::wrap(posteriors));
+	}
 
 	// calculate marginal ancestral states (posterior probabilities) at each node, as if that node was the root [Yang et al. 1995]
 	// note that the original edge mappings (e.g. traversal_node2first_edge[]) will no longer be consistent with current_tree_edge after rerooting
 	// Notation: current_(..) refers to tree-access structures that are updated at each rerooting. They will be consistent with each other, but not necessarily with the original tree structure.
 	std::vector<double> ancestral_likelihoods(Nnodes*Nstates);
-	if(include_ancestral_likelihoods){
-		// prepare some data structures, which will be updated everytime we reroot
-		long current_root = root;
-		std::vector<long> current_tree_edge(tree_edge.begin(), tree_edge.end());
-		std::vector<long> clade2first_inout_edge, clade2last_inout_edge, inout_edges; // will be invariant to rerootings
-		get_inout_edges_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2first_inout_edge, clade2last_inout_edge, inout_edges);
-		std::vector<long> current_incoming_edge_per_clade(Nclades,-1); // will change with each rerooting
-		for(long edge=0; edge<Nedges; ++edge) current_incoming_edge_per_clade[current_tree_edge[edge*2+1]] = edge;
-		// calculate depth-first-search traversal route
-		// this minimizes the distance between successive old_root-new_root pairs and thus the computation required to update the posteriors on each rerooting
-		// similarly, depth_first_search_queue[] will still list successive nodes, but not necessarily in downstream order
-		std::vector<long> depth_first_search_queue;
-		get_tree_traversal_depth_first_search(	Ntips,
-												Nnodes,
-												Nedges,
-												root,
-												tree_edge,
-												false,	// don't include tips
-												true, 	// edge mappings are pre-calculated
-												depth_first_search_queue,
-												traversal_node2first_edge,
-												traversal_node2last_edge,
-												traversal_edges);
-		
-		// reroot at each node, updating the tree-access structures and updating the posteriors at each node
-		// edge directions will change, but tip/node/edge indices remain the same
-		for(long q=0, new_root; q<depth_first_search_queue.size(); ++q){
-			new_root = depth_first_search_queue[q];
-			aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(Ntips,
-																	Nnodes,
-																	Nedges,
-																	Nstates,
-																	current_root,
-																	new_root,
-																	edge_length,
-																	max_edge_length,
-																	clade2first_inout_edge,
-																	clade2last_inout_edge,
-																	inout_edges,
-																	prior_probabilities_per_tip,
-																	prior_probabilities_for_root,
-																	transition_exponentiator,
-																	eigenvaluesCPP,
-																	EVmatrixCPP,
-																	inverse_EVmatrixCPP,
-																	expQ_per_edge,
-																	current_tree_edge,
-																	current_incoming_edge_per_clade,
-																	posteriors);
-			// the posteriors of the root are equal to its ancestral_likelihoods, so extract those
-			for(long s=0; s<Nstates; ++s) ancestral_likelihoods[(new_root-Ntips)*Nstates+s] = posteriors[(new_root-Ntips)*Nstates + s];
-			current_root = new_root;
-			// abort if the user has interrupted the calling R program
-			Rcpp::checkUserInterrupt();
-		}
+	// prepare some data structures, which will be updated everytime we reroot
+	long current_root = root;
+	std::vector<long> current_tree_edge(tree_edge.begin(), tree_edge.end());
+	std::vector<long> clade2first_inout_edge, clade2last_inout_edge, inout_edges; // will be invariant to rerootings
+	get_inout_edges_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2first_inout_edge, clade2last_inout_edge, inout_edges);
+	std::vector<long> current_incoming_edge_per_clade(Nclades,-1); // will change with each rerooting
+	for(long edge=0; edge<Nedges; ++edge) current_incoming_edge_per_clade[current_tree_edge[edge*2+1]] = edge;
+	// calculate depth-first-search traversal route
+	// this minimizes the distance between successive old_root-new_root pairs and thus the computation required to update the posteriors on each rerooting
+	// similarly, depth_first_search_queue[] will still list successive nodes, but not necessarily in downstream order
+	std::vector<long> depth_first_search_queue;
+	get_tree_traversal_depth_first_search(	Ntips,
+											Nnodes,
+											Nedges,
+											root,
+											tree_edge,
+											false,	// don't include tips
+											true, 	// edge mappings are pre-calculated
+											depth_first_search_queue,
+											traversal_node2first_edge,
+											traversal_node2last_edge,
+											traversal_edges);
+	
+	// reroot at each node, updating the tree-access structures and updating the posteriors at each node
+	// edge directions will change, but tip/node/edge indices remain the same
+	for(long q=0, new_root; q<depth_first_search_queue.size(); ++q){
+		new_root = depth_first_search_queue[q];
+		aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(Ntips,
+																Nnodes,
+																Nedges,
+																Nstates,
+																current_root,
+																new_root,
+																edge_length,
+																max_edge_length,
+																clade2first_inout_edge,
+																clade2last_inout_edge,
+																inout_edges,
+																prior_probabilities_per_tip,
+																transition_exponentiator,
+																expQ_per_edge,
+																current_tree_edge,
+																current_incoming_edge_per_clade,
+																posteriors);
+		// the posteriors of the root are equal to its ancestral_likelihoods, so extract those
+		for(long s=0; s<Nstates; ++s) ancestral_likelihoods[(new_root-Ntips)*Nstates+s] = posteriors[(new_root-Ntips)*Nstates+s];
+		current_root = new_root;
+		// abort if the user has interrupted the calling R program
+		Rcpp::checkUserInterrupt();
 	}
 	
-	if(include_ancestral_likelihoods){
-		return Rcpp::List::create(	Rcpp::Named("loglikelihood") = loglikelihood,
-									Rcpp::Named("ancestral_likelihoods") = Rcpp::wrap(ancestral_likelihoods));
-	}else{
-		return Rcpp::List::create(	Rcpp::Named("loglikelihood") = loglikelihood);
-	}
+	return Rcpp::List::create(	Rcpp::Named("loglikelihood") = loglikelihood,
+								Rcpp::Named("ancestral_likelihoods") = Rcpp::wrap(ancestral_likelihoods));
 }
 
 
@@ -11115,17 +14578,18 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 
 // forward-project marginal likelihoods of a subset of nodes to their descending tips by applying the exponentiated transition rate matrix
 // [[Rcpp::export]]
-NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long			Ntips,
-																	const long 			Nnodes,
-																	const long			Nedges,
-																	const long			Nstates,
-																	const IntegerVector &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-																	const NumericVector &edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-																	const NumericVector	&transition_matrix,		// (INPUT) 2D matrix of size Nstates x Nstates, in row-major format. Transition rate matrix of the Markov model. Sum-per-row should be zero.
-																	const double		exponentiation_accuracy,// (INPUT) maximum allowed error when exponentiating the transition matrix, in terms of the Hilbert-Schmidt L2 norm.
-																	const long			max_polynomials,		// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
-																	LogicalVector		likelihoods_known,		// (INPUT) 1D array of size Nclades, indicating whether the likelihoods for a particular clade are known (1) or unknown/to be determined (0).
-																	NumericVector 		likelihoods){			// (INPUT) 2D matrix of size Nclades x Nstates, in row-major format. Likelihoods of each state in each clade (tip & node) of the tree.
+NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long					Ntips,
+																	const long 					Nnodes,
+																	const long					Nedges,
+																	const long					Nstates,
+																	const IntegerVector 		&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+																	const NumericVector 		&edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+																	const std::vector<double> 	&transition_matrix,		// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c. Sum-per-row should be zero.
+																	const double				exponentiation_accuracy,// (INPUT) maximum allowed error when exponentiating the transition matrix, in terms of the Hilbert-Schmidt L2 norm.
+																	const long					max_polynomials,		// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
+																	LogicalVector				likelihoods_known,		// (INPUT) 1D array of size Nclades, indicating whether the likelihoods for a particular clade are known (1) or unknown/to be determined (0).
+																	NumericVector 				likelihoods,			// (INPUT) 2D matrix of size Nclades x Nstates, in row-major format. Likelihoods of each state in each clade (tip & node) of the tree.
+																	const bool					unknown_likelihoods_as_priors){	// (INPUT) use unknown likelihoods (i.e. likelihoods[r,:] when likelihoods_known[r]==false) as priors. If false, unknown likelihoods are ignored, and effectively a flat prior is used
 
 	// determine root
 	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
@@ -11148,22 +14612,10 @@ NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long			
 										
 	// prepare data structures for exponentiations of transition matrix
 	const double max_edge_length = (edge_length.size()==0 ? 1.0 : get_array_max(edge_length));
-	std::vector<double> transition_polynomials, transition_polynomial_norms, exponentiation_balances;
+	matrix_exponentiator transition_exponentiator;
 	const long min_polynomials = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
-	long Npolynomials;
-	long exponentiation_scaling_power;
-	calculate_balanced_matrix_polynomials(	Nstates,
-											std::vector<double>(transition_matrix.begin(), transition_matrix.end()),
-											max_edge_length,
-											exponentiation_accuracy,
-											min_polynomials,
-											max_polynomials,
-											transition_polynomials,
-											transition_polynomial_norms,
-											Npolynomials,
-											exponentiation_balances,
-											exponentiation_scaling_power);
-
+	transition_exponentiator.initialize(Nstates, transition_matrix, max_edge_length, exponentiation_accuracy, min_polynomials, max_polynomials, true);
+	
 	// calculate unknown likelihoods based on parents with known likelihoods (traverse root --> tips)
 	std::vector<double> expQ, Y;
 	for(long q=0, node, clade; q<traversal_queue.size(); ++q){
@@ -11174,19 +14626,14 @@ NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long			
 			child = tree_edge[edge*2+1];
 			if(likelihoods_known[child]) continue; // skip children with known likelihoods
 			// exponentiate transition matrix along this edge
-			get_matrix_exponential_using_balanced_polynomials(	Nstates,
-																Npolynomials,
-																transition_polynomials,
-																transition_polynomial_norms,
-																(edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length,
-																exponentiation_accuracy,
-																min_polynomials,
-																exponentiation_balances,
-																exponentiation_scaling_power,
-																expQ);
-			// propagate clade's likelihoods to child by multiplying from the right with exponentiated transition matrix
-			multiply_vector_with_matrix(Nstates, Nstates, &expQ[0], &likelihoods[clade*Nstates], Y);
-			for(long s=0; s<Nstates; ++s) likelihoods[child*Nstates+s] = Y[s];
+			transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
+			// propagate clade's likelihoods to child by multiplying with exponentiated transition matrix
+			multiply_matrix_with_vector(Nstates, Nstates, &expQ[0], &likelihoods[clade*Nstates], Y);
+			if(unknown_likelihoods_as_priors){
+				for(long s=0; s<Nstates; ++s) likelihoods[child*Nstates+s] = Y[s];
+			}else{
+				for(long s=0; s<Nstates; ++s) likelihoods[child*Nstates+s] *= Y[s];
+			}
 			likelihoods_known[child] = true;
 		}
 	}
@@ -11724,15 +15171,1094 @@ NumericVector apply_BM_parsimony_to_missing_clades_CPP(	const long			Ntips,
 
 
 
+#pragma mark -
+#pragma mark MuSSE model fitting
+#pragma mark
+
+
+// MuSSE: Multiple State Speciation Extinction dynamics
+// This is an extension of the BiSSE model by Maddison (2007)
+// The model can account for tips with unknown state as well as for sampling biases (tips with known state are biased towards certain states)
+// References:
+//  [Maddison et al (2007). Estimating a binary character's effect on speciation and extinction. Systematic Biology. 56:701-710] 
+//  [FitzJohn et al. (2009). Estimating trait-dependent speciation and extinction rates from incompletely resolved phylogenies. Systematic Biology. 58:595-611]
+//  [FitzJohn (2012). Diversitree: comparative phylogenetic analyses of diversification in R. Methods in Ecology and Evolution. 3:1084-1092]
+
+typedef std::vector<double> MuSSEstateD;
+typedef std::vector<double> MuSSEstateE;
+
+
+// class for integrating D-part of a MuSSE model (Multiple State Speciation Extinction) along a single edge
+// this model should be integrated in reverse age (i.e. increasing age)
+// this class defines the ODE for calculating D over increasing age, given some MuSSE model and some initial condition D(0)
+// the class can also be used to calculate the dynamics of the mapping Phi(t):D(0)-->D(t), by treating the current_state as a matrix (with Dmap(0)=Id).
+// the class can also be used to calculate the inverse mapping over increasing age, i.e. Theta(t):=Phi(t)^{-1}. Use inverse=true and matrix_form=true, to enable this.
+class MuSSEmodelD{
+	// scratch space
+	mutable std::vector<double> mapping; // 2D matrix of size Nstates x Nstates, used to map a current state to its linear rate of change
+	mutable std::vector<double> AY, YA; // 1D vector or 2D matrix, depending on whether matrix_form is true or false
+	
+public:
+	std::vector<MuSSEstateD> trajectory;
+	std::vector<double> ages; // integration normally proceeds in increasing age direction (i.e. backward time).
+	std::vector<double> initial; // vector of size Nstates, or 2D matrix of size Nstates x Nstates (if matrix_form==true), specifying the initial D. Must be set by whoever creates the model instance
+
+	// alternative storage space, for storing the rescaled trajectory instead of the actual trajectory
+	// Hence, trajectory[t] = trajectory_shape[t] * exp(trajectory_scale[t])
+	// Such a storage format may be needed to avoid overflow or underflow (i.e. if the trajectory explodes to infinity or implodes to zero)
+	std::vector<MuSSEstateD> trajectory_shape;
+	std::vector<double> trajectory_scale; // log-scale of trajectory mean
+	
+	bool matrix_form; // if true, the model is a model for 2D square matrices, not for vectors, i.e. dM/dt = A*M instead of dV/dt = A*V (internally, state variables are still stored as vectors, in row-major form)
+	bool inverse; // if true, the model describes the evolution of the inverse mapping. That is, if the model normally describes the evolution of Phi(t), where dPhi(t)/dT = A(T)*Phi(t) and Phi(t=0)=Id, then the inverse model describes the evolution of Theta(t):=Phi^{-1}(t), i.e. dTheta(t)/ds = -Theta(t)*A(t) and Theta(0)=Id
+		
+	// Pre-computed extinction probabilities (E) over age, as a functor
+	// Must be set by whoever creates the model instance
+	LinearInterpolationFunctor<MuSSEstateE> E;
+	
+	
+	void clear(){
+		trajectory.clear();
+		ages.clear();
+		trajectory_shape.clear();
+		trajectory_scale.clear();
+	}
+	
+	// model parameters
+	// should be manually set by whoever creates the MuSSEmodel instance
+	std::vector<double> transition_rates; // 2D array of size Nstates x Nstates, in row-major format, listing Markov transition rates between states. transition_rates[r,c] is the transition rate r-->c. Non-diagonal entries must be positive, the sum of each row must be zero.
+	std::vector<double> speciation_rates; // 1D array of size Nstates, listing extinction rates at each state
+	std::vector<double> extinction_rates; // 1D array of size Nstates, listing extinction rates at each state
+	long Nstates;
+	
+	// default constructor
+	MuSSEmodelD(){
+		matrix_form 	= false;
+		inverse 		= false;
+		Nstates 		= 0;
+	}
+	
+	// use parameters from another model instance
+	template<class MODEL_TYPE>
+	void adopt_parameters(const MODEL_TYPE &model2){
+		transition_rates 	= model2.transition_rates;
+		speciation_rates 	= model2.speciation_rates;
+		extinction_rates 	= model2.extinction_rates;
+		Nstates 			= model2.Nstates;
+	}
+		
+	// model is notified by the numerical solver that a time series of size count will need to be stored
+	void reserveSpaceForTimeSeries(long Nages){ 
+		trajectory.clear();
+		trajectory.reserve(Nages); 
+		ages.clear();
+		ages.reserve(Nages); 
+	}
+
+	void reserveSpaceForScaledTimeSeries(long Nages){ 
+		trajectory_shape.clear();
+		trajectory_shape.reserve(Nages); 
+		trajectory_scale.clear();
+		trajectory_scale.reserve(Nages); 
+		ages.clear();
+		ages.reserve(Nages); 
+	}
+	
+	// provide initial state to numerical solver
+	bool getInitialState(double age, MuSSEstateD &state) const{ 
+		state = initial;
+		return true; 
+	}
+	
+	// provide scaled initial state to numerical solver
+	bool getScaledInitialState(double age, MuSSEstateD &shape, double &scale) const{ 
+		const double initial_mean = vector_mean(initial);
+		if(initial_mean<=0) return false;
+		scale = log(initial_mean);
+		shape = initial/initial_mean;
+		return true; 
+	}
+
+	// record a new time series point, provided by the numerical solver
+	void registerState(double age, const MuSSEstateD &state){
+		trajectory.push_back(state); 
+		ages.push_back(age); 
+
+		// make sure entries are in [0,1]
+		const long i = trajectory.size()-1;
+		for(long s=0; s<trajectory[i].size(); ++s) trajectory[i][s] = max(0.0, min(1.0, trajectory[i][s]));
+	}
+	
+	
+	// record a new trajectory point, provided by the numerical solver
+	// The state X to be recorded is provided in rescaled format, i.e. state = exp(scale) * shape
+	// You can either record shape and scale separately, or combine them to obtain the actual state
+	void registerScaledState(double age, const MuSSEstateD &shape, const double scale){
+		trajectory_shape.push_back(shape);
+		trajectory_scale.push_back(scale);
+		ages.push_back(age); 
+		
+		// make sure entries are >0
+		const long i = trajectory_shape.size()-1;
+		for(long s=0; s<trajectory_shape[i].size(); ++s) trajectory_shape[i][s] = max(0.0, trajectory_shape[i][s]);
+	}
+	
+	// provide matrix encoding linear rates of change of the current state X, i.e. return A(t), where:
+	//   dX/dt = A(t)*X(t) (if inverse==false)
+	// or:
+	//   dX/dt = X(t)*A(t) (if inverse==true)
+	// note that, in principle, A may also depend on the current state X, i.e. A=A(t,X(t))
+	// The returned A must be in row-major format
+	void getLinearDynamics(double age, std::vector<double> &A) const{
+		const MuSSEstateE current_E = E(age);
+		// The mapping A is essentially the transition_matrix, plus some additional terms on the diagonal
+		A = transition_rates;
+		for(long r=0; r<Nstates; ++r){
+			A[r*Nstates+r] += - (speciation_rates[r]+extinction_rates[r]) + 2*speciation_rates[r]*current_E[r]; // add more terms to diagonal
+		}
+		if(inverse) A *= -1;
+	}
+	
+	
+	// return the rate of change of S & Y, where S is the "scale" of the trajectory and Y is the "shape" (scaled version) of the trajectory
+	// I.e. instead of returning dX/dt, return dS/dt and dY/dt
+	// The correspondence between X and (Y,S) should be handled transparently by the model class, not by the calling ODE solver
+	// In this particular case, "scale" S is defined as S := log(mean(X)) and Y := X/S, so that X = exp(S)*Y
+	RequestedDynamics getRateOfChangeAtScaledState(double age, const MuSSEstateD &currentY, const double currentS, MuSSEstateD &rateY, double &rateS, MuSSEstateD &jump_scaled_state, double &jump_scale) const{
+		// first construct mapping matrix, then apply to currentY and currentS
+		getLinearDynamics(age,mapping);
+		// apply mapping to current_state
+		// if dX/dt = A*X (inverse=false), then:
+		//    dS/dt = mean(A*Y) and dY/dt = A*Y - Y*mean(A*Y)
+		// if dX/dt = X^T*A (inverse=true), then:
+		//    dS/dt = mean(Y^T*A) and dY/dt = Y^T*A - Y^T*mean(Y^T*A)
+		const double corrective_rate = abs(get_matrix_trace(Nstates,mapping)) * (vector_mean(currentY) - 1.0);
+		if(matrix_form){
+			// current_state is a 2D matrix of size Nstates x Nstates, so the rate of change should also be a 2D matrix of size Nstates x Nstates
+			if(inverse){
+				multiply_matrices(Nstates,Nstates,Nstates,currentY,mapping,YA);
+				rateS = vector_mean(YA) + corrective_rate;
+				rateY = YA - currentY*rateS;
+			}else{
+				multiply_matrices(Nstates,Nstates,Nstates,mapping,currentY,AY);
+				rateS = vector_mean(AY) + corrective_rate;
+				rateY = AY - currentY*rateS;
+			}
+		}else{
+			// current_state is a 1D vector of size Nstates
+			if(inverse){
+				multiply_vector_with_matrix(Nstates,Nstates,currentY,mapping,YA);
+				rateS = vector_mean(YA) + corrective_rate;
+				rateY = YA - currentY*rateS;
+			}else{
+				multiply_matrix_with_vector(Nstates,Nstates,mapping,currentY,AY);
+				rateS = vector_mean(AY) + corrective_rate;
+				rateY = AY - currentY*rateS;
+			}
+		}
+		return RequestedDynamicsRateOfChange; 
+	}
+
+
+	// provide rates of change (dD/dt) to the numerical solver (where t=age)
+	RequestedDynamics getRateOfChangeAtState(double age, const MuSSEstateD &current_state, MuSSEstateD &rate_of_change, MuSSEstateD &jump_state) const{
+		// first construct mapping matrix, then apply to current state
+		getLinearDynamics(age,mapping);
+		// apply mapping to current_state
+		// dX/dt = A*X (if inverse=false), or dX/dt = X^T*A (if inverse=true)
+		if(matrix_form){
+			// current_state is a 2D matrix of size Nstates x Nstates, so the rate of change should also be a 2D matrix of size Nstates x Nstates
+			if(inverse){
+				multiply_matrices(Nstates,Nstates,Nstates,current_state,mapping,rate_of_change);
+			}else{
+				multiply_matrices(Nstates,Nstates,Nstates,mapping,current_state,rate_of_change);
+			}
+		}else{
+			// current_state is a 1D vector of size Nstates
+			if(inverse){
+				multiply_vector_with_matrix(Nstates,Nstates,current_state,mapping,rate_of_change);
+			}else{
+				multiply_matrix_with_vector(Nstates,Nstates,mapping,current_state,rate_of_change);
+			}
+		}
+		return RequestedDynamicsRateOfChange; 
+	}
+
+	// returns true if for some reason the age step should be refined, e.g. if the domain boundary is crossed
+	// this check may be requested by the numerical solver
+	// note that current_state & candidate_state may be a vector of size Nstates (if matrix_form==false) or a 2D matrix of size Nstates x Nstates (if matrix_form==true).
+	bool checkShouldRefineTimeStep(double age, const MuSSEstateD &current_state, double dt, const MuSSEstateD &candidate_state) const{ 
+		if(inverse){
+			// since the inverted mapping Theta(t) = Phi^{-1}(t) may validly map outside of [0,1]^Nstates, we cannot insist on candidate_state being within [0,1]^Nstates
+			return false;
+		}else{
+			for(long i=0; i<candidate_state.size(); ++i){
+				if(candidate_state[i]>1) return true;
+				if(candidate_state[i]<0) return true;
+			}
+		}
+		return false;
+	}
+	
+	// similar to checkShouldRefineTimeStep above, but handling rescaled states, i.e. split into "shape" Y and "scale" S
+	// If X is the actual simulated state (e.g. likelihoods D), then S:=log(mean(X)) and Y:=X/exp(S)
+	bool checkShouldRefineTimeStep(double age, const MuSSEstateD &currentY, const double currentS, double dt, const MuSSEstateD &candidateY, const double candidateS) const{ 
+		if(inverse){
+			// since the inverted mapping Theta(t) = Phi^{-1}(t) may validly map outside of [0,1]^Nstates, we cannot insist on candidate_state being within [0,1]^Nstates
+			for(long i=0; i<candidateY.size(); ++i){
+				if((currentY[0]>0) && (candidateY[0]>0) && (abs(currentY[i]/currentY[1] - candidateY[i]/candidateY[0])>0.01)) return(true); // change in shape seems to drastic for one time step
+			}
+			return false;
+		}else{
+			for(long i=0; i<candidateY.size(); ++i){
+				if((candidateY[i]>0) && (candidateS+log(candidateY[i])>0)) return true; // check if candidate_state>1
+				if(candidateY[i]<0) return true; // checking if candidateY<0
+				if((currentY[0]>0) && (candidateY[0]>0) && (abs(currentY[i]/currentY[1] - candidateY[i]/candidateY[0])>0.01)) return(true); // change in shape seems to drastic for one time step
+			}
+		}
+		return false;
+	}
+	
+	// check if candidate_state is outside of the domain boundaries.
+	// In that case, tries to correct the candidate_state to be the "last" valid state on the linear trajectory
+	// If this is not possible (e.g. because previous_state was already on the boundary), the problematic components are brute-force adjusted to be within the domain. In this case, the routine returns CrossedBoundaryYesButFixedBruteForce.
+	CrossedBoundary checkCrossedDomainBoundaryAndFix(	double				previous_age,
+														const MuSSEstateD	&previous_state,				// previous state (assumed to be valid!)
+														double 				&dt,							// (INPUT/OUTPUT) will be adjusted (reduced) if candidate_state crossed the boundary. The modified value is guaranteed to be within (0,dt]
+														MuSSEstateD			&candidate_state,				// (INPUT/OUTPUT) if candidate_state is outside of domain boundaries, then this may become the "last" state (on the linear trajectory from previous_state to candidate_state) within the domain (if possible).		
+														const bool			intermediate) const{			// (INPUT) is the candidate point an intermediate point (i.e. as used in Runge-Kutta schemes), or a final point (i.e., the final prediction for the candidate time)
+		if(inverse) return CrossedBoundaryNo; // since the inverted mapping Theta(t) = Phi^{-1}(t) may validly map outside of [0,1]^Nstates, we cannot insist on candidate_state being within [0,1]^Nstates
+		double lambda = 1;
+		const double min_lambda = 0.00001;
+		for(long s=0; s<candidate_state.size(); ++s){
+			if(candidate_state[s]<0){
+				if(previous_state[s]<=0){
+					// even refining the step would probably not help
+					lambda = 0; break;
+				}
+				lambda = min(lambda,(previous_state[s]-0)/(previous_state[s]-candidate_state[s]));
+			}
+			if((!intermediate) && (candidate_state[s]>1)){
+				if(previous_state[s]>=1){
+					// even refining the step would probably not help
+					lambda = 0; break;
+				}
+				lambda = min(lambda,(1-previous_state[s])/(candidate_state[s]-previous_state[s]));
+			}
+		}
+		if((lambda<1) && (lambda>min_lambda)){
+			candidate_state = previous_state*(1-lambda) + candidate_state*lambda;
+			dt *= lambda;
+			return CrossedBoundaryYesButFixedByReducingTimeStep;
+		}else if((lambda<1) && (lambda<=min_lambda)){
+			// at least one state variable has to be fixed brute-force, so do this for all
+			for(long s=0; s<candidate_state.size(); ++s){
+				candidate_state[s] = max(0.0, min(1.0, candidate_state[s]));
+			}
+			return CrossedBoundaryYesButFixedBruteForce;
+		}else{
+			return CrossedBoundaryNo;
+		}
+	}
+
+	// similar to checkCrossedDomainBoundaryAndFix above, but handling rescaled states, i.e. (Y,S) instead of the actual simulated state
+	// S is the "scale" of the trajectory and Y is the "shape" of the trajectory (a rescaled variant of the trajectory)
+	// If X is the actual simulated state (e.g. likelihoods D), then S:=log(mean(X)) and Y:=X/exp(S)
+	CrossedBoundary checkCrossedDomainBoundaryAndFix(	double				previous_age,
+														const MuSSEstateD	&previousY,			// (INPUT) shape of the previous state (assumed to be valid!)
+														const double		previousS,			// (INPUT) scale of the previous state
+														double 				&dt,				// (INPUT/OUTPUT) will be adjusted (reduced) if candidate_state crossed the boundary. The modified value is guaranteed to be within (0,dt]
+														MuSSEstateD			&candidateY,		// (INPUT/OUTPUT) if candidate_state is outside of domain boundaries, then this may become the "last" scaled state (on the linear trajectory from previousY to candidateY) within the domain (if possible).		
+														double				&candidateS,		// (INPUT/OUTPUT) scale of the candidate state
+														const bool			intermediate) const{// (INPUT) is the candidate point an intermediate point (i.e. as used in Runge-Kutta schemes), or a final point (i.e., the final prediction for the candidate time)
+		if(inverse) return CrossedBoundaryNo; // since the inverted mapping Theta(t) = Phi^{-1}(t) may validly map outside of [0,1]^Nstates, we cannot insist on candidate_state being within [0,1]^Nstates
+				
+		double lambda = 1;
+		const double min_lambda = 0.00001;
+		for(long s=0; s<candidateY.size(); ++s){
+			if(candidateY[s]<0){
+				if(previousY[s]<=0){
+					// even refining the step would probably not help
+					lambda = 0; break;
+				}
+				lambda = min(lambda,(previousY[s]-0)/(previousY[s]-candidateY[s]));
+			}
+			if((!intermediate) && (candidateY[s]>0) && (candidateS+log(candidateY[s])>0)){ // check if candidate_state>1
+				if((previousY[s]<0) || (previousS+log(previousY[s])>=0)){ // check if previous_state was outside of [0,1)
+					// even refining the step would probably not help
+					lambda = 0; break;
+				}
+				lambda = min(lambda,(0-(previousS+log(previousY[s])))/((candidateS+log(candidateY[s]))-(previousS+log(previousY[s])))); // calculate necessary step refinement in log-scale space
+			}
+			
+		}
+		if((lambda<1) && (lambda>min_lambda)){
+			candidateY 	= previousY*(1-lambda) + candidateY*lambda;
+			candidateS 	= previousS*(1-lambda) + candidateS*lambda;
+			dt *= lambda;
+			return CrossedBoundaryYesButFixedByReducingTimeStep;
+		}else if((lambda<1) && (lambda<=min_lambda)){
+			// at least one state variable has to be fixed brute-force, so do this for all
+			for(long s=0; s<candidateY.size(); ++s){
+				candidateY[s] = max(0.0, candidateY[s]);
+				candidateY[s] = exp(min(-candidateS,log(candidateY[s]))); // force candidate_state[s] to be <= 1
+			}
+			return CrossedBoundaryYesButFixedBruteForce;
+		}else{
+			return CrossedBoundaryNo;
+		}
+	}
+
+	
+	bool stateIsNaN(const MuSSEstateD &state) const{
+		return contains_nan(state);
+	}
+	
+	bool scaledStateIsNaN(const MuSSEstateD &scaled_state, const double scale) const{
+		return (std::isnan(scale) || contains_nan(scaled_state));
+	}
+	
+	// estimate the maximum absolute rate of change or provide a reasonable upper bound for it
+	// may be useful for choosing the age step for simulations
+	double estimate_max_rate_of_change() const{
+		double max_rate = 0;
+		for(long s=0; s<Nstates; ++s){
+			const double sumT = row_sum(transition_rates,Nstates,s)-transition_rates[s*Nstates + s]; // sum of non-diagonal transition rates from state s
+			// get maximum absolute rate of change of D[s]
+			// The sum of multiple functions f1+f2+.. is always contained within [min(f1)+min(f2)+..., max(f1)+max(f2)+...]
+			//   so calculate minima and maxima of individual summands, then use these to bound the maximum absolute value
+			const double minD1 = - (speciation_rates[s] + extinction_rates[s] + sumT);
+			const double maxD1 = 0;
+			const double minD2 = 0;
+			const double maxD2 = 2*speciation_rates[s];
+			const double minD3 = 0;
+			const double maxD3 = sumT;
+			const double maxD = max(abs(minD1+minD2+minD3),abs(maxD1+maxD2+maxD3));
+			// combine maximum absolute rate of change of D[s]
+			max_rate = max(max_rate, maxD);
+		}
+		return max_rate;
+	}
+};
+
+
+
+
+
+// class for integrating E-part of a MuSSE model (Multiple State Speciation Extinction) along a single edge
+// this model should be integrated in reverse age (i.e. increasing age)
+class MuSSEmodelE{
+protected:
+	// model parameters
+	std::vector<double> transition_rates; // 2D array of size Nstates x Nstates, in row-major format, listing Markov transition rates between states. transition_rates[r,c] is the transition rate r-->c. Non-diagonal entries must be positive, the sum of each row must be zero.
+	std::vector<double> speciation_rates; // 1D array of size Nstates, listing extinction rates at each state
+	std::vector<double> extinction_rates; // 1D array of size Nstates, listing extinction rates at each state
+	long Nstates;
+
+	std::vector<double> linear_dynamics; // store the linear part of the E-dynamics. This is a constant matrix, under BiSSE/MuSSE/HiSSE/SecSSE models
+	friend class MuSSEmodelD;
+public:
+	std::vector<MuSSEstateE> trajectory;
+	std::vector<double> ages;
+	std::vector<double> initial; // vector of size Nstates, specifying the initial E (at the start of the edge). Must be manually set by whoever creates the model instance
+	bool matrix_form;
+	
+	void clear(){
+		trajectory.clear();
+		ages.clear();
+	}
+	
+	void setup(	const long		_Nstates,
+				const dvector 	&_transition_rates, 
+				const dvector 	&_speciation_rates,
+				const dvector 	&_extinction_rates){
+		Nstates 		 = _Nstates;
+		transition_rates = _transition_rates;
+		speciation_rates = _speciation_rates;	
+		extinction_rates = _extinction_rates;
+		
+		// setup linear part of dynamics, as a square matrix
+		// this is basically the transition matrix, plus some stuff on the diagonal
+		linear_dynamics = transition_rates;
+		for(long s=0; s<Nstates; ++s){
+			linear_dynamics[s*Nstates+s] -= (speciation_rates[s]+extinction_rates[s]);
+		}
+	}
+	
+	// use parameters from another model instance
+	template<class MODEL_TYPE>
+	void adopt_parameters(const MODEL_TYPE &model2){
+		setup(model2.Nstates, model2.transition_rates, model2.speciation_rates, model2.extinction_rates);
+		matrix_form = model2.matrix_form;
+	}
+		
+	// model is notified by the numerical solver that a time series of size count will need to be stored
+	void reserveSpaceForTimeSeries(long Nages){ 
+		trajectory.clear();
+		trajectory.reserve(Nages); 
+		ages.clear();
+		ages.reserve(Nages); 
+	}
+
+	// model is notified by the numerical solver that a time series will need to be stored
+	void reserveSpaceForTimeSeries(const double simulationTime, const double minRecordingTimeStep, const double recordingValueStep){ 
+		const double max_rate = estimate_max_rate_of_change();
+		const long Nrecordings = 2 + min(simulationTime/minRecordingTimeStep, simulationTime * max_rate/recordingValueStep); // estimate total number of recording that will be performed
+		trajectory.clear();
+		trajectory.reserve(Nrecordings); 
+		ages.clear();
+		ages.reserve(Nrecordings); 
+	}
+	
+	// provide initial state to numerical solver
+	bool getInitialState(double age, MuSSEstateE &state) const{ 
+		state = initial;
+		return true; 
+	}
+	
+	bool linearDynamicsAreConstant() const{ return true; }
+
+	// record a new time series point, provided by the numerical solver
+	void registerState(double age, const MuSSEstateE &state){
+		trajectory.push_back(state); 
+		ages.push_back(age); 
+	}
+
+	// provide rates of change to the numerical solver
+	RequestedDynamics getRateOfChangeAtState(double age, const MuSSEstateE &current_state, MuSSEstateE &rate_of_change, MuSSEstateE &jump_state) const{
+		if(matrix_form){
+			// current_state is a 2D matrix of size Nstates x Nstates, so the rate of change should also be a 2D matrix of size Nstates x Nstates
+			// treat every column (c) as an independent trajectory
+			rate_of_change.resize(Nstates*Nstates);
+			for(long c=0; c<Nstates; ++c){
+				for(long s=0, j; s<Nstates; ++s){
+					j = s*Nstates + c;
+					rate_of_change[j] = extinction_rates[s] - (speciation_rates[s]+extinction_rates[s])*current_state[j] + speciation_rates[s]*SQ(current_state[j]);
+					for(long z=0; z<Nstates; ++z){
+						rate_of_change[j] += transition_rates[s*Nstates+z] * current_state[z*Nstates+c];
+					}
+				}
+			}
+		}else{
+			rate_of_change.resize(Nstates);
+			for(long s=0; s<Nstates; ++s){
+				rate_of_change[s] = extinction_rates[s] - (speciation_rates[s]+extinction_rates[s])*current_state[s] + speciation_rates[s]*SQ(current_state[s]);
+				for(long j=0; j<Nstates; ++j){
+					rate_of_change[s] += transition_rates[s*Nstates+j] * current_state[j];
+				}
+			}
+		}
+		return RequestedDynamicsRateOfChange; 
+	}
+
+
+	// provide rates of change to the numerical solver, split into a linear and non-linear part
+	// the rate of change of X will be: linearity*X + nonlinearity
+	RequestedDynamics getLinearAndNonlinearDynamics(double age, const MuSSEstateE &current_state, dvector &linearity, MuSSEstateE &nonlinearity) const{
+		linearity = linear_dynamics;
+		if(matrix_form){
+			// current_state is a 2D matrix of size Nstates x Nstates, so the rate of change should also be a 2D matrix of size Nstates x Nstates
+			// treat every column (c) as an independent trajectory
+			nonlinearity.resize(Nstates*Nstates);
+			for(long c=0; c<Nstates; ++c){
+				for(long s=0; s<Nstates; ++s){
+					nonlinearity[s*Nstates + c] = extinction_rates[s] + speciation_rates[s]*SQ(current_state[s*Nstates + c]);
+				}
+			}
+		}else{
+			nonlinearity.resize(Nstates);
+			for(long s=0; s<Nstates; ++s){
+				nonlinearity[s] = extinction_rates[s] + speciation_rates[s]*SQ(current_state[s]);
+			}
+		}
+		return RequestedDynamicsRateOfChange; 
+	}
+
+
+
+	// returns true if for some reason the age step should be refined, e.g. if the domain boundary is crossed
+	// this check may be requested by the numerical solver
+	bool checkShouldRefineTimeStep(double age, const MuSSEstateE &current_state, double dt, const MuSSEstateE &candidate_state) const{ 
+		for(long s=0; s<candidate_state.size(); ++s){
+			if(candidate_state[s]>1) return true;
+			if(candidate_state[s]<0) return true;
+			if(abs(candidate_state[s]-current_state[s])>0.0005*0.5*(candidate_state[s]+current_state[s])) return true; // relative change of state seems too drastic, so recommend reducing the time step
+		}
+		return false;
+	}
+	
+	
+	// calculate a measure of relative difference between two E-states
+	// this may be requested by the numerical ODE solver, to decide whether a new point should be recorded
+	double getRelativeChange(const MuSSEstateE &stateA, const MuSSEstateE &stateB) const{ 
+		double relativeChange = 0;
+		for(long s=0; s<stateA.size(); ++s){
+			if((stateA[s]!=0) || (stateB[s]!=0)){
+				relativeChange = max(relativeChange, abs(stateA[s]-stateB[s])*2/(abs(stateA[s])+abs(stateB[s])));
+			}
+		}
+		return relativeChange;
+	}
+	
+	// check if candidate_state is outside of the domain boundaries.
+	// In that case, tries to correct the candidate_state to be the "last" valid state on the linear trajectory
+	// If this is not possible (e.g. because previous_state was already on the boundary), the problematic components are brute-force adjusted to be within the domain. In this case, the routine returns CrossedBoundaryYesButFixedBruteForce.
+	CrossedBoundary checkCrossedDomainBoundaryAndFix(	double				previous_age,
+														const MuSSEstateE	&previous_state,		// previous state (assumed to be valid!)
+														double 				&dt,					// (INPUT/OUTPUT) will be adjusted (reduced) if candidate_state crossed the boundary. The modified value is guaranteed to be within (0,dt]
+														MuSSEstateE			&candidate_state,		// (INPUT/OUTPUT) if candidate_state is outside of domain boundaries, then this may become the "last" state (on the linear trajectory from previous_state to candidate_state) within the domain (if possible).
+														const bool			intermediate) const{	// (INPUT) is the candidate point an intermediate point (i.e. as used in Runge-Kutta schemes), or a final point (i.e., the final prediction for the candidate time)
+		double lambda = 1;
+		for(long s=0; s<candidate_state.size(); ++s){
+			if(candidate_state[s]>1){
+				if(previous_state[s]>=1){
+					// even refining the step would probably not help
+					lambda = 0; break;
+				}
+				lambda = min(lambda,(1-previous_state[s])/(candidate_state[s]-previous_state[s]));
+			}
+			if((!intermediate) && (candidate_state[s]<0)){
+				if(previous_state[s]<=0){
+					// even refining the step would probably not help
+					lambda = 0; break;
+				}
+				lambda = min(lambda,(previous_state[s]-0)/(previous_state[s]-candidate_state[s]));
+			}
+		}
+		if((lambda<1) && (lambda>0)){
+			candidate_state = previous_state*(1-lambda) + candidate_state*lambda;
+			dt *= lambda;
+			return CrossedBoundaryYesButFixedByReducingTimeStep;
+		}else if((lambda<1) && (lambda<=0)){
+			// at least one state variable has to be fixed brute-force, so do this for all
+			for(long s=0; s<candidate_state.size(); ++s){
+				candidate_state[s] = max(0.0, min(1.0, candidate_state[s]));
+			}
+			return CrossedBoundaryYesButFixedBruteForce;
+		}else{
+			return CrossedBoundaryNo;
+		}
+	}
+	
+	bool stateIsNaN(const MuSSEstateE &state) const{
+		return contains_nan(state);
+	}
+	
+	// estimate the maximum absolute rate of change or provide a reasonable upper bound for it
+	// may be useful for choosing the age step for simulations
+	double estimate_max_rate_of_change() const{
+		double max_rate = 0;
+		for(long s=0; s<Nstates; ++s){
+			const double sumT = row_sum(transition_rates,Nstates,s)-transition_rates[s*Nstates + s]; // sum of non-diagonal transition rates from state s
+			// get maximum absolute rate of change of E[s]
+			// The sum of multiple functions f1+f2+.. is always contained within [min(f1)+min(f2)+..., max(f1)+max(f2)+...]
+			//   so calculate minima and maxima of individual summands, then use these to bound the maximum absolute value
+			const double minE1 = 0;
+			const double maxE1 = extinction_rates[s];
+			const double minE2 = - (speciation_rates[s] + extinction_rates[s] + sumT);
+			const double maxE2 = 0;
+			const double minE3 = 0;
+			const double maxE3 = speciation_rates[s];
+			const double minE4 = 0;
+			const double maxE4 = sumT;
+			const double maxE = max(abs(minE1+minE2+minE3+minE4),abs(maxE1+maxE2+maxE3+maxE4));
+			// combine maximum absolute rate of change of E[s]
+			max_rate = max(max_rate, maxE);
+		}
+		return max_rate;
+	}
+};
+
+
+// DEPRECATED: Original MuSSE algorithm, but somewhat slower than the newer version below
+// calculate log-likelihood of MuSSE model (Multiple State Speciation Extinction) on a tree
+// initial conditions for D and E should be provided by the caller
+// Requirements:
+//   Tree can include multi- and mono-furcations.
+//   Tree must be rooted. Root will be determined automatically as the node with no parent.
+//   Tree must be ultrametric (e.g. a timetree of extant species). In particular, all tips are assumed to have age 0.
+// [[Rcpp::export]]
+Rcpp::List get_MuSSE_loglikelihood_classic_CPP(	const long					Ntips,
+												const long 					Nnodes,
+												const long					Nedges,
+												const long					Nstates,
+												const IntegerVector 		&tree_edge,					// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+												const std::vector<double> 	&node_ages, 				// (INPUT) 1D array of size Nclades, specifying the age (time before present) of each tip & node. All tips are assumed to have age 0.
+												const std::vector<double> 	&transition_rates,			// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c.
+												const std::vector<double> 	&speciation_rates,			// (INPUT) 1D array of size Nstate, specifying the speciation rate at each state.
+												const std::vector<double> 	&extinction_rates,			// (INPUT) 1D array of size Nstate, specifying the extinction rate at each state.
+												const std::vector<double>	&initial_D_per_tip, 		// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing initial conditions for D (clade likelihoods) for each tip
+												const std::vector<double>	&initial_E_per_state, 		// (INPUT) 1D array of Nstates, listing initial conditions for E (extinction probabilities) conditional upon the state
+												const std::vector<double>	&root_prior,				// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Used to combine the root's clade likelihoods (D) into an overall log-likelihood of the model										
+												const double				runtime_out_seconds){		// (INPUT) max allowed MuSSE integration runtime in seconds, per edge. If <=0, this option is ignored.
+	const long root 		= get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+	const long root_node 	= root - Ntips;
+	const double root_age 	= node_ages[root_node];
+
+	// prepare tree traversal route (root-->tips)
+	// Note: This seems to only have a minuscule contribution to the total runtime
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(Ntips,
+									Nnodes,
+									Nedges,
+									root,
+									tree_edge,
+									false,	// don't include tips
+									false,	// edge mappings are not pre-calculated
+									traversal_queue,
+									traversal_node2first_edge,
+									traversal_node2last_edge,	
+									traversal_edges,
+									false,
+									"");
+									
+	// prepare MuSSE model for E (extinction probabilities) and D (clade likelihoods)
+	MuSSEmodelD modelD;
+	MuSSEmodelE modelE;
+	modelE.setup(Nstates, transition_rates, speciation_rates, extinction_rates);
+	modelE.matrix_form 		= false;
+	modelD.adopt_parameters(modelE);
+	modelD.matrix_form 		= false;
+	modelD.inverse 			= false;
+	
+	// integrate MuSSE model for E
+	string warningMessage;
+	modelE.initial = initial_E_per_state;
+	const double dt = min(0.1*root_age,0.1/modelE.estimate_max_rate_of_change());
+	const long Nrecords = min(100000.0,max(100.0,root_age*modelE.estimate_max_rate_of_change())); // number of points to record
+	bool success = RungeKutta2<MuSSEstateE,MuSSEmodelE,ProgressReporter>
+								(0,
+								root_age,
+								dt,
+								modelE,
+								Nrecords, 	// number of points to record
+								2,	// maxTimeStepRefinements
+								2, // refinement_factor
+								ProgressReporter(true),
+								runtime_out_seconds,
+								warningMessage);
+	if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not integrate MuSSE model (extinction probabilities E): "+warningMessage ); // simulation failed
+	
+	// define interpolator functions for E and provide to D-model
+	modelD.E = LinearInterpolationFunctor<MuSSEstateE>(modelE.ages,modelE.trajectory,false,modelE.trajectory[0],modelE.trajectory.back(),true,0);
+		
+	// traverse tips-->root, to calculate D at each node
+	std::vector<MuSSEstateD> posteriors(Nnodes,speciation_rates); // 1D array storing MuSSE posterior clade likelihoods (D) for each node
+	double loglikelihood = 0;
+	for(long q=traversal_queue.size()-1, clade, node; q>=0; --q){
+		clade  = traversal_queue[q];
+		node   = clade-Ntips;
+		// set MuSSE likelihoods of clade to the element-wise product of its children's MuSSE likelihoods
+		for(long e=traversal_node2first_edge[node], edge, child; e<=traversal_node2last_edge[node]; ++e){
+			edge  = traversal_edges[e];
+			child = tree_edge[2*edge+1];
+			const double child_age = (child<Ntips ? 0.0 : node_ages[child-Ntips]);
+
+			// prepare MuSSE model ODE integration along this edge (specify initial condition)
+			modelD.clear();
+			if(child<Ntips){
+				// use tip's prior as initial condition
+				extract_row(initial_D_per_tip, Nstates, child, modelD.initial);
+			}else{
+				// use child's MuSSE posteriors as initial condition
+				modelD.initial = posteriors[child-Ntips];
+			}
+			
+			// solve MuSSE model ODE along edge and save final point as node's posterior
+			if(node_ages[node]==child_age){
+				// child has same age as parent node, so just take child posterior as-is (no need to integrate over zero time)
+				posteriors[node] *= modelD.initial;
+			}else{
+				success = RungeKutta2<MuSSEstateD,MuSSEmodelD,ProgressReporter>
+											(child_age,
+											node_ages[node],
+											min(0.5*(node_ages[node]-child_age),0.1/modelD.estimate_max_rate_of_change()), // dt
+											modelD,
+											1, 	// number of points to record
+											2,	// maxTimeStepRefinements
+											2, // refinement_factor
+											ProgressReporter(true),
+											runtime_out_seconds,
+											warningMessage);
+				if((!success) || modelD.ages.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not integrate MuSSE model (clade likelihoods D) along edge: "+warningMessage ); // simulation failed
+				posteriors[node] *= modelD.trajectory.back();
+			}
+		}
+				
+		// rescale (normalize) node's posterior D
+		// this is necessary due to scaling issues for very large trees; the non-normalized posterior D tends to 0 for older nodes
+		// note that since the MuSSE ODE is linear in D, rescaling just rescales the overall model likelihood (this is corrected for below)
+		const double S = vector_sum(posteriors[node]);
+		posteriors[node] /= S;
+		
+		// incorporate rescaling factor (used to normalize this node's posterior D) into tree's loglikelihood
+		// if we weren't rescaling each node's posterior D, this would not be necessary
+		loglikelihood += log(S);
+	}
+	
+	// calculate model's log-likelihood from root's posterior
+	loglikelihood += log(vector_sum(posteriors[root_node]*root_prior));
+	return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("loglikelihood") = loglikelihood);
+}
+
+
+
+
+
+
+// calculate log-likelihood of MuSSE model (Multiple State Speciation Extinction) on a tree
+// initial conditions for D and E should be provided by the caller
+// Requirements:
+//   Tree can include multi- and mono-furcations.
+//   Tree must be rooted. Root will be determined automatically as the node with no parent.
+//   Tree must be ultrametric (e.g. a timetree of extant species). In particular, all tips are assumed to have age 0.
+// [[Rcpp::export]]
+Rcpp::List get_MuSSE_loglikelihood_CPP(	const long					Ntips,
+										const long 					Nnodes,
+										const long					Nedges,							// (INPUT) number of edges in the tree
+										const long					Nstates,						// (INPUT) number of discrete states that the modeled trait can have
+										const IntegerVector 		&tree_edge,						// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+										const std::vector<double> 	&node_ages, 					// (INPUT) 1D array of size Nclades, specifying the age (time before present) of each tip & node. All tips are assumed to have age 0.
+										const std::vector<double> 	&transition_rates,				// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c.
+										const std::vector<double> 	&speciation_rates,				// (INPUT) 1D array of size Nstate, specifying the speciation rate at each state.
+										const std::vector<double> 	&extinction_rates,				// (INPUT) 1D array of size Nstate, specifying the extinction rate at each state.
+										const std::vector<double>	&initial_D_per_tip, 			// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing initial conditions for D (clade likelihoods) for each tip
+										const std::vector<double>	&initial_E_per_state, 			// (INPUT) 1D array of Nstates, listing initial conditions for E (extinction probabilities) conditional upon the state
+										std::vector<double>			&root_prior,					// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Used to combine the root's clade likelihoods (D) into an overall log-likelihood of the model. Can also be an empty vector, in which case the computed state-likelihoods at the root (D[s]) are used as prior probability distribution.
+										const std::string			&root_conditioning,				// (INPUT) either "none", "madfitz" or "herr_als", specifying how to condition the root's state-likelihoods prior to averaging. "none" corresponds to the original BiSSE model by Maddison (2007), "madfitz" and "herr_als" are options introduced by the hisse R package.
+										const bool					include_ancestral_likelihoods,	// (INPUT) whether to also return the state likelihoods (D) for each node. This may be used as "local" ancestral state reconstructions.
+										const bool					include_warnings,				// (INPUT) whether to also return all warning messages that occurred
+										const double				max_condition_number,			// (INPUT) unitless number, the maximum acceptable condition number for the Gmap (as estimated from the linearized dynamics), when choosing the integration interval size. A larger max_condition number leads to fewer age-splits, thus faster computation but also lower accuracy. Hence, this number controls the trade-off between speed and accuracy. Typical values are 1e4 (slower, more accurate) up to 1e8 (faster, less accurate).
+										const double				relative_ODE_step,				// (INPUT) unitless number, default relative integration time step for the ODE solvers. Relative to the typical time scales of the dynamics, as estimated from the theoretically maximum possible rate of change of D or E. Typical values are 0.01 - 0.1.
+										const double				E_value_step,					// (INPUT) unitless number, relative step for interpolating E over time. So a E_value_step of 0.001 means that E is recorded and interpolated between points between which E differs by roughy 0.001. Typical values are 0.01-0.0001. A smaller E_value_step increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
+										const double				D_temporal_resolution,			// (INPUT) unitless number, relative resolution for interpolating Gmap over time. This is relative to the "typical" time scales at which E and Gmap vary. So a resolution of 10 means for every typical time scale there will be 10 interpolation points. Typical values are 1-100. A greater resolution increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
+										const double				runtime_out_seconds){			// (INPUT) max allowed MuSSE integration runtime in seconds, per edge. If <=0, this option is ignored.
+	const long root 			= get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+	const long root_node 		= root - Ntips;
+	const double root_age 		= node_ages[root_node];
+	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	std::vector<string> warnings;
+	dvector scratchDV, dummyDV; // scratch space or dummy variables in the form of a vector of doubles
+	
+	// calculate rescaled birth rates (e.g. normalized relative to the mean birth rate)
+	const double speciation_rate_log_scale 	= log(vector_mean(speciation_rates));
+	const dvector scaled_speciation_rates	= speciation_rates/exp(speciation_rate_log_scale);
+		
+	// prepare tree traversal route (root-->tips)
+	// Note: This seems to only have a minuscule contribution to the total runtime
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(Ntips,
+									Nnodes,
+									Nedges,
+									root,
+									tree_edge,
+									false,	// don't include tips
+									false,	// edge mappings are not pre-calculated
+									traversal_queue,
+									traversal_node2first_edge,
+									traversal_node2last_edge,	
+									traversal_edges,
+									false,
+									"");
+									
+	// prepare MuSSE model for E (extinction probabilities) and D (clade likelihoods)
+	MuSSEmodelD modelD;
+	MuSSEmodelE modelE;
+	modelE.setup(Nstates, transition_rates, speciation_rates, extinction_rates);
+	modelE.matrix_form = false;
+	modelD.adopt_parameters(modelE);
+	
+	// integrate MuSSE model for E
+	string warningMessage;
+	modelE.initial = initial_E_per_state;
+	bool success = RungeKutta2<MuSSEstateE,MuSSEmodelE,ProgressReporter>
+								(0, // start_time
+								root_age, // end_time
+								max(0.000001*root_age,min(0.2*root_age,relative_ODE_step/modelE.estimate_max_rate_of_change())), // default time step
+								modelE,
+								1e-6/modelE.estimate_max_rate_of_change(), // minRecordingTimeStep
+								E_value_step, 		// recordingRelValueStep
+								5,			// maxTimeStepRefinements
+								4, 			// refinement_factor
+								ProgressReporter(true),
+								(runtime_out_seconds>0 ? max(runtime_out_seconds*0.01, runtime_out_seconds+start_runtime-get_thread_monotonic_walltime_seconds()) : 0.0),
+								warningMessage);	
+	if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not integrate MuSSE model (extinction probabilities E): "+warningMessage ); // simulation failed
+	if(include_warnings && (warningMessage!="")) warnings.push_back("Numerical integration of MuSSE-ODE for E was problematic: "+warningMessage);
+	// define interpolator functions for E and provide to D-model
+	// interpolate on irregular recording grid. Since later value requests by the ODE solver will be for nearby (i.e. slightly varying) time points, value retrieval will be fast
+	modelD.E = LinearInterpolationFunctor<MuSSEstateE>(modelE.ages,modelE.trajectory,false,modelE.trajectory[0],modelE.trajectory.back(),false,0);
+	const MuSSEstateE root_E = modelE.trajectory.back();
+
+
+	// integrate D model (mapping D(0)-->D(t)) from age 0 to root_age in incremental time intervals, and store as interpolators
+	// We split the interval [0:root_age] into sub-intervals, because the integrated Gmaps converge to singular matrices over time, 
+	//   so we need to "renew" them regularly (i.e. start again at identity matrix)
+	// The extent of DeltaT is chosen adaptively depending on the "dissipation rate" of the linear dynamics, i.e. how fast the condition number of Gmap increases over time
+	// The spectral range of the linear dynamics (i.e. the difference between the most positive and most negative eigenvalue in terms of their real part) dictates the dissipation rate of the D-process.
+	// Specifically, the spectral range is the exponential rate at which the condition number of Gmap (k(Gmap)) will increase over time, since Gmap ~ exp(t * dynamics)
+	// Hence, a larger spectral range necessitates a smaller DeltaT, i.e. splitting [0:root_age] into smaller sub-intervals
+	modelD.inverse 		= false;
+	modelD.matrix_form 	= true;
+	// determine linear dynamics (matrix form) of D at various representative ages, and keep track of the worst spectral range encountered
+	dvector dynamics, ages(2);
+	ages[0] = 0; ages[1] = root_age;
+	double max_spectral_range = 0;
+	for(long a=0; a<ages.size(); ++a){
+		modelD.getLinearDynamics(ages[a], dynamics); // get linear dynamics at this age
+		// calculate spectral range (most positive minus most negative eigenvalue) of the dynamics at this age
+		double spectral_range = get_spectral_range(Nstates, dynamics);
+		if(std::isnan(spectral_range)){
+			// failed to calculate spectral range for some reason
+			if(include_warnings) warnings.push_back(stringprintf("Failed to get spectral range of D-dynamics at age %g; attempting to estimate upper bound using power-method",ages[a]));
+			// try to get an upper bound, based on the dominant eigenvalue (i.e. with largest modulus)
+			// If lambda is the dominant eigenvalue, then we know that the spectral range is not greater than 2*|lambda|
+			double dominant_eigenvalue;
+			bool eigenvalue_converged = get_dominant_eigenvalue(Nstates,dynamics,1000,1e-3,dummyDV,dominant_eigenvalue); // get dominant eigenvalue (by magnitude) of the linear dynamics
+			if(include_warnings && (!eigenvalue_converged)) warnings.push_back(stringprintf("Power iteration of D-dynamics at age %g did not converge, so dominant eigenvalue could not be accurately estimated; using the provisional eigenvalue %g",ages[a],dominant_eigenvalue));
+			spectral_range = 2*abs(dominant_eigenvalue);
+		}
+		max_spectral_range = max(max_spectral_range,spectral_range);
+	}
+	// choose DeltaT (integration interval for partial D-maps) and the corresponding number of age-intervals according to the spectral range of the dynamics
+	// the condition number of Gmap after time DeltaT is ~ exp(SR*DeltaT), where SR is the typical spectral range of the dynamics
+	// A greater number of intervals means that more matrix multiplications will be needed at each edge during the postorder traversal later on
+	const long max_Nintervals 	= 100000; // hard limit on the number of age intervals allowed
+	const double DeltaT 		= max(root_age/max_Nintervals, min(1.0000001*root_age,log(max_condition_number)/max_spectral_range));
+	const long Nintervals 		= ceil(root_age/DeltaT);
+	if(include_warnings && (Nintervals==max_Nintervals)) warnings.push_back("Number of age intervals for computing Gmap reached the upper limit; perhaps the rate values are too high compared to the tree's time scales?");
+	// calculate the D-maps by integrating the ODEs for D across each age interval
+	std::vector<LinearInterpolationFunctor<MuSSEstateD> > Gmap_shape_functors(Nintervals);
+	std::vector<LinearInterpolationFunctor<double> > Gmap_scale_functors(Nintervals);
+	const double Dmax_rate_of_change = modelD.estimate_max_rate_of_change(); // estimated maximum rate of change of D under the model's dynamics
+	for(long n=0; n<Nintervals; ++n){
+		get_identity_matrix(Nstates,modelD.initial);
+		warningMessage = "";
+		const double start_age = n*DeltaT;
+		const double end_age = start_age+DeltaT;
+		const double max_runtime_for_integration = (runtime_out_seconds>0 ? runtime_out_seconds+start_runtime-get_thread_monotonic_walltime_seconds() : 0.0);
+		if((runtime_out_seconds>0) && (max_runtime_for_integration<=0)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Aborted prematurely during pre-calculation of %d D-mappings, because we reached the maximum allowed processing time",Nintervals));
+		const long NDpoints = max(10.0,min(1000000.0/Nintervals,D_temporal_resolution*DeltaT*Dmax_rate_of_change)); 	// number of points to record for this age interval		
+		success = LinearScaledRungeKutta<MuSSEstateD,MuSSEmodelD,ProgressReporter>
+									(Nstates,
+									Nstates,
+									start_age,
+									end_age,
+									max(0.00001*DeltaT,min(0.5*DeltaT,relative_ODE_step/Dmax_rate_of_change)), // default time step
+									modelD,
+									NDpoints, 	// number of points to record
+									4,			// maxTimeStepRefinements
+									2,			// refinement_factor
+									4, 			// max_exp_order
+									ProgressReporter(true),
+									max_runtime_for_integration,
+									warningMessage);
+		if((!success) || (modelD.ages.back()<end_age - 0.001*DeltaT)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Could not integrate MuSSE D-model along age interval %g --> %g: ",start_age,end_age)+warningMessage); // simulation failed
+		if(include_warnings && (warningMessage!="")) warnings.push_back(stringprintf("Numerical integration of MuSSE-ODE for D between ages %g --> %g was problematic: ",start_age,end_age)+warningMessage);
+		Gmap_shape_functors[n] = LinearInterpolationFunctor<MuSSEstateD>(modelD.ages,modelD.trajectory_shape,false,modelD.trajectory_shape[0],modelD.trajectory_shape.back(),true,DeltaT/(NDpoints-1));
+		Gmap_scale_functors[n] = LinearInterpolationFunctor<double>(modelD.ages,modelD.trajectory_scale,false,modelD.trajectory_scale[0],modelD.trajectory_scale.back(),true,DeltaT/(NDpoints-1));
+		Rcpp::checkUserInterrupt(); // abort if the user has interrupted the calling R program
+	}
+	
+
+	// traverse tips-->root, to calculate D at each node
+	std::vector<dvector> posteriors(Nnodes,dvector(Nstates,1.0)); // 1D array storing MuSSE posterior clade likelihoods (D) for each node
+	double loglikelihood = 0;
+	dvector child_D, clade_D;
+	dvector Gmap_to_clade_shape, Gmap_to_child_shape;
+	double Gmap_to_child_scale, scaling;
+	dvector X(Nstates), Y(Nstates);
+	dvector inversion_scratch(Nstates*Nstates);	
+	long Gmap_to_child_rank, start_functor, end_functor, Nsplits;
+	const long max_rank_warnings = 100; // maximum number of Gmap-rank associated warnings to include. Used to prevent returning huge lists of largely similar warnings.
+	long Nrank_warnings = 0; // keep track of the number of Gmap-rank associated warnings
+	for(long q=traversal_queue.size()-1, clade, node; q>=0; --q){
+		clade = traversal_queue[q];
+		node  = clade-Ntips;
+		const double clade_age = node_ages[node];
+		
+		// account for splitting event, i.e. initialize the likelihoods at the node to lambda[]^(Nsplits-1)
+		// Note that lambda^(Nsplits-1) is the leading-order term (in dt) for the probability of a Yule process (pure birth-process), with a per-capita birth-rate lambda, to have Nsplits splits after time interval dt (when starting with a single lineage)
+		// Alternatively, a multiplication with lambda^(Nsplits-1) can be justified by first breaking a multifurcation up into nearby bifurcations, apply the original MuSSE formula, and then taking the limit where those bifurcations are infinitesimally close to each other
+		// To prevent numerical under- or over-flow, we only multiply by the rescaled lambdas, and correct for the rescaling in the model's overall loglikelihood
+		Nsplits = traversal_node2last_edge[node]-traversal_node2first_edge[node] + 1;
+		for(long s=0; s<Nstates; ++s) posteriors[node][s] = pow(scaled_speciation_rates[s],Nsplits-1.0);
+		loglikelihood += (Nsplits-1) * speciation_rate_log_scale;
+
+		// set MuSSE likelihoods of clade to the element-wise product of its children's MuSSE likelihoods
+		for(long e=traversal_node2first_edge[node], edge, child; e<=traversal_node2last_edge[node]; ++e){
+			edge  = traversal_edges[e];
+			child = tree_edge[2*edge+1];
+			const double child_age = (child<Ntips ? 0.0 : node_ages[child-Ntips]);
+			const double age_interval = clade_age - child_age;
+
+			// specify initial condition (at child) for MuSSE model ODE integration along this edge
+			if(child<Ntips){
+				// child is a tip, so use child's prior as initial condition
+				extract_row(initial_D_per_tip, Nstates, child, child_D);
+			}else{
+				// use child's MuSSE posteriors as initial condition
+				child_D = posteriors[child-Ntips];
+			}
+			
+			// map child_D --> clade_D
+			// this is equivalent to solving the MuSSE model ODE along edge
+			if(age_interval<=root_age*RELATIVE_EPSILON){
+				// child has same age as parent node, so just take child posterior as-is (no need to integrate over zero time)
+				posteriors[node] *= child_D;			
+			}else{			
+			
+				start_functor 	= min(Nintervals-1,long(child_age/DeltaT)); // Gmap functor defined on the interval that includes child_age
+				end_functor  	= min(Nintervals-1,long(clade_age/DeltaT)); // Gmap functor defined on the interval that includes clade_age. May be the same as start_functor.
+				// map child_D --> X (defined at start_functor's start time)
+				Gmap_shape_functors[start_functor].getValue(child_age,Gmap_to_child_shape);
+				Gmap_to_child_scale = Gmap_scale_functors[start_functor](child_age);
+				//LUsolveLinearSystem(&Gmap_to_child_shape[0],&inversion_scratch[0],Nstates,&child_D[0],1e-6*vector_abs_mean(child_D),10,&X[0]);
+				QR_linear_least_squares(Nstates,Nstates,1,Gmap_to_child_shape,child_D,true,scratchDV,inversion_scratch,X,Gmap_to_child_rank);
+				if(include_warnings && (Gmap_to_child_rank<Nstates)){
+					if(Nrank_warnings<max_rank_warnings) warnings.push_back(stringprintf("G-map from age %g to %g is rank deficient (has estimated rank %d), and hence its inversionn is numerically unstable",start_functor*DeltaT,child_age,Gmap_to_child_rank));
+					++Nrank_warnings;
+				}
+				// map X --> clade_D
+				// multiply Gmaps for all age-intervals between child & clade
+				clade_D = X;
+				loglikelihood -= Gmap_to_child_scale; // correct LL for scaling of inverted Gmap_to_child
+				for(long n=start_functor; n<end_functor; ++n){
+					multiply_matrix_with_vector(Nstates,Nstates,Gmap_shape_functors[n].getLastReferenceValue(),clade_D,Y);
+					make_vector_positive(Y);
+					scaling = vector_mean(Y);
+					clade_D  = Y/scaling;
+					loglikelihood += log(scaling);
+					loglikelihood += Gmap_scale_functors[n].getLastReferenceValue();							
+				}
+				Gmap_shape_functors[end_functor].getValue(clade_age,Gmap_to_clade_shape);
+				multiply_matrix_with_vector(Nstates,Nstates,&Gmap_to_clade_shape[0],&clade_D[0],Y);
+				clade_D  = Y;
+				loglikelihood += Gmap_scale_functors[end_functor](clade_age);
+				
+			
+				/* CODE V0. DENOVO INTEGRATION ALONG EDGE
+				// map child-->clade
+				modelD.clear();
+				warningMessage = "";
+				modelD.initial = child_D;
+				const double dt = max(0.001*age_interval,min(0.5*age_interval,0.1/modelD.estimate_max_rate_of_change()));
+				success = LinearScaledRungeKutta<MuSSEstateD,MuSSEmodelD,ProgressReporter>
+								(Nstates,
+								1,
+								child_age,
+								clade_age,
+								dt, // default time step
+								modelD,
+								2, 	// number of points to record
+								2,	// maxTimeStepRefinements
+								2,	// refinement_factor
+								2, 	// max_exp_order
+								ProgressReporter(true),
+								runtime_out_seconds,
+								warningMessage);
+				if((!success) || (modelD.ages.back()<(clade_age-age_interval*1e-4))) return Rcpp::List::create(	Rcpp::Named("success") = false, Rcpp::Named("error") = "Failed to integrate D-model along edge during postorder traversal (age "+makeString(child_age)+" --> "+makeString(clade_age)+"): "+warningMessage);
+				clade_D = modelD.trajectory_shape.back();
+				const double scaling = modelD.trajectory_scale.back();
+				*/
+				
+				/* CODE V1. USING A SINGLE FLOW FROM AGE 0 --> CLADE-AGE
+				// determine MuSSE mapping along this edge child-->clade (use pre-computed mappings D & D_inverse)
+				// Gmap(child-->clade) = Gmap(0-->clade) * Gmap(0-->child)^{-1}
+				Gmap_to_clade_shape = functor_Gmap_shape(clade_age); // scaled version ("shape") of Gmap_to_clade
+				Gmap_to_clade_scale = functor_Gmap_scale(clade_age); // log-scale of Gmap_to_clade
+				Gmap_to_child_shape = functor_Gmap_shape(child_age); // scaled version ("shape") of Gmap_to_child
+				Gmap_to_child_scale = functor_Gmap_scale(child_age); // log-scale of Gmap_to_child
+
+				// solve linear system: Find vector X such that: Gmap_to_child_shape * X = child_D
+				LUsolveLinearSystem(&Gmap_to_child_shape[0],&inversion_scratch[0],Nstates,&child_D[0],1e-6*get_array_nonzero_min(child_D),100,&X[0]);
+				
+				// calculate: clade_D = Gmap_to_clade_shape * X
+				multiply_matrix_with_vector(Nstates,Nstates,Gmap_to_clade_shape,X,clade_D);
+				loglikelihood += Gmap_to_clade_scale - Gmap_to_child_scale; // since the scales of Gmap_to_child_shape & Gmap_to_clade_shape were not included in the mapping child-->clade (nor does it need to be, since posteriors[node] will be normalized anyway), they must be incorporated into the loglikelihood
+
+				// at this point Gmap_shape is a scaled version of the actual Gmap:child-->clade that we would like
+				// Specifically, Gmap_shape = Gmap/exp(Gmap_scale)
+				*/
+
+				replace_non_positives(clade_D, 1e-8*vector_abs_mean(clade_D)); // replace non-positive values with a relatively small value, to avoid NaNs in the loglikelihood
+				posteriors[node] *= clade_D;
+				
+				// rescale (normalize) node's posterior D
+				// this is necessary due to scaling issues for very large trees; the non-normalized posterior D tends to 0 for older nodes
+				// note that since the MuSSE ODE is linear in D, rescaling just rescales the overall model likelihood (this is corrected for below)
+				// normalization should be done at every sub-iteration (i.e. for every child), because for some very degenerate trees some nodes can have hundreds of children
+				scaling = vector_sum(posteriors[node]);
+				for(long s=0; s<Nstates; ++s) posteriors[node][s] /= scaling;
+				loglikelihood += log(scaling); // correct model's loglikelihood for rescaling of this node's posterior
+
+				// check validity of likelihoods so far
+				if((scaling==0) || std::isnan(scaling) || std::isinf(scaling)) return Rcpp::List::create(	Rcpp::Named("success") = false, Rcpp::Named("error") = "Likelihood reached NaN or Inf during postorder traversal", Rcpp::Named("warnings") = Rcpp::wrap(warnings));
+			}
+		}
+		
+		// abort if the user has interrupted the calling R program, or if we ran out of time
+		if(q%100==0){
+			Rcpp::checkUserInterrupt();
+			if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)){
+				return Rcpp::List::create(	Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted prematurely during postorder traversal, because we reached the maximum allowed processing time", Rcpp::Named("warnings") = Rcpp::wrap(warnings));
+			}
+		}
+	}
+	
+	// include an additional summarizing warning if some rank-warnings were omitted
+	if(include_warnings && (Nrank_warnings>max_rank_warnings)){
+		warnings.push_back(stringprintf("An additional %d Gmap-rank-related warnings have been omitted",(Nrank_warnings-max_rank_warnings)));
+	}
+
+	// determine maximum-likelihood root stage, based on state-likelihoods
+	const long ML_root_state = get_array_max(posteriors[root_node]);	
+	
+	// calculate root-prior, if needed
+	if(root_prior.empty()){
+		// use state-likelihoods at the root to define a probability distribution
+		root_prior = posteriors[root_node]/vector_sum(posteriors[root_node]);
+	}
+		
+	// condition root's state-likelihoods, if needed
+	if(root_conditioning=="madfitz"){
+		// this is the same as root.type="madfitz" in the hisse package, and condition.surv=TRUE in diversitree (function 'rootfunc.musse' in file 'model-musse.R')
+		double scaling = 0;
+		for(long s=0; s<Nstates; ++s) scaling += root_prior[s]*speciation_rates[s]*SQ(1 - root_E[s]);
+		posteriors[root_node] /= scaling;
+	}else if(root_conditioning=="herr_als"){
+		double scaling;
+		for(long s=0; s<Nstates; ++s){
+			scaling = speciation_rates[s]*SQ(1 - root_E[s]);
+			if(scaling>0) posteriors[root_node][s] /= scaling;
+		}
+	}
+	
+	// calculate model's log-likelihood from root's posterior
+	loglikelihood += log(vector_sum(posteriors[root_node]*root_prior));
+	
+	// prepare return values
+	Rcpp::List results = Rcpp::List::create(Rcpp::Named("success") 			= true, 
+											Rcpp::Named("warnings") 		= Rcpp::wrap(warnings),
+											Rcpp::Named("NErecordings") 	= modelE.ages.size(),
+											Rcpp::Named("Nintervals") 		= Nintervals,
+											Rcpp::Named("loglikelihood") 	= loglikelihood,
+											Rcpp::Named("ML_root_state") 	= ML_root_state);
+	if(include_ancestral_likelihoods){
+		dvector ancestral_likelihoods;
+		flatten_matrix(posteriors, ancestral_likelihoods); // flatten posteriors into row-major format
+		results.push_back(Rcpp::wrap(ancestral_likelihoods), "ancestral_likelihoods");
+	}
+	return results;
+
+}
+
+
+
 
 #pragma mark -
 #pragma mark Simulate models of trait evolution
 #pragma mark
-
-
-
-
-
 
 
 
@@ -11781,7 +16307,6 @@ Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long					Ntips,
 										
 	// prepare data structures for exponentiations of transition matrix
 	const double max_edge_length = (edge_length.size()==0 ? 1.0 : get_array_max(edge_length));
-	std::vector<double> transition_polynomials, transition_polynomial_norms, exponentiation_balances;
 	const long NPmin = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
 	const matrix_exponentiator transition_exponentiator(Nstates, transition_matrix, max_edge_length, 1e-4, NPmin, 1000, true);
 	
@@ -12407,8 +16932,8 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 	LinearInterpolationFunctor<double> added_birth_rates_pc, added_death_rates_pc;
 	const bool has_added_birth_rates = ((additional_rates_times.size()>0) && (additional_birth_rates_pc.size()>0));
 	const bool has_added_death_rates = ((additional_rates_times.size()>0) && (additional_death_rates_pc.size()>0));
-	if(has_added_birth_rates) added_birth_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_birth_rates_pc,additional_periodic,0.0,true);
-	if(has_added_death_rates) added_death_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_death_rates_pc,additional_periodic,0.0,true);
+	if(has_added_birth_rates) added_birth_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_birth_rates_pc,additional_periodic,0.0,0.0,true,0);
+	if(has_added_death_rates) added_death_rates_pc = LinearInterpolationFunctor<double>(additional_rates_times, additional_death_rates_pc,additional_periodic,0.0,0.0,true,0);
 	
 	// create the first tip (which is also the root)
 	long Ntips = 0; 	// current number of extant + extinct tips
@@ -12422,10 +16947,11 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 	long Nedges 		= 0;
 	long Nbirths		= 0;
 	long Ndeaths 		= 0;
-	double time 		= 0;
-	double total_rate	= INFTY_D;
-	double equilibrium_time = INFTY_D;
-	double initial_growth_rate = NAN_D;
+	long Nevents		= 0;
+	double time 				= 0;
+	double total_rate			= INFTY_D;
+	double equilibrium_time 	= INFTY_D;
+	double initial_growth_rate 	= NAN_D;
 	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
 		// determine time of next speciation or extinction event
 		// prevent deaths if only one tip is left
@@ -12435,9 +16961,12 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		if(std::isnan(initial_growth_rate)) initial_growth_rate = birth_rate-death_rate;
 		if(((birth_rate-death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
 		total_rate = birth_rate+death_rate;
+		
+		// determine next event
 		const double dt = random_exponential_distribution(total_rate);
 		time += dt;
 		const bool birth = random_bernoulli(birth_rate/total_rate);
+		++Nevents;
 				
 		// randomly pick an existing tip to split or kill
 		long tip   = uniformIntWithin(0,NEtips-1);
@@ -12472,7 +17001,7 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 			if(include_death_times) death_times.push_back(time);
 		}
 		// abort if the user has interrupted the calling R program
-		Rcpp::checkUserInterrupt();
+		if(Nevents%100==0) Rcpp::checkUserInterrupt();
 	}
 		
 	if((coalescent ? extant_tips.size() : Ntips)<=1){
@@ -12709,7 +17238,7 @@ Rcpp::List generate_random_tree_BM_rates_CPP(	const long 	 	max_tips,					// (IN
 // Generate a random phylogenetic tree under a speciation/extinction model, where species are born or go extinct as a Poissonian process
 // New species are added by splitting one of the currently extant tips (chosen randomly) into Nsplits new tips
 // This function is similar to generate_random_tree_CPP(..) above, with one important difference:
-//    Per-capita speciation and extinction rates are modelled as discrete-state continuous-time Markov chains evolving along the tree edges
+//    Per-capita speciation and extinction rates are modelled as discrete-state continuous-time Markov chains evolving along the tree edges, with transitions occuring along edges (but not at branching points)
 //	  Hence per-capita speciation/extinction rates are scalar traits specific to each node & tip.
 // [[Rcpp::export]]
 Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// (INPUT) max number of tips (extant tips, if coalescent==true). If <=0, this constraint is ignored.
@@ -12724,6 +17253,7 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 												const long					Nsplits,					// (INPUT) number of children to create at each diversification event. Must be at least 2. For a bifurcating tree this should be set to 2. If >2, then the tree will be multifurcating.
 												const bool					as_generations,				// (INPUT) if false, then edge lengths correspond to time. If true, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
 												const bool					all_transitions,			// (INPUT) if true, then all transitions between states are simulated along edges over time. This is the exact version of the model. If false, an approximation is used whereby transitions only occur at branching points (i.e. during speciation events).
+												const bool					no_full_extinction,	// (INPUT) if true, then extinction of the entire tree is prevented. This is done by temporarily disabling extinctions when the number of extant tips is 1.
 												const bool					include_birth_times,		// (INPUT) if true, then the times of speciations (in order of occurrence) will also be returned
 												const bool					include_death_times,		// (INPUT) if true, then the times of extinctions (in order of occurrence) will also be returned
 												const bool					include_rates){				// (INPUT) if true, then the per-capita birth & death rates for each clade will also be returned
@@ -12731,17 +17261,26 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 	const long expected_Nclades = (max_tips<0 ? 2l : max_tips);
 	long next_Nsplits = max(2l, Nsplits);
 	std::vector<long> tree_edge;
-	std::vector<long> extant_tips;
+	std::vector<lvector> extant_tips(Nstates,std::vector<long>());
 	std::vector<long> clade2parent;
 	std::vector<double> clade2end_time;
 	std::vector<long> clade2state; 		// state for each node/tip (i.e. determining the waiting times until speciation & extinction)
 	std::vector<double> birth_times, death_times;
+
+	// the following lookup tables are updated continuously as the tree grows:
+	//   tree_edge: edge structure of the tree, with entries being clade indices
+	//   extant_tips: keeps track of which clades are extant tips, grouped by state. For any state s and extant-tip i (in state s), the value of extant_tips[s][i] will be an index for clade2state[], clade2parent[] and clade2state[]
+	//   clade2parent: keeps track of parent of each clade ever created (including nodes and dead tips)
+	//   clade2end_time: keeps track of time at which each clade ever created split or went extinct (negative if clade is an extant tip)
+	//   clade2state: keeps track of the state of each clade ever created
+		
+	// reserve memory based on rough expectations
 	tree_edge.reserve(expected_Nclades*2);
-	extant_tips.reserve(ceil(expected_Nclades/2.0)); 	// keep track of which clades are extant tips, as the tree is built
-	clade2parent.reserve(expected_Nclades); 			// keep track of parent of each clade
-	clade2end_time.reserve(expected_Nclades); 			// keep track of time at which each clade split or went extinct (negative if clade is an extant tip)
+	clade2parent.reserve(expected_Nclades);
+	clade2end_time.reserve(expected_Nclades);
 	clade2state.reserve(expected_Nclades);
-	
+	for(long state=0; state<Nstates; ++state) extant_tips[state].reserve(ceil(expected_Nclades/2/Nstates));
+		
 	// prepare exponentiation of birth & death rate matrix
 	const double exponentiation_rescaling = max(1.0,max(max_time_since_equilibrium,max_time));
 	const long NPmin = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
@@ -12753,130 +17292,162 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 	for(long state=0; state<Nstates; ++state){
 		state_total_transition_rates[state] = sum_of_row(Nstates, Nstates, transition_matrix, state) - transition_matrix[state*Nstates+state];
 	}
-	
+		
 	// create the first tip (which is also the root)
-	long Ntips 		= 0; 	// current number of extant + extinct tips
 	long Nclades 	= 0;	// current number of clades
 	long root 		= 0;
-	extant_tips.push_back(Nclades++);
+	extant_tips[root_state].push_back(Nclades++);
 	clade2parent.push_back(-1); // root has no parent
 	clade2end_time.push_back(-1);
 	clade2state.push_back(root_state);
-	++Ntips;
-		
+	long Ntips 		 = 1; // current number of extant + extinct tips
+	long NextantTips = 1; // current number of extant tips (i.e. that can split or die). This must always be equal to sum_s extant_tips[s].size()
+	
+			
 	// create additional tips, by splitting existing tips at each step (turning the split parent tip into a node)
-	long Nedges 		= 0;
-	long Nbirths		= 0;
-	long Ndeaths 		= 0;
-	double time 		= 0;
-	double total_rate	= INFTY_D;
-	double total_birth_rate		= state_birth_rates[clade2state[root]];
-	double total_death_rate		= state_death_rates[clade2state[root]];
-	double total_transition_rate = state_total_transition_rates[clade2state[root]];
-	double equilibrium_time 	= INFTY_D;
-	double initial_growth_rate 	= NAN_D; // keep track of the net growth rate (birth rate - death rate) at the beginning of the simulation
-	while(((max_tips<=0) || ((coalescent ? extant_tips.size() : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
-		// determine time of next speciation or extinction event
+	long Nedges 					= 0;
+	double time 					= 0;
+	long Nevents					= 0; // number of births/deaths/transitions so far
+	double total_rate				= INFTY_D;
+	double total_birth_rate			= state_birth_rates[clade2state[root]];
+	double total_death_rate			= state_death_rates[clade2state[root]];
+	double total_transition_rate 	= state_total_transition_rates[clade2state[root]];
+	double equilibrium_time 		= INFTY_D;
+	double initial_growth_rate 		= NAN_D; // keep track of the net growth rate (birth rate - death rate) at the beginning of the simulation
+	std::vector<long> Ntransitions(Nstates*Nstates,0); // keep track of the number of transitions between each pair of states
+	std::vector<long> Nbirths(Nstates,0);
+	std::vector<long> Ndeaths(Nstates,0);
+	long stip=0, clade=0, tip_state=0, old_state=0, child_state=0;
+	while((NextantTips>0) && ((max_tips<=0) || ((coalescent ? NextantTips : Ntips)<max_tips)) && ((max_time<=0) || (time+1/total_rate<max_time)) && ((max_time_since_equilibrium<0) || (time-equilibrium_time+1/total_rate<max_time_since_equilibrium))){
+		// determine time of next speciation/extinction/transition event
 		// prevent deaths if only one tip is left
-		const double restricted_death_rate = (extant_tips.size()<=1 ? 0 : total_death_rate);
+		const double restricted_death_rate = (no_full_extinction && (NextantTips<=1) ? 0 : total_death_rate);
 		if(std::isnan(initial_growth_rate)) initial_growth_rate = total_birth_rate - restricted_death_rate;
 		if(((total_birth_rate - restricted_death_rate)*initial_growth_rate<0) && (equilibrium_time>time)) equilibrium_time = time; // first crossing of equilibrium state, so keep record
-		total_rate = total_birth_rate + restricted_death_rate;
+		total_rate = total_birth_rate + restricted_death_rate + (all_transitions ? total_transition_rate : 0.0);
 		
-		// add transition rates if needed and draw time lag to next event
-		if(all_transitions) total_rate += total_transition_rate;
+		// draw random (exponentially distributed) time lag to next event
 		time += random_exponential_distribution(total_rate);
+		++Nevents;
 		
 		const bool cladogenic = random_bernoulli((total_birth_rate+restricted_death_rate)/total_rate);
 		if(cladogenic){
 			// speciation or extinction event, decide which of the two
-			const bool birth = random_bernoulli(total_birth_rate/(total_birth_rate+restricted_death_rate));
+			const bool birth = ((restricted_death_rate==0) || random_bernoulli(total_birth_rate/(total_birth_rate+restricted_death_rate)));
 						
-			// randomly pick an existing tip to split or kill
-			const long tip   = random_int_from_distribution(extant_tips, (birth ? state_birth_rates : state_death_rates), clade2state, (birth ? total_birth_rate : total_death_rate));
-			const long clade = extant_tips[tip];
+			// randomly pick an existing tip to split or kill, proportionally to their state-dependent birth or death rates
+			// returns the state of the picked tip, and its index in extant_tips[tip_state][]
+			random_int_from_pools(extant_tips, (birth ? state_birth_rates : state_death_rates), (birth ? total_birth_rate : total_death_rate), tip_state, stip);
+			clade = extant_tips[tip_state][stip];
 			clade2end_time[clade] = time;
 			const double edge_length = clade2end_time[clade]-(clade==root ? 0 : clade2end_time[clade2parent[clade]]);
 		
 			// update total birth & death rates for the removal of the chosen clade from the pool of tips
-			total_birth_rate -= state_birth_rates[clade2state[clade]];
-			total_death_rate -= state_death_rates[clade2state[clade]];
+			total_birth_rate -= state_birth_rates[tip_state];
+			total_death_rate -= state_death_rates[tip_state];
 				
 			// update total transition rate for the removal of the chosen clade from the pool of tips
-			total_transition_rate -= state_total_transition_rates[clade2state[clade]];
+			total_transition_rate -= state_total_transition_rates[tip_state];
 
 			if(birth){
-				// split chosen tip into Nsplits daughter-tips & create new edges leading into those tips
-				if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? extant_tips.size() : Ntips), max(2l, Nsplits)); // temporarily reduce Ntips to stay within limits
-				// child 1:
-				++Nedges;
-				++Nbirths;
-				tree_edge.push_back(clade);
-				tree_edge.push_back(Nclades);
-				extant_tips[tip] = (Nclades++); // replace the old tip with one of the new ones
-				clade2parent.push_back(clade);
-				clade2end_time.push_back(-1);
-				if(include_birth_times) birth_times.push_back(time);
-			
-				// remaining children:
-				for(long c=1; c<next_Nsplits; ++c){
-					++Nedges;
-					++Ntips;
-					tree_edge.push_back(clade);
-					tree_edge.push_back(Nclades);
-					extant_tips.push_back(Nclades++);
-					clade2parent.push_back(clade);
-					clade2end_time.push_back(-1);
-				}
+				// determine number of splits (typically Nsplits, but may be smaller to prevent complete extinction)
+				if(max_tips>0) next_Nsplits = min(1+max_tips-long(coalescent ? NextantTips : Ntips), max(2l, Nsplits)); // cap Ntips if needed to stay within limits
 				
-				// assign states to all children
+				// remove tip from pool of extant tips (will remain in pool of clades, essentially as an internal node)
+				remove_item_from_vector(extant_tips[tip_state], stip);
+				
+				// keep track of when this clade split
+				if(include_birth_times) birth_times.push_back(time);
+
+				// split chosen tip into next_Nsplits daughter-tips & create new edges leading into those tips
+				// also choose the state of each child
 				for(long c=0; c<next_Nsplits; ++c){
+					// choose child state
 					if(all_transitions){
 						// child state is the same as parent, since transitions are modelled separately
-						clade2state.push_back(clade2state[clade]);
+						child_state = tip_state;
 					}else{
-						// pick random state for this child and update total birth & death rates
-						clade2state.push_back(get_next_Mk_state(transition_exponentiator,scratch_exp,edge_length/exponentiation_rescaling,clade2state[clade]));
+						// pick random state for this child according to Markov transition rates
+						child_state = get_next_Mk_state(transition_exponentiator,scratch_exp,edge_length/exponentiation_rescaling,tip_state);
 					}
+					// add child to lookup tables
+					// its clade index is given by the current Nclades (since we append it to the end of the clades tables)
+					tree_edge.push_back(clade);
+					tree_edge.push_back(Nclades);
+					extant_tips[child_state].push_back(Nclades);
+					clade2parent.push_back(clade);
+					clade2end_time.push_back(-1);
+					clade2state.push_back(child_state);
+					++Nclades;
+					
 					// update total birth & death rates
-					total_birth_rate += state_birth_rates[clade2state.back()];
-					total_death_rate += state_death_rates[clade2state.back()];					
+					total_birth_rate += state_birth_rates[child_state];
+					total_death_rate += state_death_rates[child_state];
+					
 					// update total transition rate
-					total_transition_rate += state_total_transition_rates[clade2state.back()];
+					total_transition_rate += state_total_transition_rates[child_state];
 				}
 				
+				// update some summary variables
+				NextantTips += next_Nsplits-1;
+				Nedges 		+= next_Nsplits;
+				Ntips 		+= next_Nsplits-1;
+				Nbirths[tip_state] += 1;					
+				
 			}else{
-				// kill chosen tip (remove from pool of extant tips); note that it still remains a tip, but it can't diversify anymore
-				extant_tips[tip] = extant_tips.back();
-				extant_tips.pop_back();
-				++Ndeaths;
+				// kill chosen tip (remove from pool of extant tips)
+				// note that it still remains a tip (e.g. listed in clade2state[]), but it can't diversify or die anymore
+				
+				// remove from pool of extant tips
+				remove_item_from_vector(extant_tips[tip_state], stip);
+
+				// keep track of when this clade died
 				if(include_death_times) death_times.push_back(time);
+
+				// update some summary variables
+				--NextantTips;
+				Ndeaths[tip_state] += 1;
 			}
+
 		}else{
 			// transition event
-			// randomly pick an existing tip to transition
-			const long tip	 = random_int_from_distribution(extant_tips, state_total_transition_rates, clade2state, total_transition_rate);
-			const long clade = extant_tips[tip];
+			// randomly pick an existing extant tip to transition
+			random_int_from_pools(extant_tips, state_total_transition_rates, total_transition_rate, old_state, stip);
+			clade = extant_tips[old_state][stip];
 			
 			// randomly pick new state
-			const long old_state = clade2state[clade];
 			const long new_state = get_next_Mk_state(Nstates,transition_matrix,state_total_transition_rates[old_state],old_state);
 			clade2state[clade] 	 = new_state;
-						
+
+			// move tip into the appropriate pool of extant_tips
+			remove_item_from_vector(extant_tips[old_state], stip);
+			extant_tips[new_state].push_back(clade);
+
 			// update total transition rate
 			total_transition_rate += state_total_transition_rates[new_state] - state_total_transition_rates[old_state];
 			
 			// update total birth & death rate
 			total_birth_rate += state_birth_rates[new_state] - state_birth_rates[old_state];
-			total_death_rate += state_death_rates[new_state] - state_death_rates[old_state];			
+			total_death_rate += state_death_rates[new_state] - state_death_rates[old_state];
+			
+			// keep record of this transition event (old_state-->new_state)
+			Ntransitions[old_state*Nstates + new_state] += 1;			
 		}
 		// abort if the user has interrupted the calling R program
-		Rcpp::checkUserInterrupt();
+		if(Nevents%100 == 0) Rcpp::checkUserInterrupt();
 	}
 	
-	if(Ntips<=1){
-		// something went wrong (e.g. zero birth & death rates)
-		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Generated tree is empty or has only one tip");
+	if(Ntips<1){
+		// something went wrong (there should always be at least one tip
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Something went wrong: Generated tree is empty");
+	}else if((NextantTips<1) && coalescent){
+		// the tree seems to have gone extinct, and only the coalescent tree was requested (i.e. we would need to return an empty tree)
+		if((!no_full_extinction) && (max_death_rate_pc>0)){
+			// full extinction is a plausible scenario since we did not try to prevent extinctions and death_rates were positive
+			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Tree went fully extinct");
+		}else{
+			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Something went wrong: Generated tree has no extant tips");
+		}
 	}
 		
 	// add a small dt at the end to make all edges non-zero length
@@ -12884,11 +17455,19 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 	if(max_time>0) time = min(time, max_time); // prevent going past max_time
 	if(max_time_since_equilibrium>=0) time = min(time, max_time_since_equilibrium+equilibrium_time); // prevent going past max_time_since_equilibrium
 
-	// translate clade states to pc birth & death rates
+	// translate clade states to clade-specific birth & death rates
 	std::vector<double> clade2birth_rate_pc(Nclades), clade2death_rate_pc(Nclades);
 	for(long c=0; c<Nclades; ++c){
 		clade2birth_rate_pc[c] = state_birth_rates[clade2state[c]];
 		clade2death_rate_pc[c] = state_death_rates[clade2state[c]];
+	}
+	
+	// flatten state-dependent pools of extant tips, into a single list
+	std::vector<long> all_extant_tips(NextantTips);
+	for(long state=0, tip=0; state<Nstates; ++state){
+		for(long stip=0; stip<extant_tips[state].size(); ++stip){
+			all_extant_tips[tip++] = extant_tips[state][stip];
+		}
 	}
 
 	// finalize tree (make valid phylo structure, make coalescent if needed)
@@ -12910,7 +17489,7 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 										root_time,
 										tree_edge,
 										edge_length,
-										extant_tips,
+										all_extant_tips,
 										new2old_clade,
 										birth_rates_pc,
 										death_rates_pc);
@@ -12921,44 +17500,6 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 	clade2state.resize(Nclades);
 	for(long clade=0; clade<Nclades; ++clade) clade2state[clade] = old_clade2state[new2old_clade[clade]];
 	
-	// debug : calculate mean edge lengths per state
-	/*
-	std::vector<long> node2first_edge, node2last_edge, edges;
-	std::vector<double> distances;
-	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, distances);
-	get_node2edge_mappings(	Ntips,
-							Nnodes,
-							Nedges,
-							tree_edge,
-							node2first_edge,
-							node2last_edge,
-							edges);
-	std::vector<double> mean_el(Nstates,0);
-	std::vector<long> counts(Nstates,0);
-	for(long node=0; node<Nnodes; ++node){
-		if(distances[node+Ntips]>0.8*(time-root_time)) continue;
-		bool OK = true;
-		for(long e=node2first_edge[node], edge, child; e<=node2last_edge[node]; ++e){
-			edge = edges[e];
-			child = tree_edge[2*edge+1];
-			if(distances[child]>0.999*(time-root_time) || child<Ntips) OK=false;
-		}
-		if(OK){
-			for(long e=node2first_edge[node], edge, state; e<=node2last_edge[node]; ++e){
-				edge = edges[e];
-				state = clade2state[tree_edge[2*edge+1]];
-				++counts[state];
-				mean_el[state] += edge_length[edge];
-			}
-		}
-	}
-	for(long state=0; state<Nstates; ++state){
-		mean_el[state] /= counts[state];
-		Rcout << "  debug: state " << state << ": mean_el=" << mean_el[state] << ", N=" << counts[state] << "\n";
-	}
-	*/
-
-	
 	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
 								Rcpp::Named("tree_edge") 		= Rcpp::wrap(tree_edge),
 								Rcpp::Named("edge_length") 		= Rcpp::wrap(edge_length),
@@ -12968,6 +17509,7 @@ Rcpp::List generate_random_tree_Mk_rates_CPP(	const long 	 				max_tips,					// 
 								Rcpp::Named("root")				= root, // this is actually guaranteed to be = Ntips
 								Rcpp::Named("Nbirths")			= Nbirths,
 								Rcpp::Named("Ndeaths")			= Ndeaths,
+								Rcpp::Named("Ntransitions")		= Ntransitions,
 								Rcpp::Named("root_time")		= root_time,
 								Rcpp::Named("final_time")		= time,
 								Rcpp::Named("equilibrium_time")	= equilibrium_time,

@@ -57,6 +57,7 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 		class(subtree) = "phylo";
 		return(list(subtree			= subtree, 
 					root_shift		= results$root_shift, # distance between old & new root (will always be non-negative)
+					new2old_clade	= new2old_clade,
 					new2old_tip		= new2old_clade[1:Ntips_kept], 
 					new2old_node	= new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips));
 	}

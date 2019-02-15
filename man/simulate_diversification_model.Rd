@@ -1,14 +1,14 @@
 \name{simulate_diversification_model}
 \alias{simulate_diversification_model}
 \title{
-Simulate a speciation/extinction model.
+Simulate a deterministic uniform speciation/extinction model.
 }
 \description{
-Simulate a speciation/extinction model for diversity over time, corresponding to a tree generation model. Speciation (birth) and extinction (death) rates can each be constant or power-law functions of the number of extant species. For example,
+Simulate a speciation/extinction cladogenic model for diversity over time, in the derministic limit. Speciation (birth) and extinction (death) rates can each be constant or power-law functions of the number of extant species. For example,
 \deqn{
 B = I + F\cdot N^E,
 }
-where \eqn{B} is the birth rate, \eqn{I} is the intercept, \eqn{F} is the power-law factor, \eqn{N} is the current number of extant species and \eqn{E} is the power-law exponent. Note that currently only the deterministic version of the model can be simulated; for the stochastic version (Poisson process) see \code{\link{generate_random_tree}}. Optionally, the model can account for incomplete taxon sampling (rarefaction of tips) and for the effects of collapsing a tree at a non-zero resolution (i.e. clustering closely related tips into a single tip).
+where \eqn{B} is the birth rate, \eqn{I} is the intercept, \eqn{F} is the power-law factor, \eqn{N} is the current number of extant species and \eqn{E} is the power-law exponent. Optionally, the model can account for incomplete taxon sampling (rarefaction of tips) and for the effects of collapsing a tree at a non-zero resolution (i.e. clustering closely related tips into a single tip).
 }
 \usage{
 simulate_diversification_model( times,
@@ -29,27 +29,21 @@ Numeric vector, listing the times for which to calculate diversities, as predict
 }
 \item{parameters}{
 A named list specifying the birth-death model parameters, with one or more of the following entries:
-
-\code{birth_rate_intercept}: Non-negative number. The intercept of the Poissonian rate at which new species (tips) are added. In units 1/time.
-
-\code{birth_rate_factor}:
+\itemize{
+\item\code{birth_rate_intercept}: Non-negative number. The intercept of the Poissonian rate at which new species (tips) are added. In units 1/time.
+\item\code{birth_rate_factor}:
 Non-negative number. The power-law factor of the Poissonian rate at which new species (tips) are added. In units 1/time.
-
-\code{birth_rate_exponent}:
+\item\code{birth_rate_exponent}:
 Numeric. The power-law exponent of the Poissonian rate at which new species (tips) are added. Unitless.
-
-\code{death_rate_intercept}:
+\item\code{death_rate_intercept}:
 Non-negative number. The intercept of the Poissonian rate at which extant species (tips) go extinct. In units 1/time.
-
-\code{death_rate_factor}:
+\item\code{death_rate_factor}:
 Non-negative number. The power-law factor of the Poissonian rate at which extant species (tips) go extinct. In units 1/time.
-
-\code{death_rate_exponent}:
+\item\code{death_rate_exponent}:
 Numeric. The power-law exponent of the Poissonian rate at which extant species (tips) go extinct. Unitless.
-
-\code{resolution}: Non-negative number. Time resolution at which the final tree is assumed to be collapsed. Units are time units. E.g. if this is 10, then all nodes of age 10 or less, are assumed to be collapsed into (represented by) a single tip. This can be used to model OTU trees, obtained after clustering strains by some similarity (=age) threshold. Set to 0 to disable collapsing. If left unspecified, this is set to 0.
-
-\code{rarefaction}: Numeric between 0 and 1, specifying the fraction of tips kept in the final tree after random subsampling. Rarefaction is assumed to occur after collapsing at the specified resolution (if applicable). This can be used to model incomplete taxon sampling. If left unspecified, this is set to 1.
+\item\code{resolution}: Non-negative number. Time resolution at which the final tree is assumed to be collapsed. Units are time units. E.g. if this is 10, then all nodes of age 10 or less, are assumed to be collapsed into (represented by) a single tip. This can be used to model OTU trees, obtained after clustering strains by some similarity (=age) threshold. Set to 0 to disable collapsing. If left unspecified, this is set to 0.
+\item\code{rarefaction}: Numeric between 0 and 1, specifying the fraction of tips kept in the final tree after random subsampling. Rarefaction is assumed to occur after collapsing at the specified resolution (if applicable). This can be used to model incomplete taxon sampling. If left unspecified, this is set to 1.
+}
 }
 
 \item{start_time}{
@@ -83,6 +77,8 @@ Numeric. Maximum runtime (in seconds) allowed for the simulation. If this time i
 
 
 \details{
+The simulation is deterministic, meaning that diversification is modeled using ordinary differential equations, not as a stochastic process. The simulation essentially computes the deterministic diversity over time, not an actual tree. For stochastic cladogenic simulations yielding a random tree, see \code{\link{generate_random_tree}} and \code{\link{simulate_musse}}.
+
 In the special case where per-capita birth and death rates are constant (i.e. \eqn{I=0} and \eqn{E=1} for birth and death rates), this function uses an explicit analytical solution to the underlying differential equations, and is thus much faster than in the general case.
 
 If \code{rarefaction<1} and \code{resolution>0}, collapsing of closely related tips (at the resolution specified) is assumed to take place prior to rarefaction (i.e., subsampling applies to the already collapsed tips).

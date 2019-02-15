@@ -22,6 +22,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 	
 	# set default model parameters
 	if(rate_model=="BM"){
+		parameter_names = c("birth_rate_diffusivity", "min_birth_rate_pc", "max_birth_rate_pc", "death_rate_diffusivity", "min_death_rate_pc", "max_death_rate_pc", "root_birth_rate_pc", "root_death_rate_pc", "rarefaction")
 		if(is.null(parameters$birth_rate_diffusivity)) 	parameters$birth_rate_diffusivity = 1;
 		if(is.null(parameters$min_birth_rate_pc)) 		parameters$min_birth_rate_pc = 0;
 		if(is.null(parameters$max_birth_rate_pc)) 		parameters$max_birth_rate_pc = 1;
@@ -33,6 +34,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		parameters$root_birth_rate_pc = max(parameters$min_birth_rate_pc, min(parameters$max_birth_rate_pc, parameters$root_birth_rate_pc))
 		parameters$root_death_rate_pc = max(parameters$min_death_rate_pc, min(parameters$max_death_rate_pc, parameters$root_death_rate_pc))
 	}else if(rate_model=="Mk"){
+		parameter_names = c("Nstates", "transition_matrix", "state_birth_rates", "state_death_rates", "root_state", "rarefaction")
 		if(is.null(parameters$Nstates)) 			parameters$Nstates = 1;
 		if(is.null(parameters$transition_matrix))	parameters$transition_matrix = matrix(0,nrow=parameters$Nstates, ncol=parameters$Nstates);
 		# pc birth rates corresponding to each state
@@ -52,6 +54,10 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		stop(sprintf("ERROR: Invalid rate_model '%s'",rate_model))
 	}
 	if(is.null(parameters$rarefaction)) parameters$rarefaction = 1;
+	
+	# check if some passed parameters are not recognized
+	invalids = setdiff(names(parameters),parameter_names)
+	if(length(invalids)>0) stop(sprintf("ERROR: Unknown parameter '%s' provided for model '%s'",invalids[1],rate_model))
 	
 	if(parameters$rarefaction<=0 || parameters$rarefaction>1) stop("ERROR: rarefaction parameter must be between 0 (non-inclusive) and 1 (inclusive).")
 	
@@ -86,6 +92,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													Nsplits						= Nsplits,
 													as_generations				= as_generations,
 													all_transitions				= all_Mk_transitions,
+													no_full_extinction			= TRUE,
 													include_birth_times			= include_birth_times,
 													include_death_times			= include_death_times,
 													include_rates				= include_rates);
@@ -129,8 +136,8 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 				root_time			= results$root_time,
 				final_time			= results$final_time,
 				equilibrium_time	= results$equilibrium_time,
-				Nbirths		 		= results$Nbirths,
-				Ndeaths				= results$Ndeaths,
+				Nbirths		 		= sum(results$Nbirths),
+				Ndeaths				= sum(results$Ndeaths),
 				Nrarefied			= Nrarefied, # number of tips removed via rarefaction at the end
 				states				= (if(is.null(results$clade_states) || (!discrete_state_model)) NULL else results$clade_states+1L), # only relevant for discrete-state rate models
 				root_state			= (if(discrete_state_model) parameters$root_state else NULL), # only relevant for discrete-state rate models
