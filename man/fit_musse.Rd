@@ -64,7 +64,7 @@ Integer vector of size \code{Nstates} and with values in 1,..\code{NPstates}, sp
 Integer vector of size Ntips, listing the proxy state at each tip, in the same order as tips are indexed in the tree. The vector may (but need not) include names; if it does, these are checked for consistency with the tree (if \code{check_input==TRUE}). Values must range from 1 to \code{NPstates} (which is assumed equal to \code{Nstates} in the case of BiSSE/MuSSE). States may also be \code{NA}, corresponding to unknown tip proxy states (no information available).
 }
 \item{tip_priors}{
-Numeric matrix of size Ntips x \code{NPstates}, listing prior likelihoods of each proxy state at each tip. Can be provided as an alternative to \code{tip_pstates}. Either \code{tip_pstates} or \code{tip_priors} must be non-NULL, but not both.
+Numeric matrix of size Ntips x \code{Nstates} (or of size Ntips x \code{NPstates}), listing prior likelihoods of each state (or each proxy-state) at each tip. Can be provided as an alternative to \code{tip_pstates}. Thus, \code{tip_priors[i,s]} is the likelihood of observing the data if the tip \code{i} was at state \code{s} (or proxy-state \code{s}). Either \code{tip_pstates} or \code{tip_priors} must be non-NULL, but not both.
 }
 \item{sampling_fractions}{
 Integer vector of size \code{NPstates}, with values between 0 and 1, listing the sampling fractions of species depending on proxy-state. That is, \code{sampling_fractions[p]} is the probability that an extant species, having proxy state \code{p}, is included in the phylogeny. If all species are included in the tree with the same probability (i.e., independent of state), this can also be a single number. If \code{NULL} (default), all species are assumed to be included in the tree.

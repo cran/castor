@@ -1056,7 +1056,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // WMPR_ASR_CPP
-NumericMatrix WMPR_ASR_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const IntegerVector& tree_edge, const NumericVector& edge_length, const IntegerVector& tip_states, const NumericVector& transition_costs, const double branch_length_exponent, bool weight_posteriors_by_scenario_counts, bool verbose, const std::string& verbose_prefix);
+Rcpp::List WMPR_ASR_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const IntegerVector& tree_edge, const NumericVector& edge_length, const IntegerVector& tip_states, const NumericVector& transition_costs, const double branch_length_exponent, bool weight_posteriors_by_scenario_counts, bool verbose, const std::string& verbose_prefix);
 RcppExport SEXP _castor_WMPR_ASR_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_statesSEXP, SEXP transition_costsSEXP, SEXP branch_length_exponentSEXP, SEXP weight_posteriors_by_scenario_countsSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

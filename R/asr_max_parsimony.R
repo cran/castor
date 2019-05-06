@@ -21,7 +21,7 @@ asr_max_parsimony = function(	tree,
 								tip_states, 				# integer vector of size Ntips
 								Nstates				= NULL, 
 								transition_costs	= "all_equal", 
-								edge_exponent		= 0, 
+								edge_exponent		= 0,
 								weight_by_scenarios	= TRUE,
 								check_input			= TRUE){
 	Ntips  = length(tree$tip.label)
@@ -75,17 +75,19 @@ asr_max_parsimony = function(	tree,
 		}
 	}
 
-	ancestral_likelihoods = WMPR_ASR_CPP(	Ntips			 						= Ntips,
-											Nnodes			 						= tree$Nnode,
-											Nedges			 						= Nedges,
-											Nstates			 						= Nstates,
-											tree_edge 		 						= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
-											edge_length		 						= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
-											tip_states		 						= tip_states-1,
-											transition_costs 						= as.vector(t(transition_costs)),
-											branch_length_exponent 					= edge_exponent,
-											weight_posteriors_by_scenario_counts	= weight_by_scenarios,	# (INPUT) if true, then the posterior_probability of a state (in a specific node) is proportional to the number of scenarios in which the trait is at that state
-											verbose									= FALSE,
-											verbose_prefix							= "");
-	return(list(ancestral_likelihoods=ancestral_likelihoods, success=TRUE));
+	results = WMPR_ASR_CPP(	Ntips			 						= Ntips,
+							Nnodes			 						= tree$Nnode,
+							Nedges			 						= Nedges,
+							Nstates			 						= Nstates,
+							tree_edge 		 						= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
+							edge_length		 						= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
+							tip_states		 						= tip_states-1,
+							transition_costs 						= as.vector(t(transition_costs)),
+							branch_length_exponent 					= edge_exponent,
+							weight_posteriors_by_scenario_counts	= weight_by_scenarios,	# (INPUT) if true, then the posterior_probability of a state (in a specific node) is proportional to the number of scenarios in which the trait is at that state
+							verbose									= FALSE,
+							verbose_prefix							= "");
+	return(list(success 				= TRUE,
+				ancestral_likelihoods 	= results$posterior_probabilities,
+				total_cost 				= results$best_root_cost));
 }

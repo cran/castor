@@ -53,10 +53,11 @@ This function is meant for reconstructing ancestral states in all nodes of a tre
 
 \value{
 A list with the following elements:
+\item{success}{Boolean, indicating whether ASR was successful. If \code{FALSE}, the remaining returned elements may be undefined.}
 \item{ancestral_likelihoods}{
 A 2D numeric matrix, listing the probability of each node being in each state. This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument or inferred from \code{tip_states}. The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the probability of the s-th state for the n-th node. Note that the name was chosen for compatibility with other ASR functions.
-
 }
+\item{total_cost}{Real number, specifying the total transition cost across the tree for the most parsimonious scenario. In the classical case where \code{transition_costs="all_equal"}, the \code{total_cost} equals the total number of state changes in the tree under the most parsimonious scenario.}
 }
 
 

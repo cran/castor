@@ -11073,12 +11073,10 @@ Rcpp::List trim_tree_at_height_CPP(	const long			Ntips,
 	for(long tip_new=0, counter=0; tip_new<Ntips_new; ++tip_new){
 		if(new2old_clade[tip_new]>=Ntips) new_tips_ex_nodes[counter++] = tip_new;
 	}
-	
-
 							
 	// Step 3: Calculate edge lengths for extracted subtree
 	// (trim terminal edges if needed)
-	std::vector<long> new_edge_length(Nedges_new);
+	std::vector<double> new_edge_length(Nedges_new);
 	long Nedges_trimmed = 0;
 	for(long edge_new=0, edge; edge_new<Nedges_new; ++edge_new){
 		edge 	= new2old_edge[edge_new];
@@ -13965,18 +13963,18 @@ double aux_get_cost_of_parent_state_transitioning_to_all_children(	const long			
 // For example, root must be a 0-based index, and tree_edge[] must have values in 0:(Ntips+Nnodes-1) instead of 1:(Ntips+Nnodes)
 
 // [[Rcpp::export]]
-NumericMatrix WMPR_ASR_CPP(	const long			Ntips,
-							const long 			Nnodes,
-							const long			Nedges,
-							const long			Nstates, 				// (INPUT) number of possible states
-							const IntegerVector	&tree_edge, 			// (INPUT) 2D array of size Nedges x 2 (in row-major format), in similar format as tree$edge in R "phylo" trees. This array holds the topology of the tree (apart from branch lengths).
-							const NumericVector	&edge_length,			// (INPUT) 1D array of size Nedges, synchronized with the rows of tree_edge[,], i.e. with edge_length[e] being the length of edge e. Can also be an empty vector (all edges have length 1.0).
-							const IntegerVector	&tip_states, 			// (INPUT) 1D array of size Ntips, with values being in 0:(Nstates-1)
-							const NumericVector	&transition_costs,	 	// (INPUT) 2D array of size Nstates x Nstates (in row-major format), with transition_costs[i,j] being the cost of transition i-->j. Normally transition_cost[i,i]=0 for all i. Some transitions may be vorbitten, in which case the transition cost should be set to infinity (INFTY_D).
-							const double 		branch_length_exponent, // (INPUT) exponent for weighting transition costs by branch length. To ignore branch lengths (i.e. to obtain the non-weighted MPR algorithm), set this to 0.
-							bool				weight_posteriors_by_scenario_counts,	// (INPUT) if true, then the posterior_probability of a state (in a specific node) is proportional to the number of scenarios in which the trait is at that state
-							bool				verbose,
-							const std::string	&verbose_prefix){
+Rcpp::List WMPR_ASR_CPP(const long			Ntips,
+						const long 			Nnodes,
+						const long			Nedges,
+						const long			Nstates, 				// (INPUT) number of possible states
+						const IntegerVector	&tree_edge, 			// (INPUT) 2D array of size Nedges x 2 (in row-major format), in similar format as tree$edge in R "phylo" trees. This array holds the topology of the tree (apart from branch lengths).
+						const NumericVector	&edge_length,			// (INPUT) 1D array of size Nedges, synchronized with the rows of tree_edge[,], i.e. with edge_length[e] being the length of edge e. Can also be an empty vector (all edges have length 1.0).
+						const IntegerVector	&tip_states, 			// (INPUT) 1D array of size Ntips, with values being in 0:(Nstates-1)
+						const NumericVector	&transition_costs,	 	// (INPUT) 2D array of size Nstates x Nstates (in row-major format), with transition_costs[i,j] being the cost of transition i-->j. Normally transition_cost[i,i]=0 for all i. Some transitions may be vorbitten, in which case the transition cost should be set to infinity (INFTY_D).
+						const double 		branch_length_exponent, // (INPUT) exponent for weighting transition costs by branch length. To ignore branch lengths (i.e. to obtain the non-weighted MPR algorithm), set this to 0.
+						bool				weight_posteriors_by_scenario_counts,	// (INPUT) if true, then the posterior_probability of a state (in a specific node) is proportional to the number of scenarios in which the trait is at that state
+						bool				verbose,
+						const std::string	&verbose_prefix){
 	// Terminology in this function:
 	// 	'node' runs from 0:(Nnodes-1)
 	// 	'tip' runs from 0:(Ntips-1)
@@ -14074,7 +14072,6 @@ NumericMatrix WMPR_ASR_CPP(	const long			Ntips,
 		}
 	}
 	
-
 	for(long q=0; q<traversal_queue_root2tips.size(); ++q){
 		parent 	= traversal_queue_root2tips[q];
 		node	= parent-Ntips;
@@ -14117,8 +14114,9 @@ NumericMatrix WMPR_ASR_CPP(	const long			Ntips,
 			for(state=0; state<Nstates; ++state) posterior_probabilities(node,state) = (scenario_count_per_node_and_state[node*Nstates + state]>0 ? 1.0 : 0.0)/mass;			
 		}
 	}
-	
-	return(posterior_probabilities);
+
+	return Rcpp::List::create(	Rcpp::Named("posterior_probabilities") 	= Rcpp::wrap(posterior_probabilities),
+								Rcpp::Named("best_root_cost")			= best_root_cost);
 }
 
 
