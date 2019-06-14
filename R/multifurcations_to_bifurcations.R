@@ -27,6 +27,8 @@ multifurcations_to_bifurcations = function(	tree,
 		new_tree$node.label = c(tree$node.label, if(Nnew_nodes<=Nnodes) c() else paste(new_node_basename, new_node_start_index+(0:(Nnew_nodes-Nnodes-1)), sep=""))
 	}
 	class(new_tree) = "phylo";
+	attr(new_tree,"order") = "none";
+
 	return(list(tree 			= new_tree, 
 				old2new_edge 	= results$old2new_edge+1,
 				Nnodes_added 	= (new_tree$Nnode-Nnodes)));

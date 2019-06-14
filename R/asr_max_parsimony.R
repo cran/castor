@@ -18,7 +18,7 @@
 # 	(page 11) https://cs.brown.edu/courses/csci1950-z/slides/CSCI1950ZFall09_Lecture2.pdf
 #  The function returns ancestral state probabilities as a (non-flattened) NumericMatrix of size Nnodes x Nstates.
 asr_max_parsimony = function(	tree, 
-								tip_states, 				# integer vector of size Ntips
+								tip_states, 			# integer vector of size Ntips
 								Nstates				= NULL, 
 								transition_costs	= "all_equal", 
 								edge_exponent		= 0,

@@ -80,3 +80,4 @@ barplot(table(tip_states)/length(tip_states), xlab="state")
 % R documentation directory.
 \keyword{Mk model}
 \keyword{random}
+\keyword{simulation}

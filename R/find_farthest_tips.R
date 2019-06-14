@@ -8,7 +8,6 @@ find_farthest_tips = function(tree, only_descending_tips=FALSE, target_tips=NULL
 	Ntips  = length(tree$tip.label)
 	Nnodes = tree$Nnode;
 	if(!is.null(target_tips)) target_tips = map_tip_or_node_names_to_indices(tree, A=target_tips, type='tip', list_title='target_tips', check_input=TRUE)
-	print(target_tips) # debug
 	results = get_farthest_tip_per_clade_CPP(	Ntips					= Ntips,
 												Nnodes					= Nnodes,
 												Nedges					= nrow(tree$edge),
@@ -18,7 +17,6 @@ find_farthest_tips = function(tree, only_descending_tips=FALSE, target_tips=NULL
 												only_descending_tips	= only_descending_tips,
 												verbose					= FALSE,
 												verbose_prefix			= "");
-	print(results$farthest_distances[tree$root]) # debug
 	results$farthest_tips[results$farthest_tips<0] = NA;
 	return(list(farthest_tip_per_tip		= (results$farthest_tips[1:Ntips] + 1), 
 				farthest_tip_per_node		= (results$farthest_tips[(Ntips+1):(Ntips+Nnodes)] + 1), 

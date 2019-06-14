@@ -13,6 +13,7 @@ fit_musse(tree,
           Nstates,
           NPstates              = NULL,
           proxy_map             = NULL,
+          state_names           = NULL,
           tip_pstates           = NULL,
           tip_priors            = NULL,
           sampling_fractions    = 1,
@@ -60,6 +61,9 @@ Integer, optionally specifying a number of "proxy-states" that are observed inst
 \item{proxy_map}{
 Integer vector of size \code{Nstates} and with values in 1,..\code{NPstates}, specifying the correspondence between states (i.e. diversification-rate categories) and proxy-states, in a HiSSE/SecSSE model. Specifically, \code{proxy_map[s]} indicates which proxy-state the state s is represented by. Each proxy-state can represent multiple states (i.e. proxies are ambiguous), but each state must be represented by exactly one proxy-state. For example, to setup the HiSSE model described by Beaulieu and O'meara (2016), use \code{proxy_map=c(1,2,1,2)}. For non-HiSSE models, set this to \code{NULL} or to \code{c(1:Nstates)}. See below for more details.
 }
+\item{state_names}{
+Optional character vector of size \code{Nstates}, specifying a name/description for each state. This does not influence any of the calculations. It is merely used to add human-readable row/column names (rather than integers) to the returned vectors/matrices. If \code{NULL}, no row/column names are added.
+}
 \item{tip_pstates}{
 Integer vector of size Ntips, listing the proxy state at each tip, in the same order as tips are indexed in the tree. The vector may (but need not) include names; if it does, these are checked for consistency with the tree (if \code{check_input==TRUE}). Values must range from 1 to \code{NPstates} (which is assumed equal to \code{Nstates} in the case of BiSSE/MuSSE). States may also be \code{NA}, corresponding to unknown tip proxy states (no information available).
 }
@@ -96,7 +100,7 @@ Either \code{NULL}, or a single number, or a numeric vector of length Nstates, s
 \item{first_guess}{
 Either \code{NULL}, or a named list containing optional initial suggestions for various model parameters, i.e. start values for fitting. The list can contain any or all of the following elements:
 \itemize{
-\item\code{transition_matrix}: A single number or a 2D numeric matrix of size Nstates x Nstates, specifying suggested start values for the transition rates. May contain NA, indicating rates that should be guessed automatically by the function (by fitting an Mk model, see \code{\link{asr_mk_model}}). If a single number, the that value is used as a start value for all transition rates.
+\item\code{transition_matrix}: A single number or a 2D numeric matrix of size Nstates x Nstates, specifying suggested start values for the transition rates. May contain NA, indicating rates that should be guessed automatically by the function. If a single number, then that value is used as a start value for all transition rates.
 \item\code{birth_rates}: A single number or a numeric vector of size Nstates, specifying suggested start values for the birth rates. May contain NA, indicating rates that should be guessed automatically by the function (by fitting a simple birth-death model, see \code{\link{fit_tree_model}}).
 \item\code{death_rates}: A single number or a numeric vector of size Nstates, specifying suggested start values for the death rates. May contain NA, indicating rates that should be guessed automatically by the function (by fitting a simple birth-death model, see \code{\link{fit_tree_model}}).
 }
@@ -214,7 +218,7 @@ Named list containing the default start parameter values for the fitting. Struct
 The maximized log-likelihood of the model, if fitting succeeded.
 }
 \item{AIC}{
-The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized loglikelihood.
+The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
 }
 \item{Niterations}{
 The number of iterations needed for the best fit. Only relevant if the optimization method was "optim" or "nlminb".
@@ -272,7 +276,7 @@ S. L. Louca (2019). Modeling state-dependent diversification on large phylogenie
 }
 
 \seealso{
-\code{\link{simulate_musse}},
+\code{\link{simulate_dsse}},
 \code{\link{asr_mk_model}},
 \code{\link{fit_tree_model}}
 }

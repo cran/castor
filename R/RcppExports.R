@@ -13,8 +13,8 @@ smoothenTimeSeriesSavitzkyGolay_CPP <- function(times, data, windowTimeSpan, win
     .Call(`_castor_smoothenTimeSeriesSavitzkyGolay_CPP`, times, data, windowTimeSpan, windowIndexSpan, order)
 }
 
-simulate_deterministic_diversity_growth_CPP <- function(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds) {
-    .Call(`_castor_simulate_deterministic_diversity_growth_CPP`, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds)
+simulate_deterministic_diversity_growth_CPP <- function(birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds) {
+    .Call(`_castor_simulate_deterministic_diversity_growth_CPP`, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, resolution, rarefaction, Nsplits, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, times, start_time, final_time, start_diversity, final_diversity, reverse, include_coalescent, include_probabilities, include_birth_rates, include_death_rates, include_Nevents, runtime_out_seconds)
 }
 
 reconstruct_past_diversity_from_coalescent_CPP <- function(times, raw_coalescent_diversities, birth_rates_pc, rarefaction, max_age, smoothing_span, smoothing_order) {
@@ -63,6 +63,10 @@ get_total_tip_count_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
 
 get_mean_depth_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
     .Call(`_castor_get_mean_depth_per_node_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
+}
+
+get_child_count_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
+    .Call(`_castor_get_child_count_per_node_CPP`, Ntips, Nnodes, Nedges, tree_edge)
 }
 
 get_min_max_tip_distance_from_root_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
@@ -289,6 +293,18 @@ get_MuSSE_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edg
     .Call(`_castor_get_MuSSE_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds)
 }
 
+simulate_deterministic_HBD_model_CPP <- function(Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, PDRs, lambda0, splines_degree, relative_dt) {
+    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, PDRs, lambda0, splines_degree, relative_dt)
+}
+
+get_HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds) {
+    .Call(`_castor_get_HBD_model_loglikelihood_CPP`, branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds)
+}
+
+get_HBD_class_loglikelihood_CPP <- function(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds) {
+    .Call(`_castor_get_HBD_class_loglikelihood_CPP`, branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds)
+}
+
 simulate_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations) {
     .Call(`_castor_simulate_fixed_rates_Markov_model_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations)
 }
@@ -321,7 +337,7 @@ generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since
     .Call(`_castor_generate_random_tree_BM_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates)
 }
 
-generate_random_tree_Mk_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, root_state, transition_matrix, coalescent, Nsplits, as_generations, all_transitions, no_full_extinction, include_birth_times, include_death_times, include_rates) {
-    .Call(`_castor_generate_random_tree_Mk_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, root_state, transition_matrix, coalescent, Nsplits, as_generations, all_transitions, no_full_extinction, include_birth_times, include_death_times, include_rates)
+generate_random_tree_Mk_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, start_state, transition_matrix_A, transition_matrix_C, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times, include_rates) {
+    .Call(`_castor_generate_random_tree_Mk_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, start_state, transition_matrix_A, transition_matrix_C, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times, include_rates)
 }
 

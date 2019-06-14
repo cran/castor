@@ -1,6 +1,7 @@
 # Read tree from a Newick-formatted string or file
-read_tree = function(	string="", 
-						file="", 
+read_tree = function(	string="",
+						file="",
+						edge_order				= "cladewise", # how to order edges. Options are "cladewise" (i.e. depth-first-search) or "pruningwise" (i.e. iterating through edge[] leads a post-order traversal) or "none" (unspecified, i.e. depending on how the tree was written in the file)
 						include_edge_lengths 	= TRUE, 
 						include_node_labels 	= TRUE, 
 						underscores_as_blanks 	= FALSE, 
@@ -9,6 +10,7 @@ read_tree = function(	string="",
 		if(string!="") stop("ERROR: Either string or file must be specified, but not both")
 		string = readChar(file, file.info(file)$size)
 	}
+	if(!(edge_order %in% c("cladewise", "pruningwise"))) stop(sprintf("ERROR: Invalid option '%s' for edge order. Use either 'cladewise' or 'pruningwise'",edge_order))
 
 	results = read_Newick_string_CPP(	input = string, 
 										underscores_as_blanks = underscores_as_blanks)								
@@ -26,6 +28,11 @@ read_tree = function(	string="",
 				root 		= results$root+1L,
 				root.edge	= (if(is.nan(results$root_edge)) NULL else results$root_edge))
 	class(tree) = "phylo";
+	attr(tree,"order") = "cladewise";
+	
+	if(edge_order=="pruningwise"){
+		tree = reorder_tree_edges(tree, root_to_tips=FALSE, depth_first_search=TRUE, index_only=FALSE)
+	}
 	
 	return(tree)
 }

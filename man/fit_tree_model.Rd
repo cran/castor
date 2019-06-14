@@ -209,5 +209,4 @@ cat(sprintf("birth_rate_intercept: true=\%g, fitted=\%g\n",T,F))
 }
 % Only 1 keyword per line
 \keyword{fitting}
-\keyword{speciation}
 \keyword{tree model}

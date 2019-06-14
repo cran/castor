@@ -174,5 +174,5 @@ tree = generate_random_tree(parameters,max_tips=100)$tree
 % R documentation directory.
 % Only 1 keyword per line
 \keyword{random}
-\keyword{speciation}
 \keyword{tree model}
+\keyword{simulation}

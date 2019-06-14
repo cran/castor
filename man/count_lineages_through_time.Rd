@@ -1,18 +1,18 @@
-\name{count_clades_over_time}
-\alias{count_clades_over_time}
+\name{count_lineages_through_time}
+\alias{count_lineages_through_time}
 \title{
-Count number of clades over time.
+Count number of lineages through time.
 }
 \description{
-Given a rooted phylogenetic tree whose edge lengths represent time intervals, calculate the number of clades at various time points (e.g., spanning from 0 to the maximum time of any tip). The root is interpreted as time 0, and the distance of any node or tip from the root is interpreted as time elapsed since the root. This function defines an equidistant sequence of time points, and counts how many edges "cross" each time point. Optionally, the slopes and relative slopes of the clade-counts-vs-time curve are also returned. The slopes and relative slopes are approximations for the species birth rate and the per-capita species birth rate (assuming no extinctions occurred).
+Given a rooted phylogenetic tree whose edge lengths represent time intervals, calculate the number of lineages represented in the tree at various time points (e.g., spanning from 0 to the maximum time of any tip). The root is interpreted as time 0, and the distance of any node or tip from the root is interpreted as time elapsed since the root. This function defines an equidistant sequence of time points, and counts how many edges "cross" each time point. Optionally, the slopes and relative slopes of the clade-counts-vs-time curve are also returned. The slopes and relative slopes are approximations for the species birth rate and the per-capita species birth rate (assuming no extinctions occurred).
 }
 \usage{
-count_clades_over_time( tree, 
-                        Ntimes        = NULL, 
-                        min_time      = NULL,
-                        max_time      = NULL,
-                        times         = NULL, 
-                        include_slopes= FALSE)
+count_lineages_through_time(  tree, 
+                              Ntimes        = NULL, 
+                              min_time      = NULL,
+                              max_time      = NULL,
+                              times         = NULL, 
+                              include_slopes= FALSE)
 }
 \arguments{
 \item{tree}{
@@ -51,8 +51,8 @@ Integer, indicating the number of returned time points. Equal to the provided \c
 \item{times}{
 Numeric vector of size Ntimes, listing the considered time points in increasing order. If \code{times} was provided as an argument to the function, then this will be the same as provided.
 }
-\item{diversities}{
-Integer vector of size Ntimes, listing the number of clades for each time point.
+\item{lineages}{
+Integer vector of size Ntimes, listing the number of lineages represented in the tree at each time point.
 }
 \item{slopes}{
 Numeric vector of size Ntimes, listing the slopes (finite-difference approximation of 1st derivative) of the curve clade_counts vs time_point.
@@ -76,10 +76,10 @@ Numeric vector of size Ntimes, listing the relative slopes of the curve clade_co
 tree = generate_random_tree(list(birth_rate_intercept=1), max_tips=1000)$tree
 
 # count clades over time
-results = count_clades_over_time(tree, Ntimes=100)
+results = count_lineages_through_time(tree, Ntimes=100)
 
 # plot curve (number of clades vs time)
-plot(results$times, results$diversities, type="l", xlab="time", ylab="# clades")
+plot(results$times, results$lineages, type="l", xlab="time", ylab="# clades")
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.

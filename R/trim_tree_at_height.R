@@ -33,6 +33,7 @@ trim_tree_at_height = function(	tree,
 						edge.length = results$new_edge_length,
 						root 		= results$new_root+1)
 	class(trimmed_tree) = "phylo";
+	attr(trimmed_tree,"order") = "none";
 
 	return(list(tree			= trimmed_tree,
 				Nedges_trimmed	= results$Nedges_trimmed,

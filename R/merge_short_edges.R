@@ -39,6 +39,8 @@ merge_short_edges = function(	tree,
 		new_tree$tip.label[ex_node_tips] = paste(new_tip_prefix, 1:length(ex_node_tips), sep = "")
 	}
 	class(new_tree) = "phylo";
+	attr(new_tree,"order") = "none";
+
 	return(list(tree 			= new_tree, 
 				new2old_clade 	= new2old_clade,
 				new2old_edge 	= results$new2old_edge+1,

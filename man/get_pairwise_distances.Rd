@@ -44,12 +44,13 @@ A numeric vector of size Npairs, with the i-th element being the patristic dista
 %}
 
 \seealso{
-\code{\link{get_all_distances_to_root}}
+\code{\link{get_all_distances_to_root}},
+\code{\link{get_all_pairwise_distances}}
 }
 
 \examples{
 # generate a random tree
-Ntips = 1000
+Ntips = 100
 tree = generate_random_tree(list(birth_rate_intercept=1),Ntips)$tree
 
 # pick 3 random pairs of tips or nodes

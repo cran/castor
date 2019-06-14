@@ -12,16 +12,20 @@ where \eqn{B} is the birth rate, \eqn{I} is the intercept, \eqn{F} is the power-
 }
 \usage{
 simulate_diversification_model( times,
-                                parameters          = list(),
-                                start_time          = NULL,
-                                final_time          = NULL,
-                                start_diversity	    = 1,
-                                final_diversity     = NULL,
-                                reverse             = FALSE,
-                                include_coalescent  = FALSE,
-                                include_event_rates = FALSE,
-                                include_Nevents     = FALSE,
-                                max_runtime         = NULL)
+                                parameters            = list(),
+                                added_rates_times     = NULL,
+                                added_birth_rates_pc  = NULL,
+                                added_death_rates_pc  = NULL,
+                                added_periodic        = FALSE,
+                                start_time            = NULL,
+                                final_time            = NULL,
+                                start_diversity	      = 1,
+                                final_diversity       = NULL,
+                                reverse               = FALSE,
+                                include_coalescent    = FALSE,
+                                include_event_rates   = FALSE,
+                                include_Nevents       = FALSE,
+                                max_runtime           = NULL)
 }
 \arguments{
 \item{times}{
@@ -45,7 +49,18 @@ Numeric. The power-law exponent of the Poissonian rate at which extant species (
 \item\code{rarefaction}: Numeric between 0 and 1, specifying the fraction of tips kept in the final tree after random subsampling. Rarefaction is assumed to occur after collapsing at the specified resolution (if applicable). This can be used to model incomplete taxon sampling. If left unspecified, this is set to 1.
 }
 }
-
+\item{added_rates_times}{
+Numeric vector, listing time points (in ascending order) for a custom per-capita birth and/or death rates time series (see \code{added_birth_rates_pc} and \code{added_death_rates_pc} below). Can also be \code{NULL}, in which case the custom time series are ignored.
+}
+\item{added_birth_rates_pc}{
+Numeric vector of the same size as \code{added_rates_times}, listing per-capita birth rates to be added to the power law part. Added rates are interpolated linearly between time points in \code{added_rates_times}. Can also be \code{NULL}, in which case this option is ignored and birth rates are purely described by the power law.
+}
+\item{added_death_rates_pc}{
+Numeric vector of the same size as \code{added_rates_times}, listing per-capita death rates to be added to the power law part. Added rates are interpolated linearly between time points in \code{added_rates_times}. Can also be \code{NULL}, in which case this option is ignored and death rates are purely described by the power law.
+}
+\item{added_periodic}{
+Logical, indicating whether \code{added_birth_rates_pc} and \code{added_death_rates_pc} should be extended periodically if needed (i.e. if not defined for the entire simulation time). If \code{FALSE}, added birth & death rates are extended with zeros.
+}
 \item{start_time}{
 Numeric. Start time of the tree (<=\code{times[1]}). Can also be \code{NULL}, in which case it is set to the first value in \code{times}.
 }
@@ -77,7 +92,7 @@ Numeric. Maximum runtime (in seconds) allowed for the simulation. If this time i
 
 
 \details{
-The simulation is deterministic, meaning that diversification is modeled using ordinary differential equations, not as a stochastic process. The simulation essentially computes the deterministic diversity over time, not an actual tree. For stochastic cladogenic simulations yielding a random tree, see \code{\link{generate_random_tree}} and \code{\link{simulate_musse}}.
+The simulation is deterministic, meaning that diversification is modeled using ordinary differential equations, not as a stochastic process. The simulation essentially computes the deterministic diversity over time, not an actual tree. For stochastic cladogenic simulations yielding a random tree, see \code{\link{generate_random_tree}} and \code{\link{simulate_dsse}}.
 
 In the special case where per-capita birth and death rates are constant (i.e. \eqn{I=0} and \eqn{E=1} for birth and death rates), this function uses an explicit analytical solution to the underlying differential equations, and is thus much faster than in the general case.
 
@@ -115,8 +130,7 @@ Numeric vector of the same size as \code{times}, listing the cumulative number o
 
 \seealso{
 \code{\link{generate_random_tree}},
-%\code{\link{fit_tree_model}}
-\code{\link{count_clades_over_time}}
+\code{\link{count_lineages_through_time}}
 }
 
 \examples{
@@ -136,7 +150,7 @@ final_total_diversity = length(tree$tip.label)+generator$Nrarefied+generator$Nco
 
 # Calculate diversity-vs-time curve for the tree
 times = seq(from=0,to=0.99*max_time,length.out=50)
-tree_diversities = count_clades_over_time(tree, times=times)$diversities
+tree_diversities = count_lineages_through_time(tree, times=times)$lineages
 
 # simulate diversity curve based on deterministic model
 simulation = simulate_diversification_model(times,
@@ -154,3 +168,4 @@ abline(a=0,b=1,col="#A0A0A0") # show diagonal for reference
 % R documentation directory.
 % Only 1 keyword per line
 \keyword{tree model}
+\keyword{simulation}

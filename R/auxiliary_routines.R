@@ -158,8 +158,9 @@ get_subtree_with_clades = function(	tree,
 					root 		= results$new_root+1L,
 					root.edge	= (if(force_keep_root && (!is.null(tree$root.edge))) tree$root.edge else NULL));
 	class(subtree) = "phylo";
+	attr(subtree,"order") = "none";
 	
-	return(list(subtree 		= subtree,
+	return(list(tree 			= subtree,
 				root_shift		= results$root_shift, # distance between old & new root (will always be non-negative)
 				new2old_tip		= new2old_clade[1:Ntips_kept], 
 				new2old_node	= new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips));
@@ -336,5 +337,90 @@ extract_independent_rates_from_vector = function(rates, index_vector){
 
 
 
+# guesstimate an Mk transition matrix Q based on transitions along edges, as inferred via max-parsimony ASR
+# Convention: Q[i,j] will be an estimate for the probability rate of the transition i-->j
+# at least one of tip_states[] or tip_priors[] must be given; tip_states[] is given priority
+guesstimate_Mk_transition_rates_via_max_parsimony_ASR = function(	tree, 
+																	tip_states			= NULL,	# 1D vector of size Ntips, or NULL
+																	tip_priors			= NULL,	# 2D array of size Ntips x Nstates, or NULL 
+																	Nstates			 	= NULL, 
+																	transition_costs 	= "all_equal"){
+	# basic error checking & input formatting
+	if(is.null(tip_states)){
+		if(is.null(tip_priors)) return(list(success=FALSE, error="Missing tip_states or tip_priors"));
+		tip_states  = max.col(tip_priors, ties.method="first")
+		tip_states2 = max.col(tip_priors, ties.method="last")
+		tip_states[tip_states!=tip_states2] = NA # in case of ambiguity, assign NA
+	}
+	if(length(tip_states)!=length(tree$tip.label)) return(list(success=FALSE, error=sprintf("Number of provided tip states (%d) does not match number of tips in the tree (%d)",length(tip_states),length(tree$tip.label))))
+	
+	# only consider subtree with known tip states
+	known_tips = which(!is.na(tip_states));
+	if(length(known_tips)<length(tip_states)){
+		extraction	= get_subtree_with_tips(tree, only_tips=known_tips, omit_tips=FALSE, collapse_monofurcations=TRUE, force_keep_root=TRUE);
+		tree		= extraction$subtree;
+		tip_states	= tip_states[extraction$new2old_tip]
+	}
+	Ntips  = length(tree$tip.label)
+	Nedges = nrow(tree$edge)
+	
+	# perform ASR max-parsimony on known subtree
+	asr = asr_max_parsimony(	tree				= tree, 
+								tip_states			= tip_states, 		
+								Nstates				= Nstates, 
+								transition_costs	= transition_costs);
+	if(!asr$success) return(list(success=FALSE, error="ASR max-parsimony failed"))
+	Nstates = ncol(asr$ancestral_likelihoods);
+								
+	# determine most likely node states
+	node_states 	 	= max.col(asr$ancestral_likelihoods, ties.method="first")
+	clade_states 		= c(tip_states, node_states)
+	state_transitions 	= cbind(clade_states[tree$edge[,1]],clade_states[tree$edge[,2]]) # state_transitions[e,1]-->state_transitions[e,2] is the transition along edge e.
+	
+	# determine entries Q[i,j] based on transitions i-->j among all edges
+	Q 			 = matrix(0,nrow=Nstates,ncol=Nstates)
+	Ntransitions = matrix(0,nrow=Nstates,ncol=Nstates)
+	edge_lengths = (if(is.null(tree$edge.length)) rep(1.0,Nedges) else tree$edge.length)
+	for(i in 1:Nstates){
+		for(j in 1:Nstates){
+			transitions = which((state_transitions[,1]==i) & (state_transitions[,2]==j));
+			Ntransitions[i,j] = length(transitions)
+			if(i!=j){ # keep diagonal zero, for correct normalization afterwards
+				if(length(transitions)>0){
+					mean_transition_time = mean(edge_lengths[transitions])
+					Q[i,j] = 1.0/mean_transition_time
+				}else{
+					Q[i,j] = 0;
+				}
+			}
+		}
+	}
+	
+	# make sure Q has zero sum in each row
+	diag(Q) = -rowSums(Q, na.rm = TRUE);
+	return(list(success=TRUE, Q=Q, Ntransitions=Ntransitions));
+}
 
+
+
+# return the ages of all branching events in an ultrametric timetree, i.e. all nodes accounting for multifurcations
+# if the tree is purely bifurcating, this is the same as getting all node ages
+# However, if the tree includes multifurcations, these are counted multiple times (since they represent multiple nearby bifurcations)
+# Monofurcations are not returned
+# Assumes that the tree is ultrametric
+get_all_branching_ages = function(tree){
+	Ntips  = length(tree$tip.label)
+	Nnodes = tree$Nnode;
+	depths = get_mean_depth_per_node_CPP(	Ntips			= Ntips,
+											Nnodes			= Nnodes,
+											Nedges			= nrow(tree$edge),
+											tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+											edge_length		= (if(is.null(tree$edge.length)) numeric() else tree$edge.length));
+	Nchildren = get_child_count_per_node_CPP(	Ntips			= Ntips,
+												Nnodes			= Nnodes,
+												Nedges			= nrow(tree$edge),
+												tree_edge		= as.vector(t(tree$edge))-1);
+	branch_ages = rep(depths,times=Nchildren-1);
+	return(branch_ages);
+}
 

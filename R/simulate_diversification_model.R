@@ -1,7 +1,11 @@
 # Simulate a deterministic speciation/extinction model
-# The model is parameterized similarly to tree models, but the returned value is a time series of diversity (number of clades) over time
+# The model is parameterized similarly to generate_random_tree(), but the returned value is a time series of diversity (number of clades) over time
 simulate_diversification_model = function(	times,									# times at which to calculate diversities, in ascending order
 											parameters				= list(), 		# named list of model parameters. For entries and default values see the main function body below
+											added_rates_times		= NULL,			# numeric vector of size NAR, or empty or NULL
+											added_birth_rates_pc	= NULL,			# numeric vector of size NAR, or empty or NULL
+											added_death_rates_pc 	= NULL,			# numeric vector of size NAR, or empty or NULL
+											added_periodic			= FALSE,		# (logical) if TRUE, added pc birth & death rates are extended periodically if needed. If FALSE, they are extended with zeros.
 											start_time				= NULL,			# Beginning (earliest) time of the simulation (<=times[1]). If NULL, this is set to times[1]. If reverse==FALSE, the tree is simulated forwards from this time point.
 											final_time				= NULL,			# Final (latest) time of the simulation (>=times[NT]). If NULL, this is set to times[NT]. If reverse==TRUE, the tree is simulated backwards from this time point.
 											start_diversity			= 1,			# diversity of extant clades at start_time. Only relevant if reverse==FALSE.
@@ -33,7 +37,7 @@ simulate_diversification_model = function(	times,									# times at which to ca
 	if(is.null(parameters$resolution)) 				parameters$resolution = 0;
 	if(is.null(parameters$rarefaction)) 			parameters$rarefaction = 1;
 						
-	# run simulation		
+	# run simulation
 	simulation = simulate_deterministic_diversity_growth_CPP(	birth_rate_intercept 		= parameters$birth_rate_intercept,
 																birth_rate_factor 			= parameters$birth_rate_factor,
 																birth_rate_exponent 		= parameters$birth_rate_exponent,
@@ -43,6 +47,10 @@ simulate_diversification_model = function(	times,									# times at which to ca
 																resolution					= parameters$resolution,
 																rarefaction					= parameters$rarefaction,
 																Nsplits 					= 2,
+																additional_rates_times		= (if(is.null(added_rates_times)) numeric() else added_rates_times),
+																additional_birth_rates_pc	= (if(is.null(added_birth_rates_pc)) numeric() else added_birth_rates_pc),
+																additional_death_rates_pc	= (if(is.null(added_death_rates_pc)) numeric() else added_death_rates_pc),
+																additional_periodic			= added_periodic,
 																times 						= times,
 																start_time					= start_time,
 																final_time					= final_time,

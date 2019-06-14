@@ -14,7 +14,6 @@ generate_tree_with_evolving_rates(parameters           = list(),
                                   max_time_eq          = NULL,
                                   coalescent           = TRUE,
                                   as_generations       = FALSE,
-                                  all_Mk_transitions   = TRUE,
                                   Nsplits              = 2, 
                                   tip_basename         = "", 
                                   node_basename        = NULL,
@@ -47,9 +46,6 @@ Logical, specifying whether only the coalescent tree (i.e. the tree spanning the
 }
 \item{as_generations}{
 Logical, specifying whether edge lengths should correspond to generations. If FALSE, then edge lengths correspond to time.
-}
-\item{all_Mk_transitions}{
-Logical, specifying whether to simulate all state transitions along edges. Only relevant if \code{rate_model=='Mk'}. If \code{FALSE}, then state transitions are only simulated (i.e. states are only updated) during speciation events. This should typically be \code{TRUE}, however it may increase computation time if transition rates are comparable to or greater than speciation rates.
 }
 \item{Nsplits}{
 Integer greater than 1. Number of child-tips to generate at each diversification event. If set to 2, the generated tree will be bifurcating. If >2, the tree will be multifurcating.
@@ -102,11 +98,11 @@ If \code{rate_model=='Mk'}, then speciation/extinction rates are determined by a
 \item\code{state_birth_rates}: Numeric vector of size Nstates, listing the per-capita birth rate (speciation rate) at each state. Can also be a single number (all states have the same birth rate).
 \item\code{state_death_rates}: Numeric vector of size Nstates, listing the per-capita death rate (extinction rate) at each state. Can also be a single number (all states have the same death rate).
 \item\code{transition_matrix}: 2D numeric matrix of size Nstates x Nstates. Transition rate matrix for the Markov chain model of birth/death rate evolution.
-\item\code{root_state}:
-Integer within 1,..,\code{Nstates}, specifying the initial state of the root. If left unspecified, this is chosen randomly and uniformly among all possible states.
+\item\code{start_state}:
+Integer within 1,..,\code{Nstates}, specifying the initial state of the first created lineage. If left unspecified, this is chosen randomly and uniformly among all possible states.
 \item\code{rarefaction}: Same as when \code{rate_model=='BM'}.
 }
-Note: The option \code{rate_model=='Mk'} is deprecated and included for backward compatibility purposes only. To generate a tree with Markov transitions between states (known as Multiple State Speciation and Extinction model), use the command \command{simulate_musse} instead.
+Note: The option \code{rate_model=='Mk'} is deprecated and included for backward compatibility purposes only. To generate a tree with Markov transitions between states (known as Multiple State Speciation and Extinction model), use the command \command{simulate_dsse} instead.
 }
 
 
@@ -151,8 +147,8 @@ Numeric vector, listing the per-capita death rate of each tip and node in the tr
 \item{states}{
 Integer vector of size Ntips+Nnodes, listing the discrete state of each tip and node in the tree. Only included if \code{rate_model=="Mk"}.
 }
-\item{root_state}{
-Integer, specifying the initial state of the root (either provided during the function call, or generated randomly). Only included if \code{rate_model=="Mk"}.
+\item{start_state}{
+Integer, specifying the initial state of the first created lineage (either provided during the function call, or generated randomly). Only included if \code{rate_model=="Mk"}.
 }
 \item{root_birth_rate_pc}{
 Numeric, specifying the initial per-capita birth rate of the root (either provided during the function call, or generated randomly). Only included if \code{rate_model=="BM"}.
@@ -171,7 +167,7 @@ W. P. Maddison, P. E. Midford, S. P. Otto (2007). Estimating a binary character'
 }
 
 \seealso{
-\code{\link{simulate_musse}}
+\code{\link{simulate_dsse}}
 }
 
 \examples{
@@ -225,7 +221,7 @@ barplot(table(rates)/length(rates),
 % R documentation directory.
 % Only 1 keyword per line
 \keyword{random}
-\keyword{speciation}
 \keyword{tree model}
+\keyword{simulation}
 \keyword{BM model}
 \keyword{Mk model}

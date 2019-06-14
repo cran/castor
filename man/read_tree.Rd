@@ -9,6 +9,7 @@ Load a phylogenetic tree from a file or a string, in Newick (parenthetic) format
 \usage{
 read_tree(  string  = "", 
             file    = "", 
+            edge_order              = "cladewise",
             include_edge_lengths    = TRUE, 
             include_node_labels     = TRUE, 
             underscores_as_blanks   = FALSE, 
@@ -17,10 +18,13 @@ read_tree(  string  = "",
 
 \arguments{
 \item{string}{
-A string containing a single tree in Newick format. Can be used alternatively to \code{file}.
+A character containing a single tree in Newick format. Can be used alternatively to \code{file}.
 }
 \item{file}{
-A path to an input text file containing a single tree in Newick format. Can be used alternatively to \code{string}.
+Character, a path to an input text file containing a single tree in Newick format. Can be used alternatively to \code{string}.
+}
+\item{edge_order}{
+Character, one of ``cladewise'' or ``pruningwise'', specifying the order in which edges should be listed in the returned tree. This does not influence the topology of the tree or the tip/node labeling, it only affects the way edges are numbered internally.
 }
 \item{include_edge_lengths}{
 Logical, specifying whether edge lengths (if available) should be included in the generated tree.

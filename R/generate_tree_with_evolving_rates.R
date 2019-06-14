@@ -10,7 +10,6 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 											 max_time_eq			= NULL,
 											 coalescent 			= TRUE,
 											 as_generations			= FALSE,	# if FALSE, then edge lengths correspond to time. If TRUE, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
-											 all_Mk_transitions		= TRUE,		# simulate all Mk transition events along edges (not just at branching points). This should typically be TRUE.
 											 Nsplits				= 2,	 	# number of children generated at each diversification event. If set to 2, a bifurcating tree is generated. If >2, the tree will be multifurcating.
 											 tip_basename			= "",		# basename for tips (e.g. "tip."). 
 											 node_basename			= NULL,		# basename for nodes (e.g. "node."). If NULL, then nodes will not have any labels.
@@ -34,7 +33,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		parameters$root_birth_rate_pc = max(parameters$min_birth_rate_pc, min(parameters$max_birth_rate_pc, parameters$root_birth_rate_pc))
 		parameters$root_death_rate_pc = max(parameters$min_death_rate_pc, min(parameters$max_death_rate_pc, parameters$root_death_rate_pc))
 	}else if(rate_model=="Mk"){
-		parameter_names = c("Nstates", "transition_matrix", "state_birth_rates", "state_death_rates", "root_state", "rarefaction")
+		parameter_names = c("Nstates", "transition_matrix", "state_birth_rates", "state_death_rates", "start_state", "rarefaction")
 		if(is.null(parameters$Nstates)) 			parameters$Nstates = 1;
 		if(is.null(parameters$transition_matrix))	parameters$transition_matrix = matrix(0,nrow=parameters$Nstates, ncol=parameters$Nstates);
 		# pc birth rates corresponding to each state
@@ -49,7 +48,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		}else if(length(parameters$state_death_rates)==1){
 			parameters$state_death_rates = rep(parameters$state_death_rates, times=parameters$Nstates);
 		}
-		if(is.null(parameters$root_state)) parameters$root_state = sample.int(n=parameters$Nstates,size=1)
+		if(is.null(parameters$start_state)) parameters$start_state = sample.int(n=parameters$Nstates,size=1)
 	}else{
 		stop(sprintf("ERROR: Invalid rate_model '%s'",rate_model))
 	}
@@ -86,12 +85,12 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													Nstates						= parameters$Nstates,
 													state_birth_rates			= parameters$state_birth_rates, 
 													state_death_rates			= parameters$state_death_rates,
-													root_state					= max(1,min(parameters$Nstates, parameters$root_state)) - 1,
-													transition_matrix 			= as.vector(t(parameters$transition_matrix)), # flatten in row-major format
+													start_state					= max(1,min(parameters$Nstates, parameters$start_state)) - 1,
+													transition_matrix_A			= as.vector(t(parameters$transition_matrix)), # flatten in row-major format
+													transition_matrix_C			= numeric(), # no cladogenic transitions included in this model
 													coalescent					= coalescent,
 													Nsplits						= Nsplits,
 													as_generations				= as_generations,
-													all_transitions				= all_Mk_transitions,
 													no_full_extinction			= TRUE,
 													include_birth_times			= include_birth_times,
 													include_death_times			= include_death_times,
@@ -108,6 +107,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 				edge.length = results$edge_length,
 				root 		= results$root+1L)
 	class(tree) = "phylo";
+	attr(tree,"order") = "none";
 	
 	
 	# rarefy if needed
@@ -140,7 +140,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 				Ndeaths				= sum(results$Ndeaths),
 				Nrarefied			= Nrarefied, # number of tips removed via rarefaction at the end
 				states				= (if(is.null(results$clade_states) || (!discrete_state_model)) NULL else results$clade_states+1L), # only relevant for discrete-state rate models
-				root_state			= (if(discrete_state_model) parameters$root_state else NULL), # only relevant for discrete-state rate models
+				start_state			= (if(discrete_state_model) parameters$start_state else NULL), # only relevant for discrete-state rate models
 				root_birth_rate_pc	= (if(discrete_state_model) NULL else parameters$root_birth_rate_pc),
 				root_death_rate_pc	= (if(discrete_state_model) NULL else parameters$root_death_rate_pc),
 				birth_times			= (if(include_birth_times) results$birth_times else NULL),

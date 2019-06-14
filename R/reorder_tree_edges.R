@@ -1,4 +1,5 @@
 # reorder edges in a tree for postorder (tips-->root) or pre-order (root-->tips) traversal
+# to achieve ape's default "cladewise" order use root_to_tips=TRUE and depth_first_search=TRUE
 reorder_tree_edges = function(tree, root_to_tips=TRUE, depth_first_search=TRUE, index_only=FALSE){ 
 	Ntips 	= length(tree$tip.label);
 	Nnodes	= tree$Nnode;

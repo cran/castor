@@ -30,6 +30,8 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	if(is.null(parameters$rarefaction)) 			parameters$rarefaction = 1;
 
 	if(parameters$rarefaction<=0 || parameters$rarefaction>1) return(list(success=FALSE, error="Rarefaction parameter must be between 0 (non-inclusive) and 1 (inclusive)."));
+	if(length(added_rates_times)!=length(added_birth_rates_pc)) stop(sprintf("Number of added birth_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_birth_rates_pc),length(added_rates_times)));
+	if(length(added_rates_times)!=length(added_death_rates_pc)) stop(sprintf("Number of added death_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_death_rates_pc),length(added_rates_times)));
 	
 	results = generate_random_tree_CPP(	max_tips					= (if(is.null(max_tips)) -1 else max_tips),
 										max_time					= (if(is.null(max_time)) -1 else max_time),
@@ -59,15 +61,16 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 				edge.length = results$edge_length,
 				root 		= results$root+1)
 	class(tree) = "phylo";
-	
+	attr(tree,"order") = "none";
+		
 	# collapse tips if needed
 	Ncollapsed = 0;
 	if(parameters$resolution>0){
 		root_age = results$final_time - results$root_time
 		if(parameters$resolution>=root_age) return(list(success=FALSE, error=sprintf("Collapsing at resolution %g is impossible for the generated tree (root age %g)", parameters$resolution, root_age)))
-		collapsing = collapse_tree_at_resolution(tree,  resolution = parameters$resolution, shorten = FALSE, rename_collapsed_nodes = FALSE, criterion = 'max_tip_depth')
-		tree 	= collapsing$tree
-		Ncollapsed = Ntips - length(tree$tip.label)
+		collapsing 	= collapse_tree_at_resolution(tree,  resolution = parameters$resolution, shorten = FALSE, rename_collapsed_nodes = FALSE, criterion = 'max_tip_depth')
+		tree 		= collapsing$tree
+		Ncollapsed 	= Ntips - length(tree$tip.label)
 		results$root_time = results$root_time + collapsing$root_shift; # update root time, in case root has changed
 		Ntips  	= length(tree$tip.label)
 		Nnodes 	= tree$Nnode
@@ -90,7 +93,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 		# make sure tree is ultrametric, i.e. correct small numerical errors
 		tree = extend_tree_to_height(tree)$tree;	
 	}
-	
+
 	return(list(success				= TRUE,
 				tree				= tree,
 				root_time			= results$root_time,

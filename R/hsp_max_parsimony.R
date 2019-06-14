@@ -61,7 +61,9 @@ hsp_max_parsimony = function(	tree,
 	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
 		
-	return(list(likelihoods=likelihoods, success=TRUE))
+	return(list(success		= TRUE,
+				likelihoods	= likelihoods, 
+				total_cost	= asr_results$total_cost))
 }
 
 

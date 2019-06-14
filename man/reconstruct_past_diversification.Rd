@@ -146,7 +146,7 @@ Numeric vector of the same size as \code{times}, listing the estimated pulled to
 \seealso{
 \code{\link{generate_random_tree}},
 \code{\link{fit_tree_model}}
-\code{\link{count_clades_over_time}}
+\code{\link{count_lineages_through_time}}
 }
 
 \examples{
@@ -167,14 +167,14 @@ time_span = simulation$final_time - simulation$root_time
 cat(sprintf("Generated tree has \%d tips, spans \%g time units\n",length(tree$tip.label),time_span))
 
 # Calculate diversity time series from the tree
-counter = count_clades_over_time(tree, times=seq(0,0.99*time_span,length.out=100))
+counter = count_lineages_through_time(tree, times=seq(0,0.99*time_span,length.out=100))
 
 # print coalescent diversities
-print(counter$diversities)
+print(counter$lineages)
 
 # reconstruct diversification dynamics based on diversity time series
 results = reconstruct_past_diversification( counter$times,
-                                            counter$diversities,
+                                            counter$lineages,
                                             coalescent      = TRUE,
                                             smoothing_span  = 3,
                                             smoothing_order = 1)
@@ -184,7 +184,7 @@ print(results$total_diversities)
                                                   
 # plot coalescent and reconstructed true diversities
 matplot(x     = counter$times, 
-        y     = matrix(c(counter$diversities,results$total_diversities), ncol=2, byrow=FALSE),
+        y     = matrix(c(counter$lineages,results$total_diversities), ncol=2, byrow=FALSE),
         type  = "b", 
         xlab  = "time", 
         ylab  = "# clades",
@@ -212,14 +212,14 @@ time_span = simulation$final_time - simulation$root_time
 cat(sprintf("Generated tree has \%d tips, spans \%g time units\n",length(tree$tip.label),time_span))
 
 # Calculate diversity time series from the tree
-counter = count_clades_over_time(tree, times=seq(0,0.99*time_span,length.out=100))
+counter = count_lineages_through_time(tree, times=seq(0,0.99*time_span,length.out=100))
 
 # print true diversities
-print(counter$diversities)
+print(counter$lineages)
 
 # reconstruct diversification dynamics based on diversity time series
 results = reconstruct_past_diversification( counter$times,
-                                            counter$diversities,
+                                            counter$lineages,
                                             birth_rates_pc  = params$birth_rate_factor,
                                             coalescent      = FALSE,
                                             smoothing_span  = 3,
@@ -230,7 +230,7 @@ print(results$coalescent_diversities)
                                                   
 # plot coalescent and reconstructed true diversities
 matplot(x     = counter$times, 
-        y     = matrix(c(results$coalescent_diversities,counter$diversities), ncol=2, byrow=FALSE),
+        y     = matrix(c(results$coalescent_diversities,counter$lineages), ncol=2, byrow=FALSE),
         type  = "b", 
         xlab  = "time", 
         ylab  = "# clades",

@@ -103,3 +103,4 @@ plot(tip_states[,1],tip_states[,2],xlab="trait 1",ylab="trait 2",cex=0.5)
 % R documentation directory.
 \keyword{BM model}
 \keyword{random}
+\keyword{simulation}

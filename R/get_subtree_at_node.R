@@ -36,6 +36,8 @@ get_subtree_at_node = function(tree, node){
 					edge.length = (if(is.null(tree$edge.length)) NULL else tree$edge.length[new2old_edge]),
 					root 		= results$new_root+1)
 	class(subtree) = "phylo";
+	attr(subtree,"order") = "none";
+
 	return(list(subtree			= subtree, 
 				new2old_tip		= new2old_clade[1:Ntips_kept], 
 				new2old_node	= new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips,

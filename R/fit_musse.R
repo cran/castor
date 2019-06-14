@@ -26,7 +26,8 @@ fit_musse = function(	tree,
 						Nstates,								# number of discrete states, influencing birth and death rates.
 						NPstates				= NULL,			# optional number of discrete "proxy" states. Each proxy-state may correspond to one or more distinct states. Proxy-states do not directly influence birth/death rates, but each proxy-state represents a set of states. Proxy-states are only needed when defining a "hidden state speciation and extinction" (HiSSE) model [Beaulieu and Meara, 2016]. If this is NULL or 0, then proxy-states are equal to states, and NPstates=Nstates; this is the original MuSSE model (i.e. no latent states).
 						proxy_map				= NULL,			# optional 1D integer vector of size Nstates, mapping states to proxy-states. Hence, proxy_map[s] is an integer in 1:NPstates, specifying which proxy-state the state s belongs to. Only relevant if NPstates!=NULL and NPstates!=Nstates.
-						tip_pstates				= NULL,			# 1D numerical/character/factor array of size Ntips, listing integers in 1:NPstates, specifying the proxy state at each tip. Can also be NULL. May include NA (unknown tip states).
+						state_names				= NULL,			# optional 1D character vector of size Nstates, specifying a name/description for each state. This does not influence any of the calculations, and is merely used to add human-readable names (rather than integers) to the returned vectors/matrices.
+						tip_pstates				= NULL,			# 1D integer array of size Ntips, listing integers in 1:NPstates, specifying the proxy state at each tip. Can also be NULL. May include NA (unknown tip states).
 						tip_priors 				= NULL, 		# 2D numerical array of either size Ntips x Nstates or size Ntips x NPstates, listing the prior likelihood of each state (or proxy-state) at each tip. Specifically, tip_priors[i,s] is the likelihood of observing the data, if tip i had state (or proxy-state) s. Can be provided alternatively to tip_pstates.
 						sampling_fractions		= 1,			# optional numerical vector of size NPstates, indicating the sampling fractions (fraction of species included as tips in the tree) conditional upon each species' proxy state. This can be used to incorporate detection biases for species, depending on their proxy state. Can also be NULL or a single number (in which case sampling fractions are assumed to be independent of proxy state).
 						reveal_fractions		= 1,			# optional numerical vector of size NPstates, indicating the resolved fractions (fraction of tree-tips with revealed, i.e. non hidden, state) conditional upon each tip's proxy state. Hence, reveal_fractions[s] is the probability that a species with proxy state s will have revealed state, conditional upon being included in the tree. This can be used to incorporate reveal biases for tips, depending on their proxy state. Can also be NULL or a single number (in which case reveal fractions are assumed to be independent of proxy state).
@@ -78,6 +79,7 @@ fit_musse = function(	tree,
 	else if(is.null(tip_pstates) && is.null(tip_priors))  stop("ERROR: tip_pstates and tip_priors are both NULL, but exactly one of them should be non-NULL")
 	if(! (root_conditioning %in% c("none","madfitz","herr_als"))) stop("ERROR: root_conditioning must be one of 'none', 'madfitz' or 'herr_als'")
 	if(is.null(Nstates) || is.na(Nstates) || (Nstates==0)) stop("ERROR: Nstates must be a strictly positive integer")
+	if((!is.null(state_names)) && (length(state_names)!=Nstates)) stop(sprintf("ERROR: Number of provided state_names (%d) differs from Nstates (%d)",length(state_names),Nstates))
 	if(is_hisse_model && is.null(proxy_map)) stop("ERROR: Missing proxy_map, needed for HiSSE model")
 	if(is_hisse_model && (length(proxy_map)!=Nstates)) stop("ERROR: proxy_map has length %d, but should have length %d (Nstates)",length(proxy_map),Nstates)
 	if(is_hisse_model && (length(unique(proxy_map))!=NPstates)) stop("ERROR: Not all %d proxy states are represented in proxy_map",NPstates)
@@ -165,7 +167,7 @@ fit_musse = function(	tree,
 		# incorporate reveal fractions into initial conditions
 		if(length(reveal_fractions)!=NPstates) stop(sprintf("ERROR: Expected %d reveal fractions, but got %d",NPstates,length(reveal_fractions)))
 		if(any((Nknown_tips_per_pstate>0) & (reveal_fractions==0))) stop("ERROR: Reveal fractions for some states are zero, despite the presence of tips with that known state")
-		reveal_fractions = reveal_fractions*Ntips/sum(Nknown_tips_per_pstate[Nknown_tips_per_pstate>0]/reveal_fractions[Nknown_tips_per_pstate>0]) # rescale reveal fractions to be consistent with the number of known tips in each state within the considered tree
+		reveal_fractions = reveal_fractions*sum(Nknown_tips_per_pstate[Nknown_tips_per_pstate>0]/reveal_fractions[Nknown_tips_per_pstate>0])/Ntips # rescale reveal fractions to be consistent with the number of known tips in each state within the considered tree
 	}else{
 		# reveal fractions missing, so assume tips are revealed at the same probabilities (i.e. regardless of state)
 		if(!is.null(tip_pstates)){
@@ -263,16 +265,16 @@ fit_musse = function(	tree,
 	param_maxs[is.na(param_maxs) | is.nan(param_maxs)] = Inf;
 
 	# determine start parameters
-	if(verbose) cat(sprintf("%sFiguring out reasonable start parameters..\n",verbose_prefix))
 	if(is.null(first_guess)) first_guess = list();
 	if((!is.null(first_guess$birth_rates)) && (length(first_guess$birth_rates)==1)) first_guess$birth_rates = rep(first_guess$birth_rates,Nstates)
 	if((!is.null(first_guess$death_rates)) && (length(first_guess$death_rates)==1)) first_guess$death_rates = rep(first_guess$death_rates,Nstates)
 	first_guess_compr = compress_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
 	first_guess_compr[!is.na(provided_param_values)] = provided_param_values[!is.na(provided_param_values)] # incorporate fixed values into start values
 	first_guess_compr = pmin(pmax(first_guess_compr, param_mins), param_maxs) # make sure provisionary start params are within bounds
-	first_guess = uncompress_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+	first_guess = uncompress_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
 	if(any(is.na(first_guess$birth_rates)) || any(is.na(first_guess$death_rates))){
 		# some birth_rates and/or some death_rates are non-fixed and have unknown start values, so guesstimate by fitting a birth-death model
+		if(verbose) cat(sprintf("%sGuesstimating start speciation/extinction rates..\n",verbose_prefix))
 		if(!all(is.na(first_guess$birth_rates))) start_birth_rate_factor = mean(first_guess$birth_rates, na.rm=TRUE)
 		else start_birth_rate_factor = NULL
 		if(!all(is.na(first_guess$death_rates))) start_death_rate_factor = mean(first_guess$death_rates, na.rm=TRUE)
@@ -281,7 +283,7 @@ fit_musse = function(	tree,
 		else birth_rate_factor = NULL
 		if(!all(is.na(death_rates))) death_rate_factor = mean(death_rates, na.rm=TRUE)
 		else death_rate_factor = NULL
-
+		
 		fit = fit_tree_model(	tree, 
 								parameters			= list(birth_rate_intercept=0, birth_rate_factor=birth_rate_factor, birth_rate_exponent=1, death_rate_intercept=0, death_rate_factor=death_rate_factor, death_rate_exponent=1, rarefaction=overall_rarefaction, resolution=0),	# UNFINISHED. IF SOME RATES ARE AVAILABLE, PROVIDE THEM
 								first_guess 		= list(birth_rate_factor=start_birth_rate_factor, death_rate_factor=start_death_rate_factor),
@@ -310,50 +312,41 @@ fit_musse = function(	tree,
 	}
 	if(any(is.na(first_guess$transition_matrix))){
 		# some transition rates are non-fixed and have unknown start values, so guesstimate by fitting an Mk model
-		fit = hsp_mk_model(	tree, 
-							tip_states				= NULL,
-							Nstates 				= Nstates,
-							tip_priors 				= tip_priors,
-							rate_model 				= transition_rate_model,
-							transition_matrix		= NULL,
-							include_likelihoods 	= FALSE,
-							root_prior 				= (if((root_prior=="flat") || (root_prior=="empirical")) root_prior else "flat"),
-							Ntrials 				= max(1,Ntrials/5),
-							optim_max_iterations	= optim_max_iterations,
-							optim_rel_tol			= optim_rel_tol,
-							store_exponentials 		= FALSE,
-							check_input 			= TRUE,
-							Nthreads 				= Nthreads)
-		# OLD CODE. TO BE DELETED
-		#extraction = get_subtree_with_tips(tree, only_tips=known_tips, omit_tips=NULL, collapse_monofurcations=TRUE, force_keep_root=TRUE);
-		#subtree = extraction$subtree
-		#fit = asr_mk_model(	subtree, 
-		#					tip_states 				= NULL,
-		#					Nstates 				= Nstates,
-		#					tip_priors				= tip_priors[extraction$new2old_tip,],
-		#					rate_model 				= transition_rate_model,
-		#					transition_matrix 		= NULL,
-		#					include_ancestral_likelihoods = FALSE,
-		#					root_prior 				= (if((root_prior=="flat") || (root_prior=="empirical")) root_prior else "flat"),
-		#					Ntrials 				= max(1,Ntrials/5),
-		#					optim_max_iterations	= optim_max_iterations,
-		#					optim_rel_tol			= optim_rel_tol,
-		#					store_exponentials 		= FALSE,
-		#					check_input 			= TRUE,
-		#					Nthreads 				= Nthreads)
-		if(fit$success){
-			# fitting succeeded, so use fitted transition rates
-			first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = fit$transition_matrix[is.na(first_guess$transition_matrix)]
+		if(verbose) cat(sprintf("%sGuesstimating start trait transition rates (Q)..\n",verbose_prefix))
+		guessQ = guesstimate_Mk_transition_rates_via_max_parsimony_ASR(tree,tip_states=NULL,tip_priors=tip_priors,Nstates=Nstates)
+		if(guessQ$success){
+			# max-parsimony guesstimate succeeded
+			first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = guessQ$Q[is.na(first_guess$transition_matrix)]
 		}else{
-			# fitting failed, so use a rough guesstimate based on the number of tips
-			first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = Nstates/((if(is.null(tree$edge.length)) 1 else mean(tree$edge.length))*log(Nknown_tips)/log(2.0))
+			# max-parsimony guesstimate failed, so resort to fitting an Mk model
+			fit = hsp_mk_model(	tree, 
+								tip_states				= NULL,
+								Nstates 				= Nstates,
+								tip_priors 				= tip_priors,
+								rate_model 				= transition_rate_model,
+								transition_matrix		= NULL,
+								include_likelihoods 	= FALSE,
+								root_prior 				= (if((root_prior=="flat") || (root_prior=="empirical")) root_prior else "flat"),
+								Ntrials 				= max(1,Ntrials/5),
+								optim_max_iterations	= optim_max_iterations,
+								optim_rel_tol			= optim_rel_tol,
+								store_exponentials 		= FALSE,
+								check_input 			= TRUE,
+								Nthreads 				= Nthreads)
+			if(fit$success){
+				# fitting succeeded, so use fitted transition rates
+				first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = fit$transition_matrix[is.na(first_guess$transition_matrix)]
+			}else{
+				# fitting failed, so use a rough guesstimate based on the number of tips
+				first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = Nstates/((if(is.null(tree$edge.length)) 1 else mean(tree$edge.length))*log(Nknown_tips)/log(2.0))
+			}
 		}
 		# make sure first-guess transition matrix is a valid transition matrix
 		diag(first_guess$transition_matrix) = -rowSums(first_guess$transition_matrix);
 	}
 	first_guess_compr = compress_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
 	first_guess_compr = pmin(pmax(first_guess_compr, param_mins), param_maxs) # make sure finalized start params are within bounds
-	first_guess 	 = uncompress_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+	first_guess 	  = uncompress_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 	return_value_on_failure$start_parameters = first_guess
 	
 	# at this point, all start parameters (first_guess/first_guess_compr) are assumed to be well defined (non-NA), either based on provided/fixed start values and/or based on some guesstimates
@@ -395,7 +388,7 @@ fit_musse = function(	tree,
 		fparam_values 	= unscale_params(fparam_values, param_scales[fitted_params], param_mins[fitted_params])
 		if(any(fparam_values<param_mins[fitted_params]) || any(fparam_values>param_maxs[fitted_params])) return(Inf)
 		param_values 	= provided_param_values; param_values[fitted_params] = fparam_values; # merge fixed & fitted parameter values
-		param_values 	= uncompress_params(param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+		param_values 	= uncompress_params(param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
 		results = get_MuSSE_loglikelihood_CPP(	Ntips 							= Ntips,
 												Nnodes							= Nnodes,
 												Nedges							= Nedges,
@@ -476,7 +469,7 @@ fit_musse = function(	tree,
 	if(NFP==0){
 		# all parameters are fixed, so no fitting needed
 		if(verbose) cat(sprintf("%sAll parameters are fixed; simply calculating loglikelihood of model..\n",verbose_prefix))
-		best_param_values 	= uncompress_params(provided_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+		best_param_values 	= uncompress_params(provided_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 		Nevaluations 		= NA
 		Niterations			= NA
 		converged 			= TRUE
@@ -503,7 +496,7 @@ fit_musse = function(	tree,
 										mc.cleanup = TRUE);
 		}else{
 			# run in serial mode
-			if(verbose && (Ntrials==1)) cat(sprintf("%sFitting %d model parameters (%s)..\n",verbose_prefix,NFP,(if(Ntrials==1) "1 trial" else sprintf("%d trials",Ntrials))))
+			if(verbose) cat(sprintf("%sFitting %d model parameters (%s)..\n",verbose_prefix,NFP,(if(Ntrials==1) "1 trial" else sprintf("%d trials",Ntrials))))
 			fits = vector("list", Ntrials)
 			for(trial in 1:Ntrials){
 				fits[[trial]] = fit_single_trial(trial)
@@ -526,7 +519,7 @@ fit_musse = function(	tree,
 			return_value_on_failure$error = "Fitting yielded NaN loglikelihood and/or rates"
 			return(return_value_on_failure);
 		}
-		best_param_values 	= uncompress_params(best_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+		best_param_values 	= uncompress_params(best_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 		Nevaluations 		= fits[[best]]$Nevaluations
 		Niterations 		= fits[[best]]$Niterations
 		converged	 		= fits[[best]]$converged
@@ -582,12 +575,11 @@ fit_musse = function(	tree,
 										NPstates 				= NPstates,
 										proxy_map 				= proxy_map,
 										parameters 				= best_param_values,
-										root_state 				= final$ML_root_state,
+										start_state 			= final$ML_root_state,
 										max_tips 				= Ntips/overall_rarefaction,
 										sampling_fractions		= sampling_fractions,
 										reveal_fractions		= reveal_fractions,
 										coalescent 				= TRUE,
-										all_Mk_transitions		= TRUE,	
 										no_full_extinction		= TRUE,	
 										include_labels			= FALSE);
 			# fit MuSSE model to simulated tree
@@ -637,12 +629,12 @@ fit_musse = function(	tree,
 		}
 		# calculate standard errors and confidence intervals from distribution of bootstrapped parameters
 		standard_errors_flat = sqrt(pmax(0, colMeans(bootstrap_param_values^2, na.rm=TRUE) - colMeans(bootstrap_param_values, na.rm=TRUE)^2))
-		standard_errors = unflatten_params(standard_errors_flat, Nstates)
+		standard_errors = unflatten_params(standard_errors_flat, Nstates, state_names)
 		quantiles = sapply(1:NP, FUN=function(p) quantile(bootstrap_param_values[,p], probs=c(0.25, 0.75, 0.025, 0.975), na.rm=TRUE, type=8))
-		CI50lower = unflatten_params(quantiles[1,], Nstates)
-		CI50upper = unflatten_params(quantiles[2,], Nstates)
-		CI95lower = unflatten_params(quantiles[3,], Nstates)
-		CI95upper = unflatten_params(quantiles[4,], Nstates)
+		CI50lower = unflatten_params(quantiles[1,], Nstates, state_names)
+		CI50upper = unflatten_params(quantiles[2,], Nstates, state_names)
+		CI95lower = unflatten_params(quantiles[3,], Nstates, state_names)
+		CI95upper = unflatten_params(quantiles[4,], Nstates, state_names)
 		CI = cbind(best_param_values_flat,standard_errors_flat,t(as.matrix(quantiles)))
 		rownames(CI) = get_flat_param_names(Nstates)
 		colnames(CI) = c("ML_estimate", "standard_error", "CI50lower", "CI50upper", "CI95lower", "CI95upper")
@@ -710,18 +702,20 @@ compress_params = function(transition_matrix, birth_rates, death_rates, Nstates,
 # given a compressed vector of independent model parameters (e.g. generated by compress_params()), return an unflattened named list of model parameters
 # the returned list will have entries such as transition_matrix[], birth_rates[] and death_rates[], with the proper dimensionalities and potentially redundant values
 # For example, if the birth_rate_model is "ER" (as encoded by birth_rate_indices), then the returned birth_rates will be a vector with Nstates identical entries
-uncompress_params = function(params, Nstates, transition_indices, birth_rate_indices, death_rate_indices){
+uncompress_params = function(params, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names){
 	NFT = max(as.vector(transition_indices)) # number of free (fitted) transition rates
 	NFB = max(birth_rate_indices) # number of free (fitted) birth rates
 	NFD = max(death_rate_indices) # number of free (fitted) death rates
 	
 	transition_matrix = get_transition_matrix_from_rate_vector(params[1:NFT], transition_indices, Nstates)
+	rownames(transition_matrix) = state_names
+	colnames(transition_matrix) = state_names
 	
 	free_birth_rates = params[(NFT+1):(NFT+NFB)]
-	birth_rates = free_birth_rates[birth_rate_indices]
+	birth_rates = setNames(free_birth_rates[birth_rate_indices],state_names)
 	
 	free_death_rates = params[(NFT+NFB+1):(NFT+NFB+NFD)]
-	death_rates = free_death_rates[death_rate_indices]
+	death_rates = setNames(free_death_rates[death_rate_indices],state_names)
 	
 	return(list(transition_matrix=transition_matrix, birth_rates=birth_rates, death_rates=death_rates))
 }
@@ -736,10 +730,10 @@ flatten_params = function(params, Nstates){
 
 # return unflattened list of model parameters (transition matrix, birth rates, death rates)
 # this is the reverse of flatten_params(..)
-unflatten_params = function(params_flat, Nstates){
-	unflattened = list(	transition_matrix 	= matrix(params_flat[1:(Nstates*Nstates)], ncol=Nstates, nrow=Nstates, byrow=TRUE),
-						birth_rates			= params_flat[((Nstates*Nstates)+1):((Nstates*Nstates)+Nstates)],
-						death_rates			= params_flat[((Nstates*Nstates)+Nstates+1):((Nstates*Nstates)+(2*Nstates))])
+unflatten_params = function(params_flat, Nstates, state_names){
+	unflattened = list(	transition_matrix 	= matrix(params_flat[1:(Nstates*Nstates)], ncol=Nstates, nrow=Nstates, byrow=TRUE, dimnames=list(state_names,state_names)),
+						birth_rates			= setNames(params_flat[((Nstates*Nstates)+1):((Nstates*Nstates)+Nstates)], state_names),
+						death_rates			= setNames(params_flat[((Nstates*Nstates)+Nstates+1):((Nstates*Nstates)+(2*Nstates))], state_names))
 	return(unflattened)
 }
 

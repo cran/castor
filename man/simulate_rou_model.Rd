@@ -80,3 +80,4 @@ hist(tip_states, breaks=20, xlab="state", main="Trait probability distribution",
 % R documentation directory.
 \keyword{OU model}
 \keyword{random}
+\keyword{simulation}
