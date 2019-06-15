@@ -1,22 +1,23 @@
-\name{fit_hbd_model_parametric}
-\alias{fit_hbd_model_parametric}
+\name{fit_hbd_class_parametric}
+\alias{fit_hbd_class_parametric}
 \title{
-Fit a parametric homogenous birth-death model to a timetree.
+Fit a parametric homogenous birth-death model congruence class to a timetree.
 }
 \description{
-Given an ultrametric timetree, fit a homogenous birth-death (HBD) model in which speciation and extinction rates (\eqn{\lambda} and \eqn{mu}) are given as parameterized functions of time before present.  ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Every HBD model is defined based on the values that \eqn{\lambda} and \eqn{\mu} take over time as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled); in turn, \eqn{\lambda}, \eqn{\mu} and \eqn{\rho} can be parameterized by a finite set of parameters. This function estimates these parameters by maximizing the likelihood (Morlon et al. 2011) of the timetree under the resulting HBD model.
+Given an ultrametric timetree, estimate the congruence class of homogenous birth-death (HBD) models that best explains the tree via maximum likelihood, assuming that the pulled diversification rate (PDR) is given as a parameterized function of time before present. Every HBD model is defined by some speciation and extinction rates (\eqn{\lambda} and \eqn{\mu}) over time, as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled). ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates. For any given HBD model there exists an infinite number of alternative HBD models that predict the same deterministic lineages-through-time curve and yield the same likelihood for any given reconstructed timetree; these ``congruent'' models cannot be distinguished from one another solely based on the tree. 
+
+Each congruence class is uniquely described by its PDR, defined as \eqn{PDR=\lambda-\mu+\lambda^{-1}d\lambda/d\tau} (where \eqn{\tau} is time before present) as well as the product \eqn{\rho\lambda_o} (where \eqn{\lambda_o} is the present-day speciation rate). That is, two HBD models are congruent if and only if they have the same PDR and the same product \eqn{\rho\lambda_o}. This function is designed to estimate the generating congruence class for the tree, by fitting a finite number of parameters defining the PDR and \eqn{\rho\lambda_o}.
 }
 \usage{
-fit_hbd_model_parametric( tree, 
+fit_hbd_class_parametric( tree, 
                           param_values,
                           param_guess       = NULL,
                           param_min         = -Inf,
                           param_max         = +Inf,
                           param_scale       = NULL,
                           oldest_age        = NULL,
-                          lambda,
-                          mu,
-                          rho,
+                          PDR,
+                          rholambda0,
                           age_grid          = NULL,
                           condition         = "stem",
                           relative_dt       = 1e-3,
@@ -30,7 +31,7 @@ fit_hbd_model_parametric( tree,
 An ultrametric timetree of class "phylo", representing the time-calibrated reconstructed phylogeny of a set of extant species.
 }
 \item{param_values}{
-Numeric vector, specifying fixed values for a some or all model parameters. For fitted (i.e., non-fixed) parameters, use \code{NaN} or \code{NA}. For example, the vector \code{c(1.5,NA,40)} specifies that the 1st and 3rd model parameters are fixed at the values 1.5 and 40, respectively, while the 2nd parameter is to be fitted. The length of this vector defines the total number of model parameters. If entries in this vector are named, the names are taken as parameter names. Names should be included if you'd like returned parameter vectors to have named entries, or if the functions \code{lambda}, \code{mu} or \code{rho} query parameter values by name (as opposed to numeric index).
+Numeric vector, specifying fixed values for a some or all model parameters. For fitted (i.e., non-fixed) parameters, use \code{NaN} or \code{NA}. For example, the vector \code{c(1.5,NA,40)} specifies that the 1st and 3rd model parameters are fixed at the values 1.5 and 40, respectively, while the 2nd parameter is to be fitted. The length of this vector defines the total number of model parameters. If entries in this vector are named, the names are taken as parameter names. Names should be included if you'd like returned parameter vectors to have named entries, or if the functions \code{PDR} or \code{rho} query parameter values by name (as opposed to numeric index).
 }
 \item{param_guess}{
 Numeric vector of size NP, specifying a first guess for the value of each model parameter. For fixed parameters, guess values are ignored. Can be \code{NULL} only if all model parameters are fixed.
@@ -47,21 +48,18 @@ Optional numeric vector of size NP, specifying typical scales for model paramete
 \item{oldest_age}{
 Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age, and the classical formula by Morlon et al. (2011) is used.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBD model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
 }
-\item{lambda}{
-Function specifying the speciation rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with strictly positive entries.
+\item{PDR}{
+Function specifying the pulled diversification rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument.
 }
-\item{mu}{
-Function specifying the extinction rate at any given age and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with non-negative entries.
-}
-\item{rho}{
-Function specifying the sampling fraction (fraction of extant species sampled) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a numeric between 0 (exclusive) and 1 (inclusive).
+\item{rholambda0}{
+Function specifying the product \eqn{\rho\lambda_o} (sampling fraction times present-day speciation rate) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a strictly positive numeric.
 }
 \item{age_grid}{
-Numeric vector, specifying ages at which the \code{lambda} and \code{mu} functionals should be evaluated. This age grid must be fine enough to capture the possible variation in \eqn{\lambda} and \eqn{\mu} over time, within the permissible parameter range. If of size 1, then lambda & mu are assumed to be time-independent.
-Listed ages must be strictly increasing, and must cover at least the full considered age interval (from 0 to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the speciation rate and extinction rate is assumed to be time-independent.
+Numeric vector, specifying ages at which the \code{PDR} function should be evaluated. This age grid must be fine enough to capture the possible variation in the PDR over time, within the permissible parameter range. If of size 1, then the PDR is assumed to be time-independent.
+Listed ages must be strictly increasing, and must cover at least the full considered age interval (from 0 to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the PDR is assumed to be time-independent.
 }
 \item{condition}{
-Character, either "crown", "stem" or "none", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended.
+Character, either "crown" or "stem", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time, when calculating the likelihood. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -82,9 +80,9 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 
 
 \details{
-This function is designed to estimate a finite set of scalar parameters (\eqn{p_1,..,p_n\in\R}) that determine the speciation rate \eqn{\lambda}, the extinction rate \eqn{\mu} and the sampling fraction \eqn{\rho}, by maximizing the likelihood of observing a given timetree under the HBD model. For example, the investigator may assume that both \eqn{\lambda} and \eqn{\mu} vary exponentially over time, i.e. they can be described by \eqn{\lambda(t)=\lambda_o\cdot e^{-\alpha t}} and \eqn{\mu(t)=\mu_o\cdot e^{-\beta t}} (where \eqn{\lambda_o}, \eqn{\mu_o} are unknown present-day rates and \eqn{\alpha}, \eqn{\beta} are unknown factors, and \eqn{t} is time before present), and that the sampling fraction \eqn{\rho} is known. In this case the model has 4 free parameters, \eqn{p_1=\lambda_o}, \eqn{p_2=\mu_o}, \eqn{p_3=\alpha} and \eqn{p_4=\beta}, each of which may be fitted to the tree.
+This function is designed to estimate a finite set of scalar parameters (\eqn{p_1,..,p_n\in\R}) that determine the PDR and the product \eqn{\rho\lambda_o} (sampling fraction times present-dat extinction rate), by maximizing the likelihood of observing a given timetree under the HBD model. For example, the investigator may assume that the PDR varies exponentially over time, i.e. can be described by \eqn{PDR(t)=A\cdot e^{-B t}} (where \eqn{A} and \eqn{B} are unknown coefficients and \eqn{t} is time before present), and that the product \eqn{\rho\lambda_o} is unknown. In this case the model has 3 free parameters, \eqn{p_1=A}, \eqn{p_2=B} and \eqn{p_3=\rho\lambda_o}, each of which may be fitted to the tree.
 
-It is generally advised to provide as much information to the function \code{fit_hbd_model_parametric} as possible, including reasonable lower and upper bounds (\code{param_min} and \code{param_max}), a reasonable parameter guess (\code{param_guess}) and reasonable parameter scales \code{param_scale}. If some model parameters can vary over multiple orders of magnitude, it is advised to transform them so that they vary across fewer orders of magnitude (e.g., via log-transformation). It is also important that the \code{age_grid} is sufficiently fine to capture the variation of \code{lambda} and \code{mu} over time, since the likelihood is calculated under the assumption that both vary linearly between grid points.
+It is generally advised to provide as much information to the function \code{fit_hbd_class_parametric} as possible, including reasonable lower and upper bounds (\code{param_min} and \code{param_max}), a reasonable parameter guess (\code{param_guess}) and reasonable parameter scales \code{param_scale}. If some model parameters can vary over multiple orders of magnitude, it is advised to transform them so that they vary across fewer orders of magnitude (e.g., via log-transformation). It is also important that the \code{age_grid} is sufficiently fine to capture the variation of the PDR over time, since the likelihood is calculated under the assumption that both vary linearly between grid points.
 }
 
 
@@ -141,9 +139,9 @@ S. Louca et al. (2018). Bacterial diversification through geological time. Natur
 
 \code{\link{fit_hbd_model_on_grid}}
 
-\code{\link{fit_hbd_class_on_grid}}
+\code{\link{fit_hbd_model_parametric}}
 
-\code{\link{fit_hbd_class_parametric}}
+\code{\link{fit_hbd_class_on_grid}}
 }
 
 \examples{
@@ -163,35 +161,30 @@ tree      = generate_random_tree( parameters  = list(rarefaction=rho),
 root_age = castor::get_tree_span(tree)$max_distance
 cat(sprintf("Tree has \%d tips, spans \%g Myr\n",length(tree$tip.label),root_age))
 
-# Define a parametric HBD model, with exponentially varying lambda & mu
-# Assume that the sampling fraction is known
-# The model thus has 4 parameters: lambda0, mu0, alpha, beta
-lambda_function = function(ages,params){
-	return(params['lambda0']*exp(-params['alpha']*ages));
+# Define a parametric HBD congruence class, with exponentially varying PDR
+# The model thus has 3 parameters
+PDR_function = function(ages,params){
+	return(params['A']*exp(-params['B']*ages));
 }
-mu_function = function(ages,params){
-	return(params['mu0']*exp(-params['beta']*ages));
-}
-rho_function = function(params){
-	return(rho) # rho does not depend on any of the parameters
+rholambda0_function = function(params){
+	return(params['rholambda0'])
 }
 
 # Define an age grid on which lambda_function & mu_function shall be evaluated
-# Should be sufficiently fine to capture the variation in lambda & mu
+# Should be sufficiently fine to capture the variation in the PDR
 age_grid = seq(from=0,to=100,by=0.01)
 
 # Perform fitting
 # Lets suppose extinction rates are already known
-cat(sprintf("Fitting model to tree..\n"))
-fit = fit_hbd_model_parametric(	tree, 
-                      param_values  = c(lambda0=NA, mu0=3, alpha=NA, beta=-0.09),
-                      param_guess   = c(1,1,0,0),
-                      param_min     = c(0,0,-1,-1),
-                      param_max     = c(10,10,1,1),
+cat(sprintf("Fitting class to tree..\n"))
+fit = fit_hbd_class_parametric(	tree, 
+                      param_values  = c(A=NA, B=NA, rholambda0=NA),
+                      param_guess   = c(1,0,1),
+                      param_min     = c(-10,-10,0),
+                      param_max     = c(10,10,10),
                       param_scale   = 1, # all params are in the order of 1
-                      lambda        = lambda_function,
-                      mu            = mu_function,
-                      rho           = rho_function,
+                      PDR           = PDR_function,
+                      rholambda0    = rholambda0_function,
                       age_grid      = age_grid,
                       Ntrials       = 10,    # perform 10 fitting trials
                       Nthreads      = 2,     # use 2 CPUs

@@ -35,7 +35,7 @@ The matrix \eqn{D} is referred to as the diffusivity matrix (or diffusion tensor
 
 The function uses phylogenetic independent contrasts (Felsenstein, 1985) to retrieve independent increments of the multivariate random walk. The diffusivity matrix \eqn{D} is then fitted using maximum-likelihood on the intrinsic geometry of positive-definite matrices.
 
-If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multifurcations (i.e. nodes with more than 2 children) as well as monofurcations (i.e. nodes with only one child). Note that multifurcations are internally expanded to bifurcations, prior to model fitting. The asymptotic time complexity of this function is O(Nedges*Nsimulations*Ntraits).
+If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multifurcations (i.e. nodes with more than 2 children) as well as monofurcations (i.e. nodes with only one child). Note that multifurcations are internally expanded to bifurcations, prior to model fitting.
 }
 
 

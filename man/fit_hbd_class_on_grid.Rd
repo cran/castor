@@ -152,6 +152,8 @@ S. Louca et al. (2018). Bacterial diversification through geological time. Natur
 \code{\link{fit_hbd_model_parametric}}
 
 \code{\link{fit_hbd_model_on_grid}}
+
+\code{\link{fit_hbd_class_parametric}}
 }
 
 \examples{

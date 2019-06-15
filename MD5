@@ -1,6 +1,6 @@
-a9c5591dc2af2908e78c95edd1e132fd *DESCRIPTION
+914fb6f2cf04a2c25bd3adf865f02fdf *DESCRIPTION
 ee9d883db11079147404261b7b27acb7 *NAMESPACE
-45047b40921fcc9655e77ebe2437cd07 *R/RcppExports.R
+845166876f578e61a7802878b6a46cc3 *R/RcppExports.R
 9a05b6f5fca5551459d999dc373bcacd *R/asr_empirical_probabilities.R
 989b7786c5d618f4b4a278f60d277a71 *R/asr_independent_contrasts.R
 5766739cbd484fff29a9e045252df4d8 *R/asr_max_parsimony.R
@@ -23,8 +23,9 @@ f2609325246e3e12067277b78c354d91 *R/find_farthest_tips.R
 1ea97c12588e374ad6949df8e6c799d7 *R/find_root_of_monophyletic_tips.R
 b665f4d0c723ab385c9bdd7ec8a0910e *R/fit_bm_model.R
 9d6a08b1b024521394f63f028f46219c *R/fit_hbd_class_on_grid.R
+3e3e5489b9da530817aa9c91778d0724 *R/fit_hbd_class_parametric.R
 fb021ec74e81017dbd87c4c481eddbda *R/fit_hbd_model_on_grid.R
-c99c7a254e1777df9f17c699859aed1c *R/fit_hbd_model_parametric.R
+11817d5fe4542f2344b9e1caa68bc041 *R/fit_hbd_model_parametric.R
 ac2da9961573faf08f88902482fa6974 *R/fit_musse.R
 c4b35ed85c39cf96a49f212cf363b7ef *R/fit_tree_model.R
 3d4cef6cf62236cb2ccb1309434d3d98 *R/generate_random_tree.R
@@ -70,7 +71,7 @@ c826f8633301bd734ab8b4a9c836cef3 *R/root_at_node.R
 460faaea40c0102f0dba39c677ee8734 *R/root_in_edge.R
 a11ac7f05813f609e3d44deabc943baf *R/root_via_outgroup.R
 0e1651281fc770cadfac3cfd557ef3cd *R/simulate_bm_model.R
-2bc6689e1e908c32848d5aed4fd90096 *R/simulate_deterministic_hbd.R
+47510807d8d659f4b028c2fa988cd63e *R/simulate_deterministic_hbd.R
 f4a0c1de8e67d35f3698a571dadc2805 *R/simulate_diversification_model.R
 62ad96148d9f294de5b009d5f3dd058a *R/simulate_dsse.R
 db223ac6c2ad93e431e07fdb83085223 *R/simulate_mk_model.R
@@ -101,10 +102,11 @@ c5532d830fd70affe122a72814190a94 *man/date_tree_red.Rd
 143bd53b4e1f419166e3c4efb24270e6 *man/find_nearest_tips.Rd
 474164c84fb3892a906b791c416915dc *man/find_root.Rd
 e5b3c517b235b600c18a27ef3ce044a3 *man/find_root_of_monophyletic_tips.Rd
-11807535e742affea945503fa161e3a0 *man/fit_bm_model.Rd
-8a6f66657cc8a29cf361677997021e64 *man/fit_hbd_class_on_grid.Rd
-7f6041f47d66b67bfa4972f97814ac24 *man/fit_hbd_model_on_grid.Rd
-2a79a8f898622118145df67796ba13fb *man/fit_hbd_model_parametric.Rd
+98a238ff1ab994fd086a264640f0e121 *man/fit_bm_model.Rd
+1bdb5745ca96e8846d5db5d5ff6c369c *man/fit_hbd_class_on_grid.Rd
+2efb9b4a4df4d192e1b45a1ce917954a *man/fit_hbd_class_parametric.Rd
+741b0377d1b6178cdf7971430f1bb5a9 *man/fit_hbd_model_on_grid.Rd
+2609e17cdf8b947f6034e8ee81a8c813 *man/fit_hbd_model_parametric.Rd
 1b1fb57847dfb1a074469552f7df503b *man/fit_musse.Rd
 d507c3041b9a70549c138aa0335dc5d4 *man/fit_tree_model.Rd
 a72de92055d15cf2254ba2545a620671 *man/generate_random_tree.Rd
@@ -149,7 +151,7 @@ ec7bfbe0d0515e62b7552d3868b7c500 *man/root_at_node.Rd
 7223643ce5c3b9a4ec4563c23b9ccc78 *man/root_in_edge.Rd
 15d6da71a09fe60f14505b63fb2159a3 *man/root_via_outgroup.Rd
 6e7967df83241e1f171b7d53f434a29b *man/simulate_bm_model.Rd
-d8d8f59c77d24a32837c417ae931be8a *man/simulate_deterministic_hbd.Rd
+a46a0fc061a2a6ffa0267a2479d99161 *man/simulate_deterministic_hbd.Rd
 4ee11a93fd9a06f909937759230955fd *man/simulate_diversification_model.Rd
 bb49ed9352d79029856909af61622b90 *man/simulate_dsse.Rd
 06efb099b73c51cfadf5f1ccfe86e021 *man/simulate_mk_model.Rd
@@ -158,6 +160,6 @@ f91402ab1276c191222a9ca07ca725ce *man/simulate_rou_model.Rd
 c10add43e978486a3e629de4e3c7164e *man/tree_distance.Rd
 86e2a12383bf2a7e29593fc9e1f033c7 *man/trim_tree_at_height.Rd
 0b756907845e2b72ed893cf16073be19 *man/write_tree.Rd
-992fb167b221efc65df0aa77cd14d5c2 *src/RcppExports.cpp
-f7ef11ae6996d523db3a8f39a06e3851 *src/phylogenetics_cpp_routines.cpp
+4a102cc1181d0eae8e33a3c5c02a981f *src/RcppExports.cpp
+5a62abcf910de82b8883a0c1b9fbc1a5 *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

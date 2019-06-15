@@ -15,14 +15,16 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 										rho				= 1,		# numeric within (0,1], specifying the fraction of extant diversity represented in the tree. Can also be NULL, which is equivalent to setting rarefaction=1.
 										age_grid		= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu mut be a single scalar. The returned time series will be defined on an age-grid that may be finer than this grid.
 										lambda			= NULL,		# either NULL, or a single numeric (constant speciation rate over time), or a numeric vector of size NG (listing speciation rates at each age in grid_ages[]).
-										mu				= NULL,		# either a single numeric (constant extinction rate over time) or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]).
+										mu				= NULL,		# either a single numeric (constant extinction rate over time), or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]), or NULL (in which case mu_over_lambda must be provided).
+										mu_over_lambda	= NULL,		# ratio mu/lambda. Either a single numeric (constant over time), or a numeric vector of size NG (listing mu/lambda at each age in grid_ages[]), or NULL (in which case mu must be provided).
 										PDR				= NULL,		# either NULL, or a single numeric (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]). Only needed if lambda is NULL.
 										lambda0			= NULL,		# either NULL, or a single numeric specifying the present-day speciation rate (i.e. at age 0). Only needed if lambda is NULL.
 										splines_degree	= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
 										relative_dt		= 1e-3){	# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.	
 	# check validity of input variables
 	if(is.null(rho)) rho = 1;
-	if(is.null(mu)) return(list(success = FALSE, error = sprintf("Missing mu")))
+	if(is.null(mu) && is.null(mu_over_lambda)) return(list(success = FALSE, error = sprintf("Missing either mu or mu_over_lambda")))
+	if(!(is.null(mu) || is.null(mu_over_lambda))) return(list(success = FALSE, error = sprintf("Expected either mu or mu_over_lambda, but not both")))
 	if(is.null(lambda)){
 		if(is.null(PDR)) return(list(success = FALSE, error = sprintf("PDR must be provided when lambda are omitted")))
 		if(is.null(lambda0)) return(list(success = FALSE, error = sprintf("lambda0 must be provided when lambda are omitted")))
@@ -32,19 +34,23 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 	}
 	if(is.null(age_grid) || (length(age_grid)<=1)){
 		if((!is.null(lambda)) && (length(lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since no age grid was provided, you must either provide a single (constant) lambda or none")))
-		if(length(mu)!=1) return(list(success = FALSE, error = sprintf("Invalid number of mu; since no age grid was provided, you must provide a single (constant) mu")))
+		if((!is.null(mu)) && (length(mu)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since no age grid was provided, you must provide a single (constant) mu")))
+		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu_over_lambda; since no age grid was provided, you must provide a single (constant) mu_over_lambda")))
 		# create dummy age grid
 		NG 			= 2;
 		age_grid	= seq(from=0,to=oldest_age,length.out=NG)
 		if(!is.null(lambda)) lambda = rep(lambda,times=NG);
 		if(!is.null(mu)) mu = rep(mu,times=NG);
+		if(!is.null(mu_over_lambda)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}else{
 		NG = length(age_grid);
 		if((age_grid[1]>0) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age 0 and oldest_age (%g)",oldest_age)))
 		if((!is.null(lambda)) && (length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since an age grid of size %d was provided, you must either provide zero, one or %d lambda",NG,NG)))
-		if((length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since an age grid of size %d was provided, you must either provide one or %d mu",NG,NG)))
+		if((!is.null(mu)) && (length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since an age grid of size %d was provided, you must either provide one or %d mu",NG,NG)))
+		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)!=1) && (length(mu_over_lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu_over_lambda; since an age grid of size %d was provided, you must either provide one or %d mu_over_lambda",NG,NG)))
 		if((!is.null(lambda)) && (length(lambda)==1)) lambda = rep(lambda,times=NG);
 		if((!is.null(mu)) && (length(mu)==1)) mu = rep(mu,times=NG);
+		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)==1)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Expected one of 0,1,2,3.")))
 		
@@ -54,7 +60,8 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 														rarefaction 	= rho,
 														age_grid 		= age_grid,
 														lambdas 		= (if(is.null(lambda)) numeric() else lambda),
-														mus 			= mu,
+														mus 			= (if(is.null(mu)) numeric() else mu),
+														mu_over_lambda	= (if(is.null(mu_over_lambda)) numeric() else mu_over_lambda),
 														PDRs	 		= (if(is.null(PDR)) numeric() else PDR),
 														lambda0			= (if(is.null(lambda0)) NaN else lambda0),
 														splines_degree	= splines_degree,

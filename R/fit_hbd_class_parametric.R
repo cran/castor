@@ -1,19 +1,18 @@
-# Fit a homogenous-birth-death cladogenic model to an ultrametric timetree, by estimating parameters for functional forms of lambda & mu
-# An HBD model is defined by a time-dependent speciation rate (lambda), a time-dependent extinction rate (mu) and a rarefaction (rho, subsampling fraction)
+# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree, by estimating functional form parameters
+# An HBD congruence class is defined by a time-dependent pulled diversification rate (PDR) and the product rho*lambda(0) (sampling fraction times present-day speciation rate)
 #
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
-fit_hbd_model_parametric = function(tree, 
+fit_hbd_class_parametric = function(tree, 
 									param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
 									param_guess			= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
 									param_min			= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
 									param_max			= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
 									param_scale			= NULL,		# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
 									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
-									lambda,							# function handle, mapping age & model_parameters to the current speciation rate, (age,param_values) --> lambda. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
-									mu,								# function handle, mapping age & model_parameters to the current extinction rate, (age,param_values) --> mu. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
-									rho,							# function handle, mapping model_parameters to the sampling fraction (aka. rarefaction), (param_values) --> rho. Must be defined for all parameters within the imposed bounds.
-									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the lambda and mu functionals should be evaluated. This age grid must be fine enough to capture the possible variation in lambda() and mu() over time. If NULL or of length 1, then lambda & mu are assumed to be time-independent.
+									PDR,							# function handle, mapping age & model_parameters to the current pulled diversification rate, (age,param_values) --> PDR. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
+									rholambda0,						# function handle, mapping model_parameters to the product rho*lambda(0), where rho is the sampling fraction (aka. rarefaction) and lambda(0) is the present-day speciation rate; (param_values) --> rholambda0. Must be defined for all parameters within the imposed bounds.
+									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the PDR functional should be evaluated. This age grid must be fine enough to capture the possible variation in PDR() over time. If NULL or of length 1, then the PDR is assumed to be time-independent.
 									condition			= "stem",	# one of "crown" or "stem", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 									Ntrials				= 1,
@@ -32,8 +31,8 @@ fit_hbd_model_parametric = function(tree,
 
 	# basic input control
 	if((Ntips<2) || (Nnodes<2)) return(list(success = FALSE, error="Tree is too small"));
-	if((!is.null(age_grid)) && (age_grid[1]>tail(age_grid,1))) age_grid = rev(age_grid); # avoid common errors where age_grid is in reverse order
 	if(is.null(oldest_age)) oldest_age = root_age;
+	if((!is.null(age_grid)) && (age_grid[1]>tail(age_grid,1))) age_grid = rev(age_grid); # avoid common errors where age_grid is in reverse order
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
 	if(!(condition %in% c("stem","crown","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', or 'stem' or 'none' (not recommended)",condition)))
 	if(is.null(age_grid)) age_grid = 0;
@@ -81,12 +80,10 @@ fit_hbd_model_parametric = function(tree,
 	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
 	
 	# check if functionals are valid at least on the initial guess
-	lambda_guess 	= lambda(0,param_guess)
-	mu_guess 		= mu(0,param_guess)
-	rho_guess 		= rho(param_guess)
-	if(!is.finite(lambda_guess)) return(list(success=FALSE, error=sprintf("lambda is not a valid number for guessed parameters, at age 0")));
-	if(!is.finite(mu_guess)) return(list(success=FALSE, error=sprintf("mu is not a valid number for guessed parameters, at age 0")));
-	if(!is.finite(rho_guess)) return(list(success=FALSE, error=sprintf("rho is not a valid number for guessed parameters")));
+	PDR_guess = PDR(0,param_guess)
+	rholambda0_guess = rholambda0(param_guess)
+	if(!is.finite(PDR_guess)) return(list(success=FALSE, error=sprintf("PDR is not a valid number for guessed parameters, at age 0")));
+	if(!is.finite(rholambda0_guess)) return(list(success=FALSE, error=sprintf("rholambda0 is not a valid number for guessed parameters")));
 						
 	#################################
 	# PREPARE PARAMETERS TO BE FITTED
@@ -121,26 +118,22 @@ fit_hbd_model_parametric = function(tree,
 		params = param_values; params[fitted_params] = fparam_values * param_scale[fitted_params];
 		if(any(is.nan(params)) || any(is.infinite(params))) return(Inf); # catch weird cases where params become NaN
 		if(!is.null(param_names)) names(params) = param_names;
-		lambdas 	= lambda(age_grid,params)
-		mus 		= mu(age_grid,params)
-		input_rho 	= rho(params)
-		if(!(all(is.finite(lambdas)) && all(is.finite(mus)) && is.finite(input_rho))) return(Inf); # catch weird cases where lambda/mu/rho become NaN
+		PDRs = PDR(age_grid,params)
+		input_rholambda0 = rholambda0(params)
+		if(!(all(is.finite(PDRs)) && is.finite(input_rholambda0))) return(Inf); # catch weird cases where PDR/rholambda0 become NaN
 		if(length(age_grid)==1){
-			# while age-grid has only one point (i.e., lambda & mu are constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
+			# while age-grid has only one point (i.e., PDR is constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
 			input_age_grid 	= c(0,oldest_age);
-			input_lambdas	= c(lambdas, lambdas);
-			input_mus		= c(mus, mus);
+			input_PDRs		= c(PDRs, PDRs);
 		}else{
 			input_age_grid 	= age_grid;
-			input_lambdas	= lambdas
-			input_mus 		= mus
+			input_PDRs		= PDRs
 		}
-		results = get_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
+		results = get_HBD_class_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
 													oldest_age			= oldest_age,
-													rarefaction			= input_rho,
+													rholambda0			= input_rholambda0,
 													age_grid 			= input_age_grid,
-													lambdas 			= input_lambdas,
-													mus 				= input_mus,
+													PDRs 				= input_PDRs,
 													splines_degree		= 1,
 													condition			= condition,
 													relative_dt			= relative_dt,
@@ -194,8 +187,6 @@ fit_hbd_model_parametric = function(tree,
 			fits[[trial]] = fit_single_trial(trial)
 		}
 	}
-	
-	
 	
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)

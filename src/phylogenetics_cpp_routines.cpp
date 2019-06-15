@@ -1285,17 +1285,17 @@ public:
 	// constructors
 	PiecewisePolynomial(): degree(0), last_requested_index(-1) {}
 
-	PiecewisePolynomial(const std::vector<double> 		&_X, 		// (INPUT) 1D array of size NX, listing x-values in ascending order
-						const std::vector<VALUE_TYPE> 	&_coeff, 	// (INPUT) 2D array of size NX x (degree+1), listing polynomial coefficients in each grid cell
-						const long 						_degree,	// (INPUT) polynomial degree
-						const VALUE_TYPE				&_outlier_value_left,		// (INPUT) value to return for requests outside (leftwards) of the x-grid range
-						const VALUE_TYPE				&_outlier_value_right){		// (INPUT) value to return for requests outside (rightwards) of the x-grid range
-		degree 	= _degree;
-		X 		= _X;
-		coeff 	= _coeff;
+	PiecewisePolynomial(const std::vector<double> 		&X_, 		// (INPUT) 1D array of size NX, listing x-values in ascending order
+						const std::vector<VALUE_TYPE> 	&coeff_, 	// (INPUT) 2D array of size NX x (degree+1), listing polynomial coefficients in each grid cell
+						const long 						degree_,	// (INPUT) polynomial degree
+						const VALUE_TYPE				&outlier_value_left_,		// (INPUT) value to return for requests outside (leftwards) of the x-grid range
+						const VALUE_TYPE				&outlier_value_right_){		// (INPUT) value to return for requests outside (rightwards) of the x-grid range
+		degree 	= degree_;
+		X 		= X_;
+		coeff 	= coeff_;
 		last_requested_index 	= -1;
-		outlier_value_left 		= _outlier_value_left;
-		outlier_value_right 	= _outlier_value_right;
+		outlier_value_left 		= outlier_value_left_;
+		outlier_value_right 	= outlier_value_right_;
 	}
 
 
@@ -1325,14 +1325,14 @@ public:
 	}
 	
 	
-	bool set_to_piecewise_linear(	const std::vector<double> 		&_X, 	// (INPUT) 1D array of size NX, listing x-grid values in ascending order
+	bool set_to_piecewise_linear(	const std::vector<double> 		&X_, 	// (INPUT) 1D array of size NX, listing x-grid values in ascending order
 									const std::vector<VALUE_TYPE> 	&Y,		// (INPUT) 1D array of size NX, listing y values on the grid
-									const VALUE_TYPE				&_outlier_value_left,		// (INPUT) value to return for requests outside (leftwards) of the x-grid range
-									const VALUE_TYPE				&_outlier_value_right){		// (INPUT) value to return for requests outside (rightwards) of the x-grid range
+									const VALUE_TYPE				&outlier_value_left_,		// (INPUT) value to return for requests outside (leftwards) of the x-grid range
+									const VALUE_TYPE				&outlier_value_right_){		// (INPUT) value to return for requests outside (rightwards) of the x-grid range
 		last_requested_index 	= -1;
-		outlier_value_left 		= _outlier_value_left;
-		outlier_value_right 	= _outlier_value_right;
-		X 						= _X;
+		outlier_value_left 		= outlier_value_left_;
+		outlier_value_right 	= outlier_value_right_;
+		X 						= X_;
 		degree 					= 1;
 		const long N = X.size();
 		if(N==0) return false;
@@ -1355,17 +1355,17 @@ public:
 	
 	// initialize as splines of a given degree
 	// Note: Currently only degrees 0, 1, 2 or 3 are supported
-	bool set_to_spline(	const std::vector<double> 		&_X, 		// (INPUT) 1D array of size NX, listing x-grid values in ascending order
+	bool set_to_spline(	const std::vector<double> 		&X_, 		// (INPUT) 1D array of size NX, listing x-grid values in ascending order
 						const std::vector<VALUE_TYPE> 	&Y, 		// (INPUT) 1D array of size NX, listing y values on the grid
-						const long 						_degree,	// (INPUT) desired polynomial degree for the constructed splines. Currently only values 0, 1, 2 and 3 are supported.
-						const VALUE_TYPE				&_outlier_value_left,		// (INPUT) value to return for requests outside (leftwards) of the x-grid range
-						const VALUE_TYPE				&_outlier_value_right){		// (INPUT) value to return for requests outside (rightwards) of the x-grid range
+						const long 						degree_,	// (INPUT) desired polynomial degree for the constructed splines. Currently only values 0, 1, 2 and 3 are supported.
+						const VALUE_TYPE				&outlier_value_left_,		// (INPUT) value to return for requests outside (leftwards) of the x-grid range
+						const VALUE_TYPE				&outlier_value_right_){		// (INPUT) value to return for requests outside (rightwards) of the x-grid range
 		if((degree<0) || (degree>3)) return false;
 		last_requested_index 	= -1;
-		outlier_value_left 		= _outlier_value_left;
-		outlier_value_right 	= _outlier_value_right;
-		X 						= _X;
-		degree 					= _degree;
+		outlier_value_left 		= outlier_value_left_;
+		outlier_value_right 	= outlier_value_right_;
+		X 						= X_;
+		degree 					= degree_;
 		if(X.empty()) return false;
 		get_spline(X, Y, degree, coeff);
 		return true;
@@ -1376,6 +1376,15 @@ public:
 		X.clear();
 		coeff.assign(1,value);
 		degree = 0;
+	}
+	
+	
+	// add a constant to each ponynomial
+	void add(const VALUE_TYPE &added_value){
+		const long NG = X.size();
+		for(long g=0; g<NG; ++g){
+			coeff[g*(degree+1) + 0] += added_value;
+		}
 	}
 	
 	
@@ -3499,37 +3508,38 @@ public:
 	
 	// Constructors
 	matrix_exponentiator(){ initialized = false; }
-	matrix_exponentiator(	const long 			_NR,
+	matrix_exponentiator(	const long 			NR_,
 							std::vector<double>	A,					// (INPUT) 2D array of size NR x NR, in row-major format
 							const double		rescaling,			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
-							double				_epsilon,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
-							const long			_NPmin,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
-							const long			NPmax,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
-							bool				_balanced){
-		initialize(_NR, A, rescaling, _epsilon, _NPmin, NPmax, _balanced);
+							double				epsilon_,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
+							const long			NPmin_,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
+							const long			NPmax_,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
+							bool				balanced_){
+		initialize(NR_, A, rescaling, epsilon_, NPmin_, NPmax_, balanced_);
 	}
-	matrix_exponentiator(	const long 					_NR,
-							const std::vector<cdouble>	&_eigenvalues,
-							const std::vector<cdouble>	&_EVmatrix,
-							const std::vector<cdouble>	&_inverse_EVmatrix,
+	
+	matrix_exponentiator(	const long 					NR_,
+							const std::vector<cdouble>	&eigenvalues_,
+							const std::vector<cdouble>	&EVmatrix_,
+							const std::vector<cdouble>	&inverse_EVmatrix_,
 							const double				rescaling){			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
-		initialize(_NR, _eigenvalues, _EVmatrix, _inverse_EVmatrix, rescaling);
+		initialize(NR_, eigenvalues_, EVmatrix_, inverse_EVmatrix_, rescaling);
 	}
 	
 	
 	// prepare exponentiation of matrix A, by pre-calculating polynomials of A
 	// if balanced==true then preps include balancing the matrix. This may be needed for some weird matrixes
-	void initialize(const long 			_NR,
+	void initialize(const long 			NR_,
 					std::vector<double>	A,					// (INPUT) 2D array of size NR x NR, in row-major format
 					const double		rescaling,			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
-					double				_epsilon,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
-					const long			_NPmin,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
+					double				epsilon_,			// (INPUT) norm threshold for calculated polynomials C_p=A^p/p!, i.e. stop calculating polynomials as soon as ||exp(A)-sum_{p=0}^{NP-1}C_p||<epsilon. Norm refers to the Hilbert-Schmidt L2 norm.
+					const long			NPmin_,				// (INPUT) minimum number of polynomials to calculate if possible (including A^0), regardless of the pursued accuracy epsilon. For sparse Markov transition matrix it is recommended to set this to NR+1, so that the matrix exponential does not contain zeros that it shouldn't contain (assuming A is irreducible). The presence of false zeros in exp(A) can mess up ancestral state reconstruction algorithms.
 					const long			NPmax,				// (INPUT) maximum possible number of polynomials to calculate, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy.
-					bool				_balanced){
-		balanced 	= _balanced;
-		NR 			= _NR;
-		NPmin 		= _NPmin;
-		epsilon 	= _epsilon;
+					bool				balanced_){
+		balanced 	= balanced_;
+		NR 			= NR_;
+		NPmin 		= NPmin_;
+		epsilon 	= epsilon_;
 		initialized	= true;
 		use_eigendecomposition = false;
 		if(balanced){
@@ -3558,17 +3568,17 @@ public:
 	}
 	
 	// prepare exponentiation of matrix A based on eigendecomposition
-	void initialize(const long 					_NR,
-					const std::vector<cdouble>	&_eigenvalues,
-					const std::vector<cdouble>	&_EVmatrix,
-					const std::vector<cdouble>	&_inverse_EVmatrix,
+	void initialize(const long 					NR_,
+					const std::vector<cdouble>	&eigenvalues_,
+					const std::vector<cdouble>	&EVmatrix_,
+					const std::vector<cdouble>	&inverse_EVmatrix_,
 					const double				rescaling){			// (INPUT) optional scalar scaling factor for input matrix (i.e. use rescaling*A instead of A in all calculations). Set to 1.0 for no rescaling.
-		NR 						= _NR;
+		NR 						= NR_;
 		initialized				= true;
 		use_eigendecomposition 	= true;
-		eigenvalues 			= _eigenvalues;
-		EVmatrix 				= _EVmatrix;
-		inverse_EVmatrix 		= _inverse_EVmatrix;
+		eigenvalues 			= eigenvalues_;
+		EVmatrix 				= EVmatrix_;
+		inverse_EVmatrix 		= inverse_EVmatrix_;
 		if(rescaling!=1.0){
 			for(long r=0; r<eigenvalues.size(); ++r) eigenvalues[r] *= rescaling;
 		}
@@ -5917,7 +5927,7 @@ public:
 	
 	bool isNULL() const{ return referenceValues.empty(); }
 	bool isPeriodic() const{ return periodic; }
-	void getDomain(double &_domain_min, double &_domain_max) const{ _domain_min=domain_min; _domain_max=domain_max; }
+	void getDomain(double &domain_min_, double &domain_max_) const{ domain_min_ = domain_min; domain_max_ = domain_max; }
 	long getReferenceCount() const{ return referenceValues.size(); }
 	
 	void setTypicalLengthScale(double _lengthScale){ lengthScale = _lengthScale; } 
@@ -5952,36 +5962,36 @@ LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(const VALUE_T
 
 
 template<class VALUE_TYPE>
-LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	const std::vector<double> 		&_referencePoints, 
-														const std::vector<VALUE_TYPE> 	&_referenceValues,
-														bool							_periodic,
-														const VALUE_TYPE				&_outlier_value_left,
-														const VALUE_TYPE				&_outlier_value_right,
+LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	const std::vector<double> 		&referencePoints_, 
+														const std::vector<VALUE_TYPE> 	&referenceValues_,
+														bool							periodic_,
+														const VALUE_TYPE				&outlier_value_left_,
+														const VALUE_TYPE				&outlier_value_right_,
 														bool							preInterpolateOnRegularGrid,
 														double							regularGridStep){
-	periodic 			= _periodic;
-	outlier_value_left 	= _outlier_value_left;
-	outlier_value_right	= _outlier_value_right;
+	periodic 			= periodic_;
+	outlier_value_left 	= outlier_value_left_;
+	outlier_value_right	= outlier_value_right_;
 	referencePoints.clear(); 
 	referenceValues.clear();
 	last_requested_reference = -1;
-	if(_referencePoints.empty()) return;
+	if(referencePoints_.empty()) return;
 
-	if(preInterpolateOnRegularGrid && (_referencePoints.size()>1)){
+	if(preInterpolateOnRegularGrid && (referencePoints_.size()>1)){
 		// pre-interpolate on regular domain grid, then setup interpolator functor
-		const double _domain_min 	= _referencePoints.front();
-		const double domain_span	= (_referencePoints.back()-_referencePoints.front());
-		regularGridStep 			= (regularGridStep<=0 ? domain_span/(_referencePoints.size()-1) : regularGridStep);
-		const long NR 				= max(2l, long(1 + (_referencePoints.back() - _referencePoints.front())/regularGridStep));
+		const double domain_min_ 	= referencePoints_.front();
+		const double domain_span	= (referencePoints_.back()-referencePoints_.front());
+		regularGridStep 			= (regularGridStep<=0 ? domain_span/(referencePoints_.size()-1) : regularGridStep);
+		const long NR 				= max(2l, long(1 + (referencePoints_.back() - referencePoints_.front())/regularGridStep));
 		std::vector<double> regular_reference_points(NR);
 		std::vector<VALUE_TYPE> regular_reference_values;
-		for(long i=0; i<NR; ++i) regular_reference_points[i] = _domain_min + i*regularGridStep;
-		regular_reference_points[NR-1] = _referencePoints.back(); // make sure last regular_reference_point is equal to the original last _referencePoint
+		for(long i=0; i<NR; ++i) regular_reference_points[i] = domain_min_ + i*regularGridStep;
+		regular_reference_points[NR-1] = referencePoints_.back(); // make sure last regular_reference_point is equal to the original last _referencePoint
 		long includedNewTimesStart=0, includedNewTimesEnd=0;
-		interpolateTimeSeriesAtTimes<VALUE_TYPE,vector<double> >(	_referencePoints,
-																	_referenceValues,
+		interpolateTimeSeriesAtTimes<VALUE_TYPE,vector<double> >(	referencePoints_,
+																	referenceValues_,
 																	0,
-																	_referencePoints.size()-1,
+																	referencePoints_.size()-1,
 																	regular_reference_points,
 																	0,
 																	NR-1,
@@ -5992,14 +6002,14 @@ LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	const std::v
 									regular_reference_points[includedNewTimesStart], 
 									regular_reference_points[includedNewTimesEnd], 
 									&regular_reference_values[includedNewTimesStart], 
-									_periodic,
-									_outlier_value_left,
-									_outlier_value_right);
+									periodic_,
+									outlier_value_left_,
+									outlier_value_right_);
 		
 	}else{
 		// use provided irregular grid
-		referencePoints = _referencePoints;
-		referenceValues = _referenceValues;
+		referencePoints = referencePoints_;
+		referenceValues = referenceValues_;
 		const long referenceCount = referencePoints.size();
 		
 		// figure out domain
@@ -6017,20 +6027,20 @@ LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	const std::v
 
 template<class VALUE_TYPE>
 void LinearInterpolationFunctor<VALUE_TYPE>::set_to_regular_grid_values(	long 				referenceCount, 
-																	const double 		_domain_min, 
-																	const double 		_domain_max, 
-																	VALUE_TYPE 			*_referenceValues,
-																	bool				_periodic,
-																	const VALUE_TYPE	&_outlier_value_left,
-																	const VALUE_TYPE	&_outlier_value_right){
+																	const double 		domain_min_, 
+																	const double 		domain_max_, 
+																	VALUE_TYPE 			*referenceValues_,
+																	bool				periodic_,
+																	const VALUE_TYPE	&outlier_value_left_,
+																	const VALUE_TYPE	&outlier_value_right_){
 
-	periodic			= _periodic;
-	domain_min			= _domain_min;
-	domain_max			= _domain_max;
+	periodic			= periodic_;
+	domain_min			= domain_min_;
+	domain_max			= domain_max_;
 	lengthScale			= (domain_max-domain_min);
 	domainStep			= (domain_max-domain_min)/max(1.0, referenceCount-1.0);
-	outlier_value_left 	= _outlier_value_left;
-	outlier_value_right	= _outlier_value_right;
+	outlier_value_left 	= outlier_value_left_;
+	outlier_value_right	= outlier_value_right_;
 	referencePoints.clear(); 
 	referenceValues.clear();
 	last_requested_reference = -1;
@@ -6038,7 +6048,7 @@ void LinearInterpolationFunctor<VALUE_TYPE>::set_to_regular_grid_values(	long 		
 		
 	referenceValues.resize(referenceCount);
 	for(long i=0; i<referenceCount; ++i){
-		referenceValues[i] = _referenceValues[i];
+		referenceValues[i] = referenceValues_[i];
 	}
 		
 	// enforce periodic boundary values if necessary
@@ -6050,13 +6060,13 @@ void LinearInterpolationFunctor<VALUE_TYPE>::set_to_regular_grid_values(	long 		
 
 template<class VALUE_TYPE>
 LinearInterpolationFunctor<VALUE_TYPE>::LinearInterpolationFunctor(	long 				referenceCount, 
-														const double 		_domain_min, 
-														const double 		_domain_max, 
-														VALUE_TYPE 			_referenceValues[],
-														bool				_periodic,
-														const VALUE_TYPE	&_outlier_value_left,
-														const VALUE_TYPE	&_outlier_value_right){
-	set_to_regular_grid_values(referenceCount, _domain_min, _domain_max, _referenceValues, _periodic, _outlier_value_left, _outlier_value_right);
+														const double 		domain_min_, 
+														const double 		domain_max_, 
+														VALUE_TYPE 			referenceValues_[],
+														bool				periodic_,
+														const VALUE_TYPE	&outlier_value_left_,
+														const VALUE_TYPE	&outlier_value_right_){
+	set_to_regular_grid_values(referenceCount, domain_min_, domain_max_, referenceValues_, periodic_, outlier_value_left_, outlier_value_right_);
 }
 
 
@@ -7529,14 +7539,16 @@ private:
 	mutable double lastReportedFraction;
 	bool silent;
 public:
-	ProgressReporter(const bool _silent){ reportCount = 10; lastReportedCase=-1; lastReportedFraction = 0; silent = _silent; }
-	ProgressReporter(long _reportCount){ reportCount = _reportCount; lastReportedCase=-1; lastReportedFraction=0; }
-	ProgressReporter(long _reportCount, const string &_prefix, const string &_suffix, bool _asPercentage){ reportCount = _reportCount; prefix = _prefix; suffix = _suffix; asPercentage = _asPercentage; lastReportedCase = -1; lastReportedFraction = 0; }
+	ProgressReporter(const bool silent_){ reportCount = 10; lastReportedCase=-1; lastReportedFraction = 0; silent = silent_; }
+	ProgressReporter(long reportCount_){ reportCount = reportCount_; lastReportedCase=-1; lastReportedFraction=0; }
+	ProgressReporter(long reportCount_, const string &prefix_, const string &suffix_, bool asPercentage_){ 
+		reportCount = reportCount_; prefix = prefix_; suffix = suffix_; asPercentage = asPercentage_; lastReportedCase = -1; lastReportedFraction = 0; 
+	}
 	
 	void setReportCount(long count){ reportCount = count; }
-	void setPrefix(const string &_prefix){ prefix = _prefix; }
-	void setSuffix(const string &_suffix){ suffix = _suffix; }
-	void setAsPercentage(bool _asPercentage){ asPercentage = _asPercentage; }
+	void setPrefix(const string &prefix_){ prefix = prefix_; }
+	void setSuffix(const string &suffix_){ suffix = suffix_; }
+	void setAsPercentage(bool asPercentage_){ asPercentage = asPercentage_; }
 	void reset(){ lastReportedCase = -1; lastReportedFraction = 0; }
 	
 	void operator()(long casesFinished, long totalCases, double exactFraction) const{
@@ -9332,17 +9344,17 @@ public:
 	
 	// Constructor/initializer
 	template<class ARRAY_TYPE>
-	tree_traversal(	const long			_Ntips,
-					const long 			_Nnodes,
-					const long			_Nedges,
+	tree_traversal(	const long			Ntips_,
+					const long 			Nnodes_,
+					const long			Nedges_,
 					const long 			root, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1)
 					const ARRAY_TYPE	&tree_edge, 					// (INPUT) 2D array (in row-major format) of size Nedges x 2
 					const bool			include_tips,					// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
 					const bool			precalculated_edge_mappings){	// (INPUT) if true, then the edge mapping tables node2first_edge[], node2last_edge[] and edges[] are taken as is. Otherwise, they are calculated from scratch.
 		includes_tips = include_tips;
-		Ntips  = _Ntips;
-		Nnodes = _Nnodes;
-		Nedges = _Nedges;
+		Ntips  = Ntips_;
+		Nnodes = Nnodes_;
+		Nedges = Nedges_;
 		get_tree_traversal_root_to_tips(Ntips,
 										Nnodes,
 										Nedges,
@@ -16754,14 +16766,14 @@ public:
 		ages.clear();
 	}
 	
-	void setup(	const long		_Nstates,
-				const dvector 	&_transition_rates, 
-				const dvector 	&_speciation_rates,
-				const dvector 	&_extinction_rates){
-		Nstates 		 = _Nstates;
-		transition_rates = _transition_rates;
-		speciation_rates = _speciation_rates;	
-		extinction_rates = _extinction_rates;
+	void setup(	const long		Nstates_,
+				const dvector 	&transition_rates_, 
+				const dvector 	&speciation_rates_,
+				const dvector 	&extinction_rates_){
+		Nstates 		 = Nstates_;
+		transition_rates = transition_rates_;
+		speciation_rates = speciation_rates_;	
+		extinction_rates = extinction_rates_;
 		
 		// setup linear part of dynamics, as a square matrix
 		// this is basically the transition matrix, plus some stuff on the diagonal
@@ -17558,38 +17570,39 @@ public:
 
 
 
-// class encoding the ODE for the HBD variable theta:=log(lambda/lambda0), where lambda0 is the present-day lambda
-// Should be integrated in forward-age direction, i.e. reverse time
+// class encoding the ODE for the transformed variable theta:=log(X/X0), where X is either lambda or mu, and where X0 is the present-day X
+// Assuming X satisfies the ODE:
+//   (1/X)dX/dtau = factor(tau) * X + intercept(tau)
+// For example, if X=lambda, then:
+//   Either factor=-1 and intercept=PDR+mu
+//   Or alternatively factor=mu_over_lambda-1 and intercept=PDR
+// The ODE should be integrated in forward-age direction, i.e. reverse time
 class HBDThetaModel{
 public:
 	std::vector<double> trajectory;
 	std::vector<double> ages;
-
-	double initial_theta;
 	
 	/// model parameters; must be set by whoever creates this class instance
-	double lambda0;						// present-day speciation rate, i.e. at age 0
-	PiecewisePolynomial<double> PDR; 	// pulled diversification rate functor, as a function of age
-	PiecewisePolynomial<double> mu; 	// per-capita extinction rate functor, as a function of age
+	double X0;		// present-day value, i.e. at age 0
+	PiecewisePolynomial<double> intercept, factor; 
 
 	HBDThetaModel(){
-		initial_theta 	= 0;// Note that typically the initial state (theta(0)) is 0, since theta=ln(lambda/lambda(0))
-		lambda0 		= NAN_D; // there really is no "canonical" default lambda0
-		PDR.set_to_constant(0);
-		mu.set_to_constant(0);
+		X0 = NAN_D; // there really is no "canonical" default X0
+		intercept.set_to_constant(0);
+		factor.set_to_constant(1);
 	}
 	
 	// use parameters from another model instance
 	void adopt_parameters(const HBDThetaModel &model2){
-		lambda0	= model2.lambda0;
-		PDR		= model2.PDR;
-		mu		= model2.mu;
+		X0			= model2.X0;
+		intercept 	= model2.intercept;
+		factor		= model2.factor;
 	}
 	
 	// estimate the maximum rate of change of theta
 	// may be useful for choosing the age step for simulations
 	double estimate_max_rate_of_change() const{
-		return 2*(mu.getMaxAbs() + PDR.getMaxAbs());
+		return 2*intercept.getMaxAbs();
 	}
 		
 	// model is notified that roughly Nrecordings will need to be stored, and asked to allocate space accordingly
@@ -17611,7 +17624,7 @@ public:
 	}
 	
 	bool getInitialState(double age, double &state) const{ 
-		state = initial_theta;
+		state = 0; // Note that the initial state (theta(0)) is 0, since theta=ln(X/X(0))
 		return true; 
 	}
 
@@ -17623,7 +17636,7 @@ public:
 
 	// return rate of change of theta, requested by the ODE solver
 	RequestedDynamics getRateOfChangeAtState(double age, const double &current_theta, double &rate_of_change, double &jump_state){
-		rate_of_change = PDR(age) + mu(age) - exp(current_theta)*lambda0;
+		rate_of_change = intercept(age) + exp(current_theta)*X0*factor(age);
 		return RequestedDynamicsRateOfChange;
 	}
 
@@ -17672,7 +17685,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 												const double				rarefaction,		// (INPUT) number within (0,1], specifying the rarefaction (subsampling fraction) of the timetree, i.e. what fraction of extant diversity is represented in the timetree
 												const std::vector<double>	&age_grid,			// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus will be defined on this age grid. This age grid must cover at least the range [0,oldest_age].
 												const std::vector<double>	&lambdas,			// (INPUT) 1D array of size NG, listing (per-capita) speciation rates on the age-grid.
-												const std::vector<double>	&mus,				// (INPUT) 1D array of size NG, listing (per-capita) extinction rates on the age-grid.
+												const std::vector<double>	&mus,				// (INPUT) 1D array of size NG, listing (per-capita) extinction rates on the age-grid. Either mus or mu_over_lambda must be provided.
+												const std::vector<double>	mu_over_lambda,		// (INPUT) 1D array of size NG, listing the ratio between mus and lambdas. Either mus or mu_over_lambda must be provided.
 												const std::vector<double>	&PDRs,				// (INPUT) optional 1D array of size NG, listing pulled diversification rates (PDRs) on the age-grid. Only needed if lambdas[] is empty; if both PDRs[] and lambdas[] are provided, their consistency is NOT verified and both are used as-is.
 												double						lambda0,			// (INPUT) present-day speciation rate (i.e. at age 0). Only needed if lambdas[] is empty. If both lambdas[] and lambda0 are provided, lambda0 is re-calculated from the provided lambdas.
 												const long					splines_degree,		// (INPUT) either 1 or 2, specifying the degree of the splines defined by the lambdas, mus and PDRs on the age grid.
@@ -17680,6 +17694,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 	if((oldest_age<age_grid[0]) || (oldest_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies outside of the provided age_grid");
 	const bool got_lambdas 	= (!lambdas.empty());
 	const bool got_PDRs		= (!PDRs.empty());
+	const bool got_mus		= (!mus.empty());
 	const double age0 		= 0;
 	if((!got_lambdas) && ((!got_PDRs) || isnan(lambda0))) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Insufficient information; requiring either lambdas or PDRs & lambda0");
 		
@@ -17689,9 +17704,16 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 	double NT;
 	long lambda_degree, mu_degree, diversification_degree;
 	if(got_lambdas){
-		// start with provided lambdas & mus
-		std::vector<double> coarse_diversification_rates = lambdas; coarse_diversification_rates -= mus;
-		const double mean_turnover_rate = vector_mean(lambdas) + vector_mean(mus);
+		// start with provided lambdas & mus (or mu_over_lambda)
+		dvector coarse_mus;
+		if(got_mus){
+			coarse_mus = mus;
+		}else{
+			coarse_mus.resize(lambdas.size());
+			for(long i=0; i<lambdas.size(); ++i) coarse_mus[i] = lambdas[i] * mu_over_lambda[i];
+		}
+		double mean_turnover_rate = vector_mean(lambdas) + vector_mean(coarse_mus);
+		dvector coarse_diversification_rates = lambdas; coarse_diversification_rates -= mus;
 		const double age_span = age_grid.back()-age_grid[0];
 		
 		// get spline representations of lambda & mu & diversification
@@ -17700,7 +17722,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 		mu_degree				= splines_degree;
 		diversification_degree 	= splines_degree;
 		get_spline(age_grid, lambdas, splines_degree, coarse_lambda_coeff);
-		get_spline(age_grid, mus, splines_degree, coarse_mu_coeff);
+		get_spline(age_grid, coarse_mus, splines_degree, coarse_mu_coeff);
 		coarse_diversification_coeff = coarse_lambda_coeff; coarse_diversification_coeff -= coarse_mu_coeff;
 		
 		// refine time grid
@@ -17748,41 +17770,69 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 		}
 
 	}else{
-		// start with provided PDRs & mus
-		
-		// get spline representations of PDR & mu
-		dvector coarse_mu_coeff, coarse_PDR_coeff;
-		get_spline(age_grid, PDRs, splines_degree, coarse_PDR_coeff);
-		get_spline(age_grid, mus, splines_degree, coarse_mu_coeff);
-				
-		// calculate lambdas from the provided PDRs
-		// we do this by solving the ODE for the auxiliary variable, theta:=ln(lambda/lambda(0))
+		// start with provided PDRs & mus (or mu_over_lambda)
 		HBDThetaModel theta_model;
-		theta_model.initial_theta 	= 0;
-		theta_model.lambda0			= lambda0;
-		theta_model.PDR 			= PiecewisePolynomial<double>(age_grid, coarse_PDR_coeff, splines_degree, 0, 0);
-		theta_model.mu  			= PiecewisePolynomial<double>(age_grid, coarse_mu_coeff, splines_degree, 0, 0);
-		const double turnover_rate 	= vector_abs_mean(PDRs) + vector_mean(mus);
-		const double default_dt		= max(1e-9*oldest_age,min(0.1*oldest_age,relative_dt/theta_model.estimate_max_rate_of_change()));
-		string warningMessage;
-		const bool success = RungeKutta2<double,HBDThetaModel,ProgressReporter>
-									(age0,		// start age
-									oldest_age, // end age
-									default_dt,	// default integration time step
-									theta_model,
-									1e-8*oldest_age,	// minRecordingTimeStep
-									min(0.1*oldest_age,relative_dt/turnover_rate),	// maxRecordingTimeStep
-									0.01, 		// recordingRelValueStep
-									2,			// maxTimeStepRefinements
-									2, 			// refinement_factor
-									ProgressReporter(true),
-									0,			// runtime_out_seconds,
-									warningMessage);
-		if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate lambdas from PDRs: "+warningMessage); // simulation failed
-		std::vector<double> computed_lambdas(theta_model.ages.size());
-		for(long t=0; t<theta_model.ages.size(); ++t) computed_lambdas[t] = lambda0*exp(theta_model.trajectory[t]);
+		dvector coarse_mu_coeff, coarse_PDR_coeff, coarse_mu_over_lambda_coeff;
+		get_spline(age_grid, PDRs, splines_degree, coarse_PDR_coeff); // get spline representations of PDR
+		if(got_mus){
+			// calculate lambda from PDR & mu
+			get_spline(age_grid, mus, splines_degree, coarse_mu_coeff); // get spline representations of mu
+				
+			// calculate lambdas from the provided PDRs and mus
+			// we do this by solving the ODE for the auxiliary variable, theta:=ln(lambda/lambda(0))
+			theta_model.X0				= lambda0;
+			theta_model.intercept		= PiecewisePolynomial<double>(age_grid, coarse_PDR_coeff+coarse_mu_coeff, splines_degree, 0, 0);
+			theta_model.factor.set_to_constant(-1);
+			const double turnover_rate 	= vector_abs_mean(PDRs) + vector_mean(mus);
+			const double default_dt		= max(1e-9*oldest_age,min(0.1*oldest_age,relative_dt/theta_model.estimate_max_rate_of_change()));
+			string warningMessage;
+			const bool success = RungeKutta2<double,HBDThetaModel,ProgressReporter>
+										(age0,		// start age
+										oldest_age, // end age
+										default_dt,	// default integration time step
+										theta_model,
+										1e-8*oldest_age,	// minRecordingTimeStep
+										min(0.1*oldest_age,relative_dt/turnover_rate),	// maxRecordingTimeStep
+										0.01, 		// recordingRelValueStep
+										2,			// maxTimeStepRefinements
+										2, 			// refinement_factor
+										ProgressReporter(true),
+										0,			// runtime_out_seconds,
+										warningMessage);
+			if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate lambdas from PDR and mu: "+warningMessage); // simulation failed
+		}else{
+			// calculate lambda from PDR & mu_over_lambda
+			get_spline(age_grid, mu_over_lambda, splines_degree, coarse_mu_over_lambda_coeff); // get spline representations of mu_over_lambda
 
+			// calculate lambda from the provided PDRs and mu_over_lambda
+			// we do this by solving the ODE for the auxiliary variable, theta:=ln(mu/mu(0))
+			theta_model.X0				= lambda0;
+			theta_model.intercept		= PiecewisePolynomial<double>(age_grid, coarse_PDR_coeff, splines_degree, 0, 0);
+			theta_model.factor			= PiecewisePolynomial<double>(age_grid, coarse_mu_over_lambda_coeff, splines_degree, 0, 0); 
+			theta_model.factor.add(-1);
+			const double turnover_rate 	= vector_abs_mean(PDRs);
+			const double default_dt		= max(1e-9*oldest_age,min(0.1*oldest_age,relative_dt/theta_model.estimate_max_rate_of_change()));
+			string warningMessage;
+			const bool success = RungeKutta2<double,HBDThetaModel,ProgressReporter>
+										(age0,		// start age
+										oldest_age, // end age
+										default_dt,	// default integration time step
+										theta_model,
+										1e-8*oldest_age,	// minRecordingTimeStep
+										min(0.1*oldest_age,relative_dt/turnover_rate),	// maxRecordingTimeStep
+										0.01, 		// recordingRelValueStep
+										2,			// maxTimeStepRefinements
+										2, 			// refinement_factor
+										ProgressReporter(true),
+										0,			// runtime_out_seconds,
+										warningMessage);
+			if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate lambdas from PDR and mu_over_lambda: "+warningMessage); // simulation failed
+		}
+		dvector computed_lambdas(theta_model.ages.size());
+		for(long t=0; t<theta_model.ages.size(); ++t) computed_lambdas[t] = lambda0*exp(theta_model.trajectory[t]);
+	
 		// further refine age grid (from the theta-ODE solver) if needed
+		const double turnover_rate 	= vector_abs_mean(PDRs) + vector_mean(computed_lambdas);
 		refine_time_series_linear(	theta_model.ages,
 									computed_lambdas,
 									0,
@@ -17793,14 +17843,18 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 									refined_age_grid,
 									refined_lambdas);
 		NT = refined_age_grid.size();
-		
+
 		// evaluate PDRs & mus on new grid
 		refined_PDRs.resize(NT);
 		refined_mus.resize(NT);
 		for(long t=0, g=0; t<NT; ++t){
 			g = find_next_left_grid_point(age_grid, refined_age_grid[t], g); // determine age_grid point to the immediate left of refined_age_grid[t]
 			refined_PDRs[t] = polynomial_value(splines_degree, &coarse_PDR_coeff[g*(splines_degree+1)+0], refined_age_grid[t]);
-			refined_mus[t]  = polynomial_value(splines_degree, &coarse_mu_coeff[g*(splines_degree+1)+0], refined_age_grid[t]);
+			if(got_mus){
+				refined_mus[t] = polynomial_value(splines_degree, &coarse_mu_coeff[g*(splines_degree+1)+0], refined_age_grid[t]);
+			}else{
+				refined_mus[t] = polynomial_value(splines_degree, &coarse_mu_over_lambda_coeff[g*(splines_degree+1)+0], refined_age_grid[t]) * refined_lambdas[t];
+			}
 		}
 		
 		// construct splines representation of lambda, mu & diversification_rates on refined grid
@@ -18234,7 +18288,7 @@ Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long					Ntips,
 	// traverse root-->tips and draw random states, conditional upon their parent's state
 	vector<double> expQ;
 	vector<long> tip_states, node_states;
-	if(include_tips) tip_states.resize(Nsimulations*Ntips);
+	if(include_tips) tip_states.assign(Nsimulations*Ntips,0); // Assign default value so that valgrind memcheck does not complain about uninitialized values.
 	node_states.assign(Nsimulations*Nnodes,0); // always store node states, since needed for moving root-->tips. Assign default value so that valgrind memcheck does not complain about uninitialized values.
 	long clade, edge, parent, parent_state, state=0;
 	for(long q=0; q<traversal_queue.size(); ++q){

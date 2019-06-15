@@ -293,8 +293,8 @@ get_MuSSE_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edg
     .Call(`_castor_get_MuSSE_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds)
 }
 
-simulate_deterministic_HBD_model_CPP <- function(Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, PDRs, lambda0, splines_degree, relative_dt) {
-    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, PDRs, lambda0, splines_degree, relative_dt)
+simulate_deterministic_HBD_model_CPP <- function(Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, mu_over_lambda, PDRs, lambda0, splines_degree, relative_dt) {
+    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, mu_over_lambda, PDRs, lambda0, splines_degree, relative_dt)
 }
 
 get_HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds) {

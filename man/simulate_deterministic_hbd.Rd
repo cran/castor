@@ -5,7 +5,8 @@ Simulate a deterministic homogenous birth-death model.
 }
 \description{
 Given a homogenous birth-death (HBD) model, i.e., with speciation rate \eqn{\lambda}, extinction rate \eqn{\mu} and sampling fraction \eqn{\rho}, calculate various deterministic features of the model backwards in time, such as the total diversity over time. The speciation and extinction rates may be time-dependent. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''; Morlon et al. 2011). ``Deterministic'' refers to the fact that all calculated properties are completely determined by the model's parameters (i.e. non-random), as if an infinitely large tree was generated (aka. ``continuum limit'').
-Alternatively to \eqn{\lambda}, one may provide the pulled diversification rate (PDR; Louca et al. 2018) and the present-day speciation rate \eqn{\lambda(0)}. In either case, the time-profiles of \eqn{\lambda}, \eqn{\mu} or the PDR are specified as piecewise polynomial functions (splines), defined on a discrete grid of ages.
+
+Alternatively to \eqn{\lambda}, one may provide the pulled diversification rate (PDR; Louca et al. 2018) and the present-day speciation rate \eqn{\lambda(0)}. Similarly, alternatively to \eqn{\mu}, one may provide the ratio of extinction over speciation rate, \eqn{\mu/\lambda}. In either case, the time-profiles of \eqn{\lambda}, \eqn{\mu}, \eqn{\mu/\lambda} or the PDR are specified as piecewise polynomial functions (splines), defined on a discrete grid of ages.
 }
 \usage{
 simulate_deterministic_hbd(Ntips,
@@ -14,6 +15,7 @@ simulate_deterministic_hbd(Ntips,
                            age_grid       = NULL,
                            lambda         = NULL,
                            mu             = NULL,
+                           mu_over_lambda = NULL,
                            PDR            = NULL,
                            lambda0        = NULL,
                            splines_degree = 1,
@@ -36,7 +38,10 @@ Numeric vector, listing discrete ages (time before present) on which either \eqn
 Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing speciation rates (\eqn{\lambda}, in units 1/time) at the ages listed in \code{age_grid}. Speciation rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then \code{PDR} and \code{lambda0} must be provided.
 }
 \item{mu}{
-Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing extinction rates (\eqn{\mu}, in units 1/time) at the ages listed in \code{age_grid}. Extinction rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). Note that \code{mu} must always be provided.
+Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing extinction rates (\eqn{\mu}, in units 1/time) at the ages listed in \code{age_grid}. Extinction rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). Either \code{mu} or \code{mu_over_lambda} must be provided, but not both.
+}
+\item{mu_over_lambda}{
+Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing the ratio of extinction rates over speciation rates (\eqn{\mu/\lambda}) at the ages listed in \code{age_grid}. These ratios should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). Either \code{mu} or \code{mu_over_lambda} must be provided, but not both.
 }
 \item{PDR}{
 Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing pulled diversification rates (in units 1/time) at the ages listed in \code{age_grid}. PDRs can be negative or positive, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then \code{lambda} must be provided.
@@ -52,7 +57,14 @@ Strictly positive numeric (unitless), specifying the maximum relative time step 
 }
 }
 \details{
-This function supports two alternative parameterizations of HBD models, either using the speciation and extinction rates (\eqn{\lambda}, \eqn{\mu}), or using the extinction rate, the pulled diversification rate (PDR) and the present-day speciation rate \eqn{\lambda(0)}. The PDR is defined as \eqn{PDR = \lambda-\mu+\lambda^{-1}d\lambda/d\tau}, where \eqn{\tau} is age. To avoid ambiguities, only one set of parameters is accepted, i.e. you must either provide \code{lambda} and \code{mu}, or provide \code{mu}, \code{PDR} and \code{lambda0}. The sampling fraction \code{rho} should be provided in either case; setting it to \code{NULL} is equivalent to setting it to 1.
+This function supports the following alternative parameterizations of HBD models:
+\itemize{
+\item Using the speciation rate \eqn{\lambda} and extinction rate \eqn{\mu}.
+\item Using the speciation rate \eqn{\lambda} and the ratio \eqn{\mu/\lambda}.
+\item Using the pulled diversification rate (PDR), the extinction rate and the present-day speciation rate \eqn{\lambda(0)}.
+\item Using the PDR, the ratio \eqn{\mu/\lambda} and the present-day speciation rate \eqn{\lambda(0)}.
+}
+The PDR is defined as \eqn{PDR = \lambda-\mu+\lambda^{-1}d\lambda/d\tau}, where \eqn{\tau} is age (time before present). To avoid ambiguities, only one of the above parameterizations is accepted at a time. The sampling fraction \code{rho} should always be provided; setting it to \code{NULL} is equivalent to setting it to 1.
 }
 
 \value{

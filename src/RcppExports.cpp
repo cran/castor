@@ -1281,8 +1281,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // simulate_deterministic_HBD_model_CPP
-Rcpp::List simulate_deterministic_HBD_model_CPP(const double Ntips, const double oldest_age, const double rarefaction, const std::vector<double>& age_grid, const std::vector<double>& lambdas, const std::vector<double>& mus, const std::vector<double>& PDRs, double lambda0, const long splines_degree, const double relative_dt);
-RcppExport SEXP _castor_simulate_deterministic_HBD_model_CPP(SEXP NtipsSEXP, SEXP oldest_ageSEXP, SEXP rarefactionSEXP, SEXP age_gridSEXP, SEXP lambdasSEXP, SEXP musSEXP, SEXP PDRsSEXP, SEXP lambda0SEXP, SEXP splines_degreeSEXP, SEXP relative_dtSEXP) {
+Rcpp::List simulate_deterministic_HBD_model_CPP(const double Ntips, const double oldest_age, const double rarefaction, const std::vector<double>& age_grid, const std::vector<double>& lambdas, const std::vector<double>& mus, const std::vector<double> mu_over_lambda, const std::vector<double>& PDRs, double lambda0, const long splines_degree, const double relative_dt);
+RcppExport SEXP _castor_simulate_deterministic_HBD_model_CPP(SEXP NtipsSEXP, SEXP oldest_ageSEXP, SEXP rarefactionSEXP, SEXP age_gridSEXP, SEXP lambdasSEXP, SEXP musSEXP, SEXP mu_over_lambdaSEXP, SEXP PDRsSEXP, SEXP lambda0SEXP, SEXP splines_degreeSEXP, SEXP relative_dtSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1292,11 +1292,12 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<double>& >::type age_grid(age_gridSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type lambdas(lambdasSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type mus(musSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double> >::type mu_over_lambda(mu_over_lambdaSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type PDRs(PDRsSEXP);
     Rcpp::traits::input_parameter< double >::type lambda0(lambda0SEXP);
     Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
     Rcpp::traits::input_parameter< const double >::type relative_dt(relative_dtSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_deterministic_HBD_model_CPP(Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, PDRs, lambda0, splines_degree, relative_dt));
+    rcpp_result_gen = Rcpp::wrap(simulate_deterministic_HBD_model_CPP(Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, mu_over_lambda, PDRs, lambda0, splines_degree, relative_dt));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1623,7 +1624,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_apply_BM_parsimony_to_missing_clades_CPP", (DL_FUNC) &_castor_apply_BM_parsimony_to_missing_clades_CPP, 6},
     {"_castor_get_MuSSE_loglikelihood_classic_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_classic_CPP, 13},
     {"_castor_get_MuSSE_loglikelihood_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_CPP, 20},
-    {"_castor_simulate_deterministic_HBD_model_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_model_CPP, 10},
+    {"_castor_simulate_deterministic_HBD_model_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_model_CPP, 11},
     {"_castor_get_HBD_model_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_model_loglikelihood_CPP, 10},
     {"_castor_get_HBD_class_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_class_loglikelihood_CPP, 9},
     {"_castor_simulate_fixed_rates_Markov_model_CPP", (DL_FUNC) &_castor_simulate_fixed_rates_Markov_model_CPP, 11},
