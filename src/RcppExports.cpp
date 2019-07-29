@@ -19,6 +19,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_antiderivative_CPP
+NumericVector get_antiderivative_CPP(const std::vector<double>& Xgrid, const double Xstart, const std::vector<double>& Ygrid, const long splines_degree, const std::vector<double>& Xtarget);
+RcppExport SEXP _castor_get_antiderivative_CPP(SEXP XgridSEXP, SEXP XstartSEXP, SEXP YgridSEXP, SEXP splines_degreeSEXP, SEXP XtargetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Xgrid(XgridSEXP);
+    Rcpp::traits::input_parameter< const double >::type Xstart(XstartSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Ygrid(YgridSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Xtarget(XtargetSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_antiderivative_CPP(Xgrid, Xstart, Ygrid, splines_degree, Xtarget));
+    return rcpp_result_gen;
+END_RCPP
+}
 // exponentiate_matrix_for_multiple_scalings_CPP
 NumericVector exponentiate_matrix_for_multiple_scalings_CPP(const long NR, const NumericVector& A, const NumericVector& scalings, const double epsilon, const long NPmin, const long NPmax, const bool enforce_probability_matrix);
 RcppExport SEXP _castor_exponentiate_matrix_for_multiple_scalings_CPP(SEXP NRSEXP, SEXP ASEXP, SEXP scalingsSEXP, SEXP epsilonSEXP, SEXP NPminSEXP, SEXP NPmaxSEXP, SEXP enforce_probability_matrixSEXP) {
@@ -1321,9 +1336,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// get_HBD_class_loglikelihood_CPP
-Rcpp::List get_HBD_class_loglikelihood_CPP(const std::vector<double>& branching_ages, const double oldest_age, const double rholambda0, const std::vector<double>& age_grid, const std::vector<double>& PDRs, const long splines_degree, const std::string& condition, const double relative_dt, const double runtime_out_seconds);
-RcppExport SEXP _castor_get_HBD_class_loglikelihood_CPP(SEXP branching_agesSEXP, SEXP oldest_ageSEXP, SEXP rholambda0SEXP, SEXP age_gridSEXP, SEXP PDRsSEXP, SEXP splines_degreeSEXP, SEXP conditionSEXP, SEXP relative_dtSEXP, SEXP runtime_out_secondsSEXP) {
+// get_HBD_PDR_loglikelihood_CPP
+Rcpp::List get_HBD_PDR_loglikelihood_CPP(const std::vector<double>& branching_ages, const double oldest_age, const double rholambda0, const std::vector<double>& age_grid, const std::vector<double>& PDRs, const long splines_degree, const std::string& condition, const double relative_dt, const double runtime_out_seconds);
+RcppExport SEXP _castor_get_HBD_PDR_loglikelihood_CPP(SEXP branching_agesSEXP, SEXP oldest_ageSEXP, SEXP rholambda0SEXP, SEXP age_gridSEXP, SEXP PDRsSEXP, SEXP splines_degreeSEXP, SEXP conditionSEXP, SEXP relative_dtSEXP, SEXP runtime_out_secondsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1336,7 +1351,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::string& >::type condition(conditionSEXP);
     Rcpp::traits::input_parameter< const double >::type relative_dt(relative_dtSEXP);
     Rcpp::traits::input_parameter< const double >::type runtime_out_seconds(runtime_out_secondsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_HBD_class_loglikelihood_CPP(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds));
+    rcpp_result_gen = Rcpp::wrap(get_HBD_PDR_loglikelihood_CPP(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_HBD_PSR_loglikelihood_CPP
+Rcpp::List get_HBD_PSR_loglikelihood_CPP(const std::vector<double>& branching_ages, const double oldest_age, const std::vector<double>& age_grid, const std::vector<double>& PSRs, const long splines_degree, const std::string& condition, const double relative_dt, const double runtime_out_seconds);
+RcppExport SEXP _castor_get_HBD_PSR_loglikelihood_CPP(SEXP branching_agesSEXP, SEXP oldest_ageSEXP, SEXP age_gridSEXP, SEXP PSRsSEXP, SEXP splines_degreeSEXP, SEXP conditionSEXP, SEXP relative_dtSEXP, SEXP runtime_out_secondsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type branching_ages(branching_agesSEXP);
+    Rcpp::traits::input_parameter< const double >::type oldest_age(oldest_ageSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type age_grid(age_gridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type PSRs(PSRsSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type condition(conditionSEXP);
+    Rcpp::traits::input_parameter< const double >::type relative_dt(relative_dtSEXP);
+    Rcpp::traits::input_parameter< const double >::type runtime_out_seconds(runtime_out_secondsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_HBD_PSR_loglikelihood_CPP(branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1552,6 +1585,7 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_castor_dense_binary_matrix_row2column_major_CPP", (DL_FUNC) &_castor_dense_binary_matrix_row2column_major_CPP, 4},
+    {"_castor_get_antiderivative_CPP", (DL_FUNC) &_castor_get_antiderivative_CPP, 5},
     {"_castor_exponentiate_matrix_for_multiple_scalings_CPP", (DL_FUNC) &_castor_exponentiate_matrix_for_multiple_scalings_CPP, 7},
     {"_castor_smoothenTimeSeriesSavitzkyGolay_CPP", (DL_FUNC) &_castor_smoothenTimeSeriesSavitzkyGolay_CPP, 5},
     {"_castor_simulate_deterministic_diversity_growth_CPP", (DL_FUNC) &_castor_simulate_deterministic_diversity_growth_CPP, 25},
@@ -1626,7 +1660,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_MuSSE_loglikelihood_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_CPP, 20},
     {"_castor_simulate_deterministic_HBD_model_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_model_CPP, 11},
     {"_castor_get_HBD_model_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_model_loglikelihood_CPP, 10},
-    {"_castor_get_HBD_class_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_class_loglikelihood_CPP, 9},
+    {"_castor_get_HBD_PDR_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_PDR_loglikelihood_CPP, 9},
+    {"_castor_get_HBD_PSR_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_PSR_loglikelihood_CPP, 8},
     {"_castor_simulate_fixed_rates_Markov_model_CPP", (DL_FUNC) &_castor_simulate_fixed_rates_Markov_model_CPP, 11},
     {"_castor_simulate_Ornstein_Uhlenbeck_model_CPP", (DL_FUNC) &_castor_simulate_Ornstein_Uhlenbeck_model_CPP, 11},
     {"_castor_simulate_reflected_Ornstein_Uhlenbeck_model_CPP", (DL_FUNC) &_castor_simulate_reflected_Ornstein_Uhlenbeck_model_CPP, 11},

@@ -81,12 +81,14 @@ fit_hbd_model_parametric = function(tree,
 	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
 	
 	# check if functionals are valid at least on the initial guess
-	lambda_guess 	= lambda(0,param_guess)
-	mu_guess 		= mu(0,param_guess)
+	lambda_guess 	= lambda(age_grid,param_guess)
+	mu_guess 		= mu(age_grid,param_guess)
 	rho_guess 		= rho(param_guess)
-	if(!is.finite(lambda_guess)) return(list(success=FALSE, error=sprintf("lambda is not a valid number for guessed parameters, at age 0")));
-	if(!is.finite(mu_guess)) return(list(success=FALSE, error=sprintf("mu is not a valid number for guessed parameters, at age 0")));
+	if(!all(is.finite(lambda_guess))) return(list(success=FALSE, error=sprintf("lambda is not a valid number for guessed parameters, at some ages")));
+	if(!all(is.finite(mu_guess))) return(list(success=FALSE, error=sprintf("mu is not a valid number for guessed parameters, at some ages")));
 	if(!is.finite(rho_guess)) return(list(success=FALSE, error=sprintf("rho is not a valid number for guessed parameters")));
+	if(length(lambda_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("lambda function must return vectors of the same length as the input ages")));
+	if(length(mu_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("mu function must return vectors of the same length as the input ages")));
 						
 	#################################
 	# PREPARE PARAMETERS TO BE FITTED

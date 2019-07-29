@@ -1,7 +1,8 @@
 # Calculate the loglikelihood of a homogenous speciation-extinction (HSE) cladogenic model, for a given ultrametric timetree and given one of the two combinations of input variables:
 #	1. speciation/extinction rates over time (lambda & mu), and rho of the tree (rho)
 #	2. pulled diversification rate over time (PDR), and the product rho*lambda0, where rho is the rho and lambda0 is the present-day speciation rate
-# The speciation rate lambda and extinction rate mu are specified on a discrete age-grid, and assumed to vary linearly (or polynomially, as splines) between grid points (see "degree" argument).
+#	3. pulled speciation rate over time (PSR)
+# The speciation rate lambda, extinction rate mu, PDR and PSR must be specified on a discrete age-grid, and are assumed to vary linearly (or polynomially, as splines) between grid points (see "degree" argument).
 #
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
@@ -18,17 +19,20 @@ loglikelihood_hbd = function(	tree,
 								lambda			= NULL,			# either NULL, or a single scalar (constant speciation rate over time), or a numeric vector of size NG (listing speciation rates at each age in grid_ages[]).
 								mu				= NULL,			# either NULL, or a single scalar (constant extinction rate over time), or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]).
 								PDR				= NULL,			# either NULL, or a single scalar (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]).
+								PSR				= NULL,			# either NULL, or a single scalar (constant PSR over time), or a numeric vector of size NG (listing PSR at each age in grid_ages[]).
 								splines_degree	= 1,			# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
 								condition		= "stem",		# one of "crown", "stem", "none" (or FALSE), specifying whether to condition the likelihood on the survival of the stem group, the crown group or none (not recommended, and only available when lambda/mu are provided). It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 								relative_dt		= 1e-3){		# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
     Ntips		= length(tree$tip.label);
     Nnodes		= tree$Nnode;
 	PDR_based 	= (!is.null(PDR))
+	PSR_based 	= (!is.null(PSR))
 	
 	# get branching ages (=node ages) in ascending order
+	# branching ages must be in ascending order when provided to the C++ routines below
 	sorted_node_ages	= sort(get_all_branching_ages(tree));
 	root_age 		 	= tail(sorted_node_ages,1);
-	age_epsilon		 = 1e-4*mean(tree$edge.length);
+	age_epsilon			= 1e-4*mean(tree$edge.length);
 
 	# check validity of input variables
 	if(PDR_based){
@@ -36,13 +40,20 @@ loglikelihood_hbd = function(	tree,
 		if(!is.null(mu)) return(list(success = FALSE, error = sprintf("mu must be NULL when PDR is provided")))
 		if(!is.null(rho)) return(list(success = FALSE, error = sprintf("rho must be NULL when PDR is provided")))
 		if(is.null(rholambda0)) return(list(success = FALSE, error = sprintf("rholambda0 must be non-NULL when PDR is provided")))
+		if(!is.null(PSR)) return(list(success = FALSE, error = sprintf("PSR must be NULL when PDR is provided")))
+	}else if(PSR_based){
+		if(!is.null(lambda)) return(list(success = FALSE, error = sprintf("lambda must be NULL when PSR is provided")))
+		if(!is.null(mu)) return(list(success = FALSE, error = sprintf("mu must be NULL when PSR is provided")))
+		if(!is.null(rho)) return(list(success = FALSE, error = sprintf("rho must be NULL when PSR is provided")))
+		if(!is.null(rholambda0)) return(list(success = FALSE, error = sprintf("rholambda0 must be NULL when PSR is provided")))
+		if(!is.null(PDR)) return(list(success = FALSE, error = sprintf("PDR must be NULL when PSR is provided")))
 	}else{
 		if(is.null(lambda) || is.null(mu)) return(list(success = FALSE, error = sprintf("Either lambda/mu, or PDR, must be NULL, but not both")))
 		if(!is.null(rholambda0)) return(list(success = FALSE, error = sprintf("rholambda0 must be NULL when lambda and mu are provided")))
 		if(is.null(rho)) return(list(success = FALSE, error = sprintf("rho must be non-NULL when lambda and mu are provided")))
 	}
 	if(condition==FALSE) condition = "none"
-	if(PDR_based){
+	if(PDR_based || PSR_based){
 		if(!(condition %in% c("stem","crown"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown' or 'stem'",condition)))
 	}else{
 		if(!(condition %in% c("stem","crown","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', or 'stem' or 'none' (not recommended)",condition)))
@@ -51,6 +62,8 @@ loglikelihood_hbd = function(	tree,
 	if(is.null(age_grid) || (length(age_grid)==0) || (length(age_grid)==1)){
 		if(PDR_based){
 			if(length(PDR)!=1) return(list(success = FALSE, error = sprintf("Invalid number of PDR; since no non-trivial age grid was provided, you must provide a single (constant) PDR")))
+		}else if(PSR_based){
+			if(length(PSR)!=1) return(list(success = FALSE, error = sprintf("Invalid number of PSR; since no non-trivial age grid was provided, you must provide a single (constant) PDR")))
 		}else{
 			if(length(lambda)!=1) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since no non-trivial age grid was provided, you must provide a single (constant) lambda")))
 			if(length(mu)!=1) return(list(success = FALSE, error = sprintf("Invalid number of mu; since no non-trivial age grid was provided, you must provide a single (constant) mu")))
@@ -60,6 +73,8 @@ loglikelihood_hbd = function(	tree,
 		age_grid = seq(from=0,to=oldest_age,length.out=NG)
 		if(PDR_based){
 			PDR = rep(PDR,times=NG);
+		}else if(PSR_based){
+			PSR = rep(PSR,times=NG);
 		}else{
 			lambda = rep(lambda,times=NG);
 			mu = rep(mu,times=NG);
@@ -70,6 +85,9 @@ loglikelihood_hbd = function(	tree,
 		if(PDR_based){
 			if((length(PDR)!=1) && (length(PDR)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of PDR (%d); since an age grid of size %d was provided, you must either provide one or %d PDR",length(PDR),NG,NG)));
 			if(length(PDR)==1) PDR = rep(PDR,times=NG);
+		}else if(PSR_based){
+			if((length(PSR)!=1) && (length(PSR)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of PSR (%d); since an age grid of size %d was provided, you must either provide one or %d PSR",length(PSR),NG,NG)));
+			if(length(PSR)==1) PSR = rep(PSR,times=NG);
 		}else{
 			if((length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda (%d); since an age grid of size %d was provided, you must either provide one or %d lambda",length(lambda),NG,NG)));
 			if((length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu (%d); since an age grid of size %d was provided, you must either provide one or %d mu",length(mu),NG,NG)));
@@ -81,17 +99,26 @@ loglikelihood_hbd = function(	tree,
 		
 	# calculate log-likelihood
 	if(PDR_based){
-		results = get_HBD_class_loglikelihood_CPP(	branching_ages		= sorted_node_ages, # provided branching ages must be in ascending order
-													oldest_age			= oldest_age,
-													rholambda0 			= rholambda0,
-													age_grid 			= age_grid,
-													PDRs 				= PDR,
-													splines_degree		= splines_degree,
-													condition			= condition,
-													relative_dt			= relative_dt,
-													runtime_out_seconds	= 0);
+		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+												oldest_age			= oldest_age,
+												rholambda0 			= rholambda0,
+												age_grid 			= age_grid,
+												PDRs 				= PDR,
+												splines_degree		= splines_degree,
+												condition			= condition,
+												relative_dt			= relative_dt,
+												runtime_out_seconds	= 0);
+	}else if(PSR_based){
+		results = get_HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+												oldest_age			= oldest_age,
+												age_grid 			= age_grid,
+												PSRs 				= PSR,
+												splines_degree		= splines_degree,
+												condition			= condition,
+												relative_dt			= relative_dt,
+												runtime_out_seconds	= 0);
 	}else{
-		results = get_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages, # provided branching ages must be in ascending order
+		results = get_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
 													oldest_age			= oldest_age,
 													rarefaction			= rho,
 													age_grid 			= age_grid,

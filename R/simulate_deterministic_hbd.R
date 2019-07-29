@@ -40,6 +40,7 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 		NG 			= 2;
 		age_grid	= seq(from=0,to=oldest_age,length.out=NG)
 		if(!is.null(lambda)) lambda = rep(lambda,times=NG);
+		if(!is.null(PDR)) PDR = rep(PDR,times=NG);
 		if(!is.null(mu)) mu = rep(mu,times=NG);
 		if(!is.null(mu_over_lambda)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}else{
@@ -49,6 +50,7 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 		if((!is.null(mu)) && (length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since an age grid of size %d was provided, you must either provide one or %d mu",NG,NG)))
 		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)!=1) && (length(mu_over_lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu_over_lambda; since an age grid of size %d was provided, you must either provide one or %d mu_over_lambda",NG,NG)))
 		if((!is.null(lambda)) && (length(lambda)==1)) lambda = rep(lambda,times=NG);
+		if((!is.null(PDR)) && (length(PDR)==1)) PDR = rep(PDR,times=NG);
 		if((!is.null(mu)) && (length(mu)==1)) mu = rep(mu,times=NG);
 		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)==1)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}
@@ -83,6 +85,7 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 				PND								= simulation$PND,				# pulled normalized diversity
 				SER								= rholambda0 - simulation$PDR, 	# shadow extinction rate
 				PER								= simulation$lambda0 - simulation$PDR, # pulled extinction rate
+				PSR								= simulation$lambda * (1-simulation$Pmissing), # pulled speciation rate
 				rholambda0						= rholambda0));
 }
 

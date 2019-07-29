@@ -5,6 +5,10 @@ dense_binary_matrix_row2column_major_CPP <- function(NR, NC, dense_rows, Rindexi
     .Call(`_castor_dense_binary_matrix_row2column_major_CPP`, NR, NC, dense_rows, Rindexing)
 }
 
+get_antiderivative_CPP <- function(Xgrid, Xstart, Ygrid, splines_degree, Xtarget) {
+    .Call(`_castor_get_antiderivative_CPP`, Xgrid, Xstart, Ygrid, splines_degree, Xtarget)
+}
+
 exponentiate_matrix_for_multiple_scalings_CPP <- function(NR, A, scalings, epsilon, NPmin, NPmax, enforce_probability_matrix) {
     .Call(`_castor_exponentiate_matrix_for_multiple_scalings_CPP`, NR, A, scalings, epsilon, NPmin, NPmax, enforce_probability_matrix)
 }
@@ -301,8 +305,12 @@ get_HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefact
     .Call(`_castor_get_HBD_model_loglikelihood_CPP`, branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds)
 }
 
-get_HBD_class_loglikelihood_CPP <- function(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds) {
-    .Call(`_castor_get_HBD_class_loglikelihood_CPP`, branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds)
+get_HBD_PDR_loglikelihood_CPP <- function(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds) {
+    .Call(`_castor_get_HBD_PDR_loglikelihood_CPP`, branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds)
+}
+
+get_HBD_PSR_loglikelihood_CPP <- function(branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds) {
+    .Call(`_castor_get_HBD_PSR_loglikelihood_CPP`, branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds)
 }
 
 simulate_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations) {

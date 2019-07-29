@@ -1,34 +1,34 @@
-\name{fit_hbd_class_parametric}
-\alias{fit_hbd_class_parametric}
+\name{fit_hbd_pdr_parametric}
+\alias{fit_hbd_pdr_parametric}
 \title{
-Fit a parametric homogenous birth-death model congruence class to a timetree.
+Fit parameterized pulled diversification rates of birth-death models.
 }
 \description{
-Given an ultrametric timetree, estimate the congruence class of homogenous birth-death (HBD) models that best explains the tree via maximum likelihood, assuming that the pulled diversification rate (PDR) is given as a parameterized function of time before present. Every HBD model is defined by some speciation and extinction rates (\eqn{\lambda} and \eqn{\mu}) over time, as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled). ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates. For any given HBD model there exists an infinite number of alternative HBD models that predict the same deterministic lineages-through-time curve and yield the same likelihood for any given reconstructed timetree; these ``congruent'' models cannot be distinguished from one another solely based on the tree. 
+Given an ultrametric timetree, estimate the pulled diversification rate (PDR) of homogenous birth-death (HBD) models that best explains the tree via maximum likelihood, assuming that the PDR is given as a parameterized function of time before present. Every HBD model is defined by some speciation and extinction rates (\eqn{\lambda} and \eqn{\mu}) over time, as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled). ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates. For any given HBD model there exists an infinite number of alternative HBD models that predict the same deterministic lineages-through-time curve and yield the same likelihood for any given reconstructed timetree; these ``congruent'' models cannot be distinguished from one another solely based on the tree. 
 
 Each congruence class is uniquely described by its PDR, defined as \eqn{PDR=\lambda-\mu+\lambda^{-1}d\lambda/d\tau} (where \eqn{\tau} is time before present) as well as the product \eqn{\rho\lambda_o} (where \eqn{\lambda_o} is the present-day speciation rate). That is, two HBD models are congruent if and only if they have the same PDR and the same product \eqn{\rho\lambda_o}. This function is designed to estimate the generating congruence class for the tree, by fitting a finite number of parameters defining the PDR and \eqn{\rho\lambda_o}.
 }
 \usage{
-fit_hbd_class_parametric( tree, 
-                          param_values,
-                          param_guess       = NULL,
-                          param_min         = -Inf,
-                          param_max         = +Inf,
-                          param_scale       = NULL,
-                          oldest_age        = NULL,
-                          PDR,
-                          rholambda0,
-                          age_grid          = NULL,
-                          condition         = "stem",
-                          relative_dt       = 1e-3,
-                          Ntrials           = 1,
-                          Nthreads          = 1,
-                          max_model_runtime = NULL,
-                          fit_control       = list())
+fit_hbd_pdr_parametric(   tree, 
+						  param_values,
+						  param_guess       = NULL,
+						  param_min         = -Inf,
+						  param_max         = +Inf,
+						  param_scale       = NULL,
+						  oldest_age        = NULL,
+						  PDR,
+						  rholambda0,
+						  age_grid          = NULL,
+						  condition         = "stem",
+						  relative_dt       = 1e-3,
+						  Ntrials           = 1,
+						  Nthreads          = 1,
+						  max_model_runtime = NULL,
+						  fit_control       = list())
 }
 \arguments{
 \item{tree}{
-An ultrametric timetree of class "phylo", representing the time-calibrated reconstructed phylogeny of a set of extant species.
+An ultrametric timetree of class "phylo", representing the time-calibrated phylogeny of a set of extant species.
 }
 \item{param_values}{
 Numeric vector, specifying fixed values for a some or all model parameters. For fitted (i.e., non-fixed) parameters, use \code{NaN} or \code{NA}. For example, the vector \code{c(1.5,NA,40)} specifies that the 1st and 3rd model parameters are fixed at the values 1.5 and 40, respectively, while the 2nd parameter is to be fitted. The length of this vector defines the total number of model parameters. If entries in this vector are named, the names are taken as parameter names. Names should be included if you'd like returned parameter vectors to have named entries, or if the functions \code{PDR} or \code{rho} query parameter values by name (as opposed to numeric index).
@@ -82,7 +82,7 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 \details{
 This function is designed to estimate a finite set of scalar parameters (\eqn{p_1,..,p_n\in\R}) that determine the PDR and the product \eqn{\rho\lambda_o} (sampling fraction times present-dat extinction rate), by maximizing the likelihood of observing a given timetree under the HBD model. For example, the investigator may assume that the PDR varies exponentially over time, i.e. can be described by \eqn{PDR(t)=A\cdot e^{-B t}} (where \eqn{A} and \eqn{B} are unknown coefficients and \eqn{t} is time before present), and that the product \eqn{\rho\lambda_o} is unknown. In this case the model has 3 free parameters, \eqn{p_1=A}, \eqn{p_2=B} and \eqn{p_3=\rho\lambda_o}, each of which may be fitted to the tree.
 
-It is generally advised to provide as much information to the function \code{fit_hbd_class_parametric} as possible, including reasonable lower and upper bounds (\code{param_min} and \code{param_max}), a reasonable parameter guess (\code{param_guess}) and reasonable parameter scales \code{param_scale}. If some model parameters can vary over multiple orders of magnitude, it is advised to transform them so that they vary across fewer orders of magnitude (e.g., via log-transformation). It is also important that the \code{age_grid} is sufficiently fine to capture the variation of the PDR over time, since the likelihood is calculated under the assumption that both vary linearly between grid points.
+It is generally advised to provide as much information to the function \code{fit_hbd_pdr_parametric} as possible, including reasonable lower and upper bounds (\code{param_min} and \code{param_max}), a reasonable parameter guess (\code{param_guess}) and reasonable parameter scales \code{param_scale}. If some model parameters can vary over multiple orders of magnitude, it is advised to transform them so that they vary across fewer orders of magnitude (e.g., via log-transformation). It is also important that the \code{age_grid} is sufficiently fine to capture the variation of the PDR over time, since the likelihood is calculated under the assumption that both vary linearly between grid points.
 }
 
 
@@ -141,7 +141,7 @@ S. Louca et al. (2018). Bacterial diversification through geological time. Natur
 
 \code{\link{fit_hbd_model_parametric}}
 
-\code{\link{fit_hbd_class_on_grid}}
+\code{\link{fit_hbd_pdr_on_grid}}
 }
 
 \examples{
@@ -177,7 +177,7 @@ age_grid = seq(from=0,to=100,by=0.01)
 # Perform fitting
 # Lets suppose extinction rates are already known
 cat(sprintf("Fitting class to tree..\n"))
-fit = fit_hbd_class_parametric(	tree, 
+fit = fit_hbd_pdr_parametric(	tree, 
                       param_values  = c(A=NA, B=NA, rholambda0=NA),
                       param_guess   = c(1,0,1),
                       param_min     = c(-10,-10,0),

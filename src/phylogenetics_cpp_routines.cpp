@@ -1492,7 +1492,7 @@ void get_antiderivative(const std::vector<double> 		&X,			// (INPUT) 1D array of
 template<class VALUE_TYPE>
 void get_antiderivative(const std::vector<double> 		&X,				// (INPUT) 1D array of size N, listing x-values in ascending order
 						const double					&Xstart,		// (INPUT) lower end of the integration, i.e. x-value where antiderivative is set to zero
-						const std::vector<VALUE_TYPE> 	&Y,				// (INPUT) 1D array of size N, listing y-values in ascending order
+						const std::vector<VALUE_TYPE> 	&Y,				// (INPUT) 1D array of size N, listing y-values defined on the x-grid
 						std::vector<VALUE_TYPE>			&A,				// (OUTPUT) 1D array of size N, listing the computed antiderivative on the same x-grid
 						std::vector<VALUE_TYPE>			&Acoeff){		// (OUTPUT) 2D array of size N x 3 in row-major format, listing the polynomial coefficients (a0,a1,a2) of the antiderivative in each grid-interval. Hence, for X[i]<=x<=X[i+1] one has A(x) = Acoeff[i*3+0] + Acoeff[i*3+1]*x + Acoeff[i*3+2]*x^2.
 	const long N = X.size();
@@ -1578,6 +1578,32 @@ void get_antiderivative(const std::vector<double> 		&X,				// (INPUT) 1D array o
 	}
 }
 
+
+
+// given a scalar function defined as a splines on a 1D x-grid, calculate its antiderivative at some target x-values
+// [[Rcpp::export]]
+NumericVector get_antiderivative_CPP(	const std::vector<double> 	&Xgrid,			// (INPUT) 1D array of size NG, listing X values in ascending order
+										const double  		 		Xstart,			// (INPUT) X value at which the antiderivative should be zero
+										const std::vector<double> 	&Ygrid,			// (INPUT) 1D array of size NG, listing Y values on the X grid
+										const long			 		splines_degree,	// (INPUT) integer, either 0,1,2 or 3, specifying the polynomial degree of the function Y=Y(X) at each grid interval
+										const std::vector<double> 	&Xtarget){		// (INPUT) 1D array of size NT, listing target x-values on which to evaluate the antiderivativative
+	// get splines representation Y
+	dvector Ycoeff;
+	get_spline(Xgrid, Ygrid, splines_degree, Ycoeff);
+
+	// calculate antiderivative as a piecewise polynomial function
+	dvector Agrid, Acoeff;
+	const long Adegree = splines_degree+1;
+	get_antiderivative(Xgrid, Xstart, splines_degree, Ycoeff, Agrid, Acoeff);
+	
+	NumericVector Atarget(Xtarget.size());
+	for(long t=0, g=0; t<Xtarget.size(); ++t){
+		g = (Xtarget[t]<=Xgrid[0] ? 0 : find_next_left_grid_point(Xgrid, Xtarget[t], g)); // determine grid point to the immediate left of target x
+		Atarget[t] = polynomial_value(Adegree,&Acoeff[g*(Adegree+1)],Xtarget[t]);
+	}
+	
+	return Atarget;
+}
 
 
 
@@ -5233,6 +5259,26 @@ void refine_spline(	const long					degree,
 		for(long d=0; d<=degree; ++d){
 			newCoeff[ng*(degree+1)+d] = oldCoeff[og*(degree+1)+d];
 		}	
+	}
+}
+
+
+// redefine a splines curve on a new (refined) time-grid, by copying polynomial coefficients onto any added grid points
+// strictly speaking the function works even when the new time grid is not a refined version (i.e. a superset) of the old grid, however the result may not satisfy the continuity assumptions of splines anymore
+void refine_spline(	const long					degree,
+					const std::vector<double> 	&oldTimes,		// (INPUT) 1D array of size N
+					const std::vector<double> 	&oldCoeff,		// (INPUT) 2D array of size N x (degree+1), listing polynomial coefficients of the splines on the grid intervals
+					const std::vector<double>	&newTimes,		// (INPUT) 1D array of size NR, listing new times on which to redefine splines
+					std::vector<double>			&newCoeff,		// (OUTPUT) 2D array of size NR x (degree+1), listing the polynomial coefficients on the new grid
+					std::vector<double>			&newValues){	// (OUTPUT) 1D array of size NR, listing the values on the refined grid
+	newCoeff.resize(newTimes.size()*(degree+1));
+	newValues.resize(newTimes.size(),0.0);
+	for(long ng=0, og=0; ng<newTimes.size(); ++ng){
+		og = find_next_left_grid_point(oldTimes, newTimes[ng], og); // find old grid point to the immediate left of the new grid point ng
+		for(long d=0; d<=degree; ++d){
+			newCoeff[ng*(degree+1)+d] = oldCoeff[og*(degree+1)+d];
+			newValues[ng] += newCoeff[ng*(degree+1)+d]*pow(newTimes[ng],double(d));
+		}
 	}
 }
 
@@ -17671,6 +17717,39 @@ public:
 
 
 
+// solve 2nd-order Bernoulli equation of order:
+// dY/dt = P(t)*Y + Q(t)*Y^2
+void aux_solve_Bernoulli_ODE2(	const dvector	&times,		// (INPUT) 1D vector of size NT, listing times in ascending order
+								const long		Pdegree,	// (INPUT) polynomial degree of function P
+								const dvector	&Pcoeff,	// (INPUT) 2D array of size NT x Pdegree, listing polynomial coefficients of function P
+								const long 		Qdegree,	// (INPUT) polynomial degree of function Q
+								const dvector	&Qcoeff,	// (INPUT) 2D array of size NT x Qdegree, listing polynomial coefficients of function Q
+								const double	time0,		// (INPUT) start time, i.e. when Y0 is given
+								const double	Y0,			// (INPUT) initial condition of Y at time0
+								dvector			&Y){		// (OUTPUT) 1D array of size NT, listing the solution Y at times[]
+	const long NT = times.size();
+	// calculate A(t):=int_0^t P(s) ds
+	const long Adegree = Pdegree+1; // polynomial order of A(s) between age-intervals
+	dvector A, Acoeff;
+	get_antiderivative(times, time0, Pdegree, Pcoeff, A, Acoeff);
+	
+	// approximate E:=exp(A) as a piecewise quadratic function
+	const long Edegree = 2;
+	dvector Ecoeff;
+	quadratic_approximation_of_piecewise_exp_polynomial(times, Adegree, Acoeff, Ecoeff);
+	
+	// calculate I(t):=int_0^t E(s) ds
+	dvector I, Icoeff;
+	get_antiderivative(times, time0, Edegree, Ecoeff, I, Icoeff);
+	
+	// calculate solution Y
+	// Y(t) = Y0*exp(A(t))/(1 - Q(t)*Y0*I(t)
+	Y.resize(NT);
+	for(long t=0; t<NT; ++t){
+		Y[t] = Y0*exp(polynomial_value(Adegree, &Acoeff[t*(Adegree+1)+0], times[t]))/(1 - Y0*polynomial_value(Qdegree, &Qcoeff[t*(Qdegree+1)+0], times[t])*I[t]);
+	}
+}
+
 
 // Calculate various deterministic features of a homogenous birth-death (HBD) model
 // Two HBD models are defined as being "equivalent" iff they have the same deterministic LTT
@@ -17689,13 +17768,14 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 												const std::vector<double>	mu_over_lambda,		// (INPUT) 1D array of size NG, listing the ratio between mus and lambdas. Either mus or mu_over_lambda must be provided.
 												const std::vector<double>	&PDRs,				// (INPUT) optional 1D array of size NG, listing pulled diversification rates (PDRs) on the age-grid. Only needed if lambdas[] is empty; if both PDRs[] and lambdas[] are provided, their consistency is NOT verified and both are used as-is.
 												double						lambda0,			// (INPUT) present-day speciation rate (i.e. at age 0). Only needed if lambdas[] is empty. If both lambdas[] and lambda0 are provided, lambda0 is re-calculated from the provided lambdas.
-												const long					splines_degree,		// (INPUT) either 1 or 2, specifying the degree of the splines defined by the lambdas, mus and PDRs on the age grid.
+												const long					splines_degree,		// (INPUT) either 1, 2 or 3, specifying the degree of the splines defined by the lambdas, mus and PDRs on the age grid.
 												const double				relative_dt){		// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 	if((oldest_age<age_grid[0]) || (oldest_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies outside of the provided age_grid");
 	const bool got_lambdas 	= (!lambdas.empty());
 	const bool got_PDRs		= (!PDRs.empty());
 	const bool got_mus		= (!mus.empty());
 	const double age0 		= 0;
+	const double age_span 	= age_grid.back()-age_grid[0];
 	if((!got_lambdas) && ((!got_PDRs) || isnan(lambda0))) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Insufficient information; requiring either lambdas or PDRs & lambda0");
 		
 	// refine age_grid as needed, based on the variation in the diversification_rates or PDRs profile
@@ -17714,7 +17794,6 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 		}
 		double mean_turnover_rate = vector_mean(lambdas) + vector_mean(coarse_mus);
 		dvector coarse_diversification_rates = lambdas; coarse_diversification_rates -= mus;
-		const double age_span = age_grid.back()-age_grid[0];
 		
 		// get spline representations of lambda & mu & diversification
 		dvector coarse_lambda_coeff, coarse_mu_coeff, coarse_diversification_coeff;
@@ -17739,16 +17818,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 		NT = refined_age_grid.size();
 		
 		// redefine lambda & mu splines on refined time grid
-		refine_spline(lambda_degree, age_grid, coarse_lambda_coeff, refined_age_grid, refined_lambda_coeff);
-		refine_spline(mu_degree, age_grid, coarse_mu_coeff, refined_age_grid, refined_mu_coeff);
-		
-		// evaluate lambda & mu on refined grid
-		refined_lambdas.resize(NT);
-		refined_mus.resize(NT);
-		for(long t=0; t<NT; ++t){
-			refined_lambdas[t] = polynomial_value(lambda_degree, &refined_lambda_coeff[t*(lambda_degree+1)+0], refined_age_grid[t]);
-			refined_mus[t] = polynomial_value(mu_degree, &refined_mu_coeff[t*(mu_degree+1)+0], refined_age_grid[t]);
-		}
+		refine_spline(lambda_degree, age_grid, coarse_lambda_coeff, refined_age_grid, refined_lambda_coeff, refined_lambdas);
+		refine_spline(mu_degree, age_grid, coarse_mu_coeff, refined_age_grid, refined_mu_coeff, refined_mus);
 
 		// calculate PDRs from lambdas & mus
 		refined_PDRs.resize(NT);
@@ -17771,99 +17842,96 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 
 	}else{
 		// start with provided PDRs & mus (or mu_over_lambda)
-		HBDThetaModel theta_model;
-		dvector coarse_mu_coeff, coarse_PDR_coeff, coarse_mu_over_lambda_coeff;
-		get_spline(age_grid, PDRs, splines_degree, coarse_PDR_coeff); // get spline representations of PDR
+		// in both cases lambda can be represented as the solution to dlambda/dtau = P*lambda + Q*lambda^2, for appropriate P and Q
+
+		// get spline representations of PDR
+		dvector coarse_PDR_coeff;
+		get_spline(age_grid, PDRs, splines_degree, coarse_PDR_coeff);
+
+		// refine time grid based on provided PDR
+		dvector refined_PDR_coeff;
+		const double mean_turnover_rate = vector_abs_mean(PDRs) + (got_mus ? vector_abs_mean(mus) : 0.0) + lambda0;
+		refine_spline(	splines_degree,
+						age_grid,
+						coarse_PDR_coeff,
+						0,
+						oldest_age,
+						max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),	// max_time_step
+						0.01*vector_abs_mean(PDRs),												// max_value_step
+						0.01, 																	// max_relative_value_step
+						refined_age_grid,
+						refined_PDR_coeff);
+		NT = refined_age_grid.size();
+		
+		// evaluate PDR on refined grid
+		refined_PDRs.resize(NT);
+		for(long t=0; t<NT; ++t){
+			refined_PDRs[t] = polynomial_value(splines_degree, &refined_PDR_coeff[t*(splines_degree+1)+0], refined_age_grid[t]);
+		}
+
 		if(got_mus){
 			// calculate lambda from PDR & mu
-			get_spline(age_grid, mus, splines_degree, coarse_mu_coeff); // get spline representations of mu
-				
-			// calculate lambdas from the provided PDRs and mus
-			// we do this by solving the ODE for the auxiliary variable, theta:=ln(lambda/lambda(0))
-			theta_model.X0				= lambda0;
-			theta_model.intercept		= PiecewisePolynomial<double>(age_grid, coarse_PDR_coeff+coarse_mu_coeff, splines_degree, 0, 0);
-			theta_model.factor.set_to_constant(-1);
-			const double turnover_rate 	= vector_abs_mean(PDRs) + vector_mean(mus);
-			const double default_dt		= max(1e-9*oldest_age,min(0.1*oldest_age,relative_dt/theta_model.estimate_max_rate_of_change()));
-			string warningMessage;
-			const bool success = RungeKutta2<double,HBDThetaModel,ProgressReporter>
-										(age0,		// start age
-										oldest_age, // end age
-										default_dt,	// default integration time step
-										theta_model,
-										1e-8*oldest_age,	// minRecordingTimeStep
-										min(0.1*oldest_age,relative_dt/turnover_rate),	// maxRecordingTimeStep
-										0.01, 		// recordingRelValueStep
-										2,			// maxTimeStepRefinements
-										2, 			// refinement_factor
-										ProgressReporter(true),
-										0,			// runtime_out_seconds,
-										warningMessage);
-			if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate lambdas from PDR and mu: "+warningMessage); // simulation failed
+
+			// get spline representations of mu
+			dvector coarse_mu_coeff;
+			get_spline(age_grid, mus, splines_degree, coarse_mu_coeff);
+			
+			// redefine mu splines on refined time grid
+			mu_degree = splines_degree;
+			refine_spline(splines_degree, age_grid, coarse_mu_coeff, refined_age_grid, refined_mu_coeff, refined_mus);
+						
+			// calculate lambda
+			dvector Qcoeff(NT,-1);
+			aux_solve_Bernoulli_ODE2(	refined_age_grid,	
+										splines_degree,			
+										refined_PDR_coeff+refined_mu_coeff,
+										0, // Qdegree
+										Qcoeff,
+										age0,
+										lambda0,
+										refined_lambdas);
+	
 		}else{
 			// calculate lambda from PDR & mu_over_lambda
-			get_spline(age_grid, mu_over_lambda, splines_degree, coarse_mu_over_lambda_coeff); // get spline representations of mu_over_lambda
 
-			// calculate lambda from the provided PDRs and mu_over_lambda
-			// we do this by solving the ODE for the auxiliary variable, theta:=ln(mu/mu(0))
-			theta_model.X0				= lambda0;
-			theta_model.intercept		= PiecewisePolynomial<double>(age_grid, coarse_PDR_coeff, splines_degree, 0, 0);
-			theta_model.factor			= PiecewisePolynomial<double>(age_grid, coarse_mu_over_lambda_coeff, splines_degree, 0, 0); 
-			theta_model.factor.add(-1);
-			const double turnover_rate 	= vector_abs_mean(PDRs);
-			const double default_dt		= max(1e-9*oldest_age,min(0.1*oldest_age,relative_dt/theta_model.estimate_max_rate_of_change()));
-			string warningMessage;
-			const bool success = RungeKutta2<double,HBDThetaModel,ProgressReporter>
-										(age0,		// start age
-										oldest_age, // end age
-										default_dt,	// default integration time step
-										theta_model,
-										1e-8*oldest_age,	// minRecordingTimeStep
-										min(0.1*oldest_age,relative_dt/turnover_rate),	// maxRecordingTimeStep
-										0.01, 		// recordingRelValueStep
-										2,			// maxTimeStepRefinements
-										2, 			// refinement_factor
-										ProgressReporter(true),
-										0,			// runtime_out_seconds,
-										warningMessage);
-			if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate lambdas from PDR and mu_over_lambda: "+warningMessage); // simulation failed
-		}
-		dvector computed_lambdas(theta_model.ages.size());
-		for(long t=0; t<theta_model.ages.size(); ++t) computed_lambdas[t] = lambda0*exp(theta_model.trajectory[t]);
-	
-		// further refine age grid (from the theta-ODE solver) if needed
-		const double turnover_rate 	= vector_abs_mean(PDRs) + vector_mean(computed_lambdas);
-		refine_time_series_linear(	theta_model.ages,
-									computed_lambdas,
-									0,
-									INFTY_D,
-									max(1e-8*oldest_age,min(0.1*oldest_age,relative_dt/turnover_rate)),	// max_time_step
-									0.01*vector_mean(computed_lambdas),									// max_value_step
-									0.01, 																// max_relative_value_step
-									refined_age_grid,
-									refined_lambdas);
-		NT = refined_age_grid.size();
+			// get spline representations of mu_over_lambda
+			dvector coarse_mu_over_lambda_coeff;
+			get_spline(age_grid, mu_over_lambda, splines_degree, coarse_mu_over_lambda_coeff);
+			
+			// redefine mu_over_lambda splines on refined time grid
+			dvector refined_mu_over_lambda_coeff;
+			refine_spline(splines_degree, age_grid, coarse_mu_over_lambda_coeff, refined_age_grid, refined_mu_over_lambda_coeff);
 
-		// evaluate PDRs & mus on new grid
-		refined_PDRs.resize(NT);
-		refined_mus.resize(NT);
-		for(long t=0, g=0; t<NT; ++t){
-			g = find_next_left_grid_point(age_grid, refined_age_grid[t], g); // determine age_grid point to the immediate left of refined_age_grid[t]
-			refined_PDRs[t] = polynomial_value(splines_degree, &coarse_PDR_coeff[g*(splines_degree+1)+0], refined_age_grid[t]);
-			if(got_mus){
-				refined_mus[t] = polynomial_value(splines_degree, &coarse_mu_coeff[g*(splines_degree+1)+0], refined_age_grid[t]);
-			}else{
+			// calculate lambda
+			dvector Qcoeff = refined_mu_over_lambda_coeff;
+			for(long t=0; t<NT; ++t){ Qcoeff[t*(splines_degree+1)+0] -= 1; }
+			aux_solve_Bernoulli_ODE2(	refined_age_grid,	
+										splines_degree,			
+										refined_PDR_coeff,
+										splines_degree, // Qdegree
+										Qcoeff,
+										age0,
+										lambda0,
+										refined_lambdas);			
+
+			// calculate mus on new grid
+			refined_mus.resize(NT);
+			for(long t=0, g=0; t<NT; ++t){
+				g = find_next_left_grid_point(age_grid, refined_age_grid[t], g); // determine age_grid point to the immediate left of refined_age_grid[t]
 				refined_mus[t] = polynomial_value(splines_degree, &coarse_mu_over_lambda_coeff[g*(splines_degree+1)+0], refined_age_grid[t]) * refined_lambdas[t];
 			}
+
+			// construct splines representation of mu on refined grid
+			// since the grid is pretty fine, we can stick to splines degree 1 (i.e. piecewise linear)
+			mu_degree = 1;
+			get_spline(refined_age_grid, refined_mus, mu_degree, refined_mu_coeff);
 		}
-		
-		// construct splines representation of lambda, mu & diversification_rates on refined grid
+
+		// construct splines representation of lambda & diversification_rate on refined grid
 		// since the grid is pretty fine, we can stick to splines degree 1 (i.e. piecewise linear)
-		lambda_degree 			= 1;
-		mu_degree 				= 1;
-		diversification_degree 	= 1;
+		lambda_degree = 1;
+		diversification_degree = 1;
 		get_spline(refined_age_grid, refined_lambdas, lambda_degree, refined_lambda_coeff);
-		get_spline(refined_age_grid, refined_mus, mu_degree, refined_mu_coeff);
 		refined_diversification_rates = refined_lambdas; refined_diversification_rates -= refined_mus;
 		get_spline(refined_age_grid, refined_diversification_rates, diversification_degree, refined_diversification_coeff);		
 	}
@@ -17886,14 +17954,14 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 	}
 
 	// calculate the antiderivative R(u):=int_0^u dx [lambda(x)-mu(x)]
-	const long Rorder = diversification_degree+1; // polynomial order of R(s) between age-intervals
+	const long Rdegree = diversification_degree+1; // polynomial order of R(s) between age-intervals
 	std::vector<double> R, Rcoeff;
 	get_antiderivative(refined_age_grid, age0, diversification_degree, refined_diversification_coeff, R, Rcoeff);
 				
 	// approximate E(s):=exp(R(s)) as a quadratic function of s
-	const long Eorder = 2;
+	const long Edegree = 2;
 	std::vector<double> Ecoeff;
-	quadratic_approximation_of_piecewise_exp_polynomial(refined_age_grid, Rorder, Rcoeff, Ecoeff);
+	quadratic_approximation_of_piecewise_exp_polynomial(refined_age_grid, Rdegree, Rcoeff, Ecoeff);
 
 	// calculate the deterministic total diversity N(t) = N(0)*exp(-R(t))
 	std::vector<double> total_diversity(NT);
@@ -17914,13 +17982,13 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 	}
 
 	// calculate the product I(s):=exp(R(s))*lambda(s) as a piecewise polynomial
-	long Iorder;
+	long Idegree;
 	std::vector<double> Icoeff; 
-	multiply_piecewise_polynomials(NT, Eorder,	Ecoeff, lambda_degree, refined_lambda_coeff, Iorder, Icoeff);
+	multiply_piecewise_polynomials(NT, Edegree,	Ecoeff, lambda_degree, refined_lambda_coeff, Idegree, Icoeff);
 		
 	// calculate the antiderivative L(s):=int_0^s I(u) du, as a piecewise polynomial
 	std::vector<double> L, Lcoeff;
-	get_antiderivative(refined_age_grid, age0, Iorder, Icoeff, L, Lcoeff);
+	get_antiderivative(refined_age_grid, age0, Idegree, Icoeff, L, Lcoeff);
 	
 	// calculate the probability of a lineage missing from the tree, Pmissing
 	// Formula taken from: [Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332]
@@ -18095,14 +18163,14 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 
 
 
-// calculate the likelihood of an ultrametric timetree (with specific branching ages) under a homogenous-birth-death (HBD) model
+// calculate the likelihood of an ultrametric timetree (with specific branching ages) under a homogenous-birth-death (HBD) model class, based on the class's pulled diversification rate and the product rho*lambda(0)
 // The model class is defined by the pulled diversification rates (PDRs, r_p) over time, and the factor rho*lambda(0)
 // Note that under such a model the likelihood only depends on the branching ages (i.e. the age of each branching event in the timetree), but not on the precise tree structure.
 // The caller must specify the PDR at each time point in the past by means of a spline function (i.e. a set of ascending ages & corresponding values).
 // Literature:
 // 	 [Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332]
 // [[Rcpp::export]]
-Rcpp::List get_HBD_class_loglikelihood_CPP(	const std::vector<double>	&branching_ages,		// (INPUT) 1D array, listing branching ages (= node ages, but accounting for multiplicities in the case of mono- or multi-furcations) in ascending order, with branching_ages.last() being the root_age. The list of branching_ages must include all branching events in the tree, even if oldest_age (see next option) is less than the root_age.
+Rcpp::List get_HBD_PDR_loglikelihood_CPP(	const std::vector<double>	&branching_ages,		// (INPUT) 1D array, listing branching ages (= node ages, but accounting for multiplicities in the case of mono- or multi-furcations) in ascending order, with branching_ages.last() being the root_age. The list of branching_ages must include all branching events in the tree, even if oldest_age (see next option) is less than the root_age.
 											const double				oldest_age,				// (INPUT) maximum age to consider, i.e. consider only branching events within ages [0:oldest_age]. If this is less than the root_age, then the tree is considered to be "cut" at oldest_age into multiple sub-trees, and the likelihood is calculated as if each sub-tree is an independent realization of the same model. If this is the stem age (i.e. >root_age), the assumption is that all extant descendands of the stem lineage have been sampled (or subsampled) at equal probabilities. This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
 											const double				rholambda0,				// (INPUT) rho*lambda(0), i.e the product of the rarefaction (subsampling fraction) and the present-day birth rate
 											const std::vector<double>	&age_grid,				// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided rp_rates will be defined on this age grid. This age grid must cover at least the range [0,oldest_age].
@@ -18138,26 +18206,28 @@ Rcpp::List get_HBD_class_loglikelihood_CPP(	const std::vector<double>	&branching
 					0.01, 																	// max_relative_value_step
 					refined_age_grid,
 					refined_PDR_coeff);	
-	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted node traversal because the maximum allowed runtime was reached");
+	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted grid refinement because the maximum allowed runtime was reached");
 
 	// calculate the antiderivative Rp(u):=int_0^u PDR(u) dx
 	const long RPdegree = PDR_degree+1; // polynomial degree of Rp(s) between age-intervals
 	std::vector<double> RP, RPcoeff;
 	get_antiderivative(refined_age_grid, age0, PDR_degree, refined_PDR_coeff, RP, RPcoeff);
-	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted node traversal because the maximum allowed runtime was reached");
+	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted calculation of Rp because the maximum allowed runtime was reached");
 
 	// approximate E(s):=exp(Rp(s)) as a quadratic function of s
 	const long EPdegree = 2;
 	std::vector<double> EPcoeff;
 	quadratic_approximation_of_piecewise_exp_polynomial(refined_age_grid, RPdegree, RPcoeff, EPcoeff);
-	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted node traversal because the maximum allowed runtime was reached");
+	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted approximation of exp(Rp) because the maximum allowed runtime was reached");
 
-	// calculate the antiderivative L(s):=int_0^s exp(RP(u)) du, as a piecewise polynomial
+	// calculate the antiderivative LP(s):=int_0^s exp(RP(u)) du, as a piecewise polynomial
 	const long LPdegree = EPdegree+1;
 	std::vector<double> LP, LPcoeff;
 	get_antiderivative(refined_age_grid, age0, EPdegree, EPcoeff, LP, LPcoeff);
-	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted node traversal because the maximum allowed runtime was reached");
+	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted integration of exp(Rp) because the maximum allowed runtime was reached");
 	
+	
+	/* OLD CODE. TO BE DELETED
 	// calculate the relative slope of the LTT, nu:=(1/LTT)*dLTT/dage, at oldest_age
 	// we do this by solving the ODE for the auxiliary variable, zeta:=ln(nu/nu(0))
 	HBDZetaModel zeta_model;
@@ -18180,6 +18250,7 @@ Rcpp::List get_HBD_class_loglikelihood_CPP(	const std::vector<double>	&branching
 								warningMessage);
 	if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate LTT slope: "+warningMessage); // simulation failed
 	const double oldest_zeta = zeta_model.trajectory.back();
+	*/
 	
 	// determine number of sub-trees if oldest_age < root_age
 	// node that branching_ages are assumed to be sorted in ascending degree
@@ -18195,7 +18266,7 @@ Rcpp::List get_HBD_class_loglikelihood_CPP(	const std::vector<double>	&branching
 	
 	// calculate log-likelihood, iterating over all branching points that happened after oldest_age (i.e., ages<=oldest_age)
 	double branching_age, branching_RP, branching_LP;
-	double LL = (NB+1)*log(rholambda0);
+	double LL = NB*log(rholambda0);
 	long current_g = 0; // grid point to the immediate left of considered age
 	for(long b=0; b<NB; ++b){
 		branching_age 	= branching_ages[b];
@@ -18209,19 +18280,98 @@ Rcpp::List get_HBD_class_loglikelihood_CPP(	const std::vector<double>	&branching
 	
 	// incorporate information at oldest_age
 	// do so as many times as there are subtrees
+	// condition survival of stem or splitting of root + survival of daughter lineages
 	current_g 		= find_next_left_grid_point(refined_age_grid, oldest_age, current_g);
 	branching_RP	= polynomial_value(RPdegree,&RPcoeff[current_g*(RPdegree+1)],oldest_age);
-	branching_LP	= polynomial_value(LPdegree,&LPcoeff[current_g*(LPdegree+1)],oldest_age);
-	LL 				+= Nsubtrees * (branching_RP - 2*log(1 + rholambda0*branching_LP));	
-	
-	// condition survival of stem or splitting of root + survival of daughter lineages
-	// do so as many times as there are subtrees
+	branching_LP	= polynomial_value(LPdegree,&LPcoeff[current_g*(LPdegree+1)],oldest_age);	
 	if(condition=="stem"){
-		LL -= Nsubtrees * (oldest_zeta + log(rholambda0));
+		LL -= Nsubtrees * log(1 + rholambda0*branching_LP);
 	}else if(condition=="crown"){
-		LL -= Nsubtrees*2*(oldest_zeta + log(rholambda0));
+		LL -= Nsubtrees*(log(rholambda0) + branching_RP);
 	}else{
 		return NAN_D; // no-conditioning is not supported in this function, because the likelihood formula cannot be written purely in terms of the PDR and rholambda0
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("success") = true, 
+								Rcpp::Named("loglikelihood") = LL);
+}
+
+
+
+
+
+// calculate the likelihood of an ultrametric timetree (with specific branching ages) under a homogenous-birth-death (HBD) model class, based on the class's pulled speciation rate
+// The model class is defined by the pulled speciation rates (PDRs) over time
+// Note that under such a model the likelihood only depends on the branching ages (i.e. the age of each branching event in the timetree), but not on the precise tree structure.
+// The caller must specify the PSR at each time point in the past by means of a spline function (i.e. a set of ascending ages & corresponding values).
+// Literature:
+// 	 [Louca et al. (in review as of 2019). Molecular phylogenies are consistent with an infinite array of diversification histories]
+// [[Rcpp::export]]
+Rcpp::List get_HBD_PSR_loglikelihood_CPP(	const std::vector<double>	&branching_ages,		// (INPUT) 1D array, listing branching ages (= node ages, but accounting for multiplicities in the case of mono- or multi-furcations) in ascending order, with branching_ages.last() being the root_age. The list of branching_ages must include all branching events in the tree, even if oldest_age (see next option) is less than the root_age.
+											const double				oldest_age,				// (INPUT) maximum age to consider, i.e. consider only branching events within ages [0:oldest_age]. If this is less than the root_age, then the tree is considered to be "cut" at oldest_age into multiple sub-trees, and the likelihood is calculated as if each sub-tree is an independent realization of the same model. If this is the stem age (i.e. >root_age), the assumption is that all extant descendands of the stem lineage have been sampled (or subsampled) at equal probabilities. This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
+											const std::vector<double>	&age_grid,				// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided rp_rates will be defined on this age grid. This age grid must cover at least the range [0,oldest_age].
+											const std::vector<double>	&PSRs,					// (INPUT) 1D array of size NG, listing pulled speciation rates (PSR) on the age-grid.
+											const long					splines_degree,			// (INPUT) either 0,1,2 or 3, specifying the degree of the splines defined by the lambdas and mus on the age grid.										
+											const std::string			&condition,				// (INPUT) either "stem" or "crown", specifying whether to condition the likelihood on the survival of the stem group or the crown group. This is similar to the "cond" option in the R function RPANDA::likelihood_bd, except for the fact that here a conditioning (stem or crown) is required. Note that "crown" really only makes sense when oldest_age==root_age.
+											const double				relative_dt,			// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
+											const double				runtime_out_seconds){	// (INPUT) max allowed MuSSE integration runtime in seconds, per edge. If <=0, this option is ignored.				
+	const long NB = branching_ages.size();
+	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	const double age0 = 0;
+	
+	// basic error checking
+	if((NB==0) || age_grid.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Empty branching ages and/or empty age grid" );
+	if((age_grid[0]>age0) || (age_grid.back()<oldest_age)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "age_grid does not cover the entire timetree's domain" );
+	
+	// get splines representation of PSR
+	dvector PSR_coeff;
+	const long PSR_degree = splines_degree;
+	get_spline(age_grid, PSRs, PSR_degree, PSR_coeff);
+	
+	// calculate the antiderivative APSR(u):=int_0^u PSR(u) dx
+	const long APSR_degree = PSR_degree+1; // polynomial degree of APSR(s) between age-intervals
+	std::vector<double> APSR, APSR_coeff;
+	get_antiderivative(age_grid, age0, PSR_degree, PSR_coeff, APSR, APSR_coeff);
+	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted integration of PSR because the maximum allowed runtime was reached");
+	
+	// determine number of sub-trees if oldest_age < root_age
+	// node that branching_ages are assumed to be sorted in ascending degree
+	long Nsubtrees = 1;
+	for(long b=NB-1; b>=0; --b){
+		if(branching_ages[b]>oldest_age){
+			++Nsubtrees;
+		}else{
+			// remaining branchings occurred at or after oldest_age
+			break;
+		}
+	}
+	
+	// calculate log-likelihood, iterating over all branching points that happened after oldest_age (i.e., ages<=oldest_age)
+	double branching_age, branching_PSR, branching_APSR;
+	double LL = 0;
+	long current_g = 0; // grid point to the immediate left of considered age
+	for(long b=0; b<NB; ++b){
+		branching_age 	= branching_ages[b];
+		if(branching_age>oldest_age) break; // remaining branching points happened before the oldest_age
+		current_g		= find_next_left_grid_point(age_grid, branching_age, current_g); // determine grid point to the immediate left of node_age
+		branching_PSR	= polynomial_value(PSR_degree,&PSR_coeff[current_g*(PSR_degree+1)],branching_age);
+		branching_APSR	= polynomial_value(APSR_degree,&APSR_coeff[current_g*(APSR_degree+1)],branching_age);
+		LL 				+= log(branching_PSR) - branching_APSR;
+		if((runtime_out_seconds>0) && (b%1000==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted node traversal because the maximum allowed runtime was reached");
+	}
+	
+	// incorporate information at oldest_age
+	// do so as many times as there are subtrees
+	// condition survival of stem or splitting of root + survival of daughter lineages
+	current_g 		= find_next_left_grid_point(age_grid, oldest_age, current_g);
+	branching_PSR	= polynomial_value(PSR_degree,&PSR_coeff[current_g*(PSR_degree+1)],oldest_age);
+	branching_APSR	= polynomial_value(APSR_degree,&APSR_coeff[current_g*(APSR_degree+1)],oldest_age);
+	if(condition=="stem"){
+		LL -= Nsubtrees*branching_APSR;
+	}else if(condition=="crown"){
+		LL -= Nsubtrees*branching_APSR - log(branching_PSR);
+	}else{
+		return NAN_D; // no-conditioning is not supported in this function, because the likelihood formula cannot be written purely in terms of the PSR
 	}
 
 	return Rcpp::List::create(	Rcpp::Named("success") = true, 
@@ -18286,9 +18436,9 @@ Rcpp::List simulate_fixed_rates_Markov_model_CPP(	const long					Ntips,
 	const matrix_exponentiator transition_exponentiator(Nstates, transition_matrix, max_edge_length, 1e-4, NPmin, 1000, true);
 	
 	// traverse root-->tips and draw random states, conditional upon their parent's state
-	vector<double> expQ;
+	vector<double> expQ(Nstates*Nstates,0);
 	vector<long> tip_states, node_states;
-	if(include_tips) tip_states.assign(Nsimulations*Ntips,0); // Assign default value so that valgrind memcheck does not complain about uninitialized values.
+	if(include_tips) tip_states.assign(Nsimulations*Ntips,0); // assign default value so that valgrind memcheck does not complain about uninitialized values.
 	node_states.assign(Nsimulations*Nnodes,0); // always store node states, since needed for moving root-->tips. Assign default value so that valgrind memcheck does not complain about uninitialized values.
 	long clade, edge, parent, parent_state, state=0;
 	for(long q=0; q<traversal_queue.size(); ++q){

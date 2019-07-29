@@ -1,15 +1,15 @@
-\name{fit_hbd_class_on_grid}
-\alias{fit_hbd_class_on_grid}
+\name{fit_hbd_pdr_on_grid}
+\alias{fit_hbd_pdr_on_grid}
 \title{
-Fit a homogenous birth-death model congruence class on a discrete time grid.
+Fit pulled diversification rates of birth-death models on a time grid.
 }
 \description{
-Given an ultrametric timetree, estimate the congruence class of homogenous birth-death (HBD) models that best explains the tree via maximum likelihood. Every HBD model is defined by some speciation and extinction rates (\eqn{\lambda} and \eqn{\mu}) over time, as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled). ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates. For any given HBD model there exists an infinite number of alternative HBD models that predict the same deterministic lineages-through-time curve and yield the same likelihood for any given reconstructed timetree; these ``congruent'' models cannot be distinguished from one another solely based on the tree. 
+Given an ultrametric timetree, estimate the pulled diversification rate of homogenous birth-death (HBD) models that best explains the tree via maximum likelihood. Every HBD model is defined by some speciation and extinction rates (\eqn{\lambda} and \eqn{\mu}) over time, as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled). ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates. For any given HBD model there exists an infinite number of alternative HBD models that predict the same deterministic lineages-through-time curve and yield the same likelihood for any given reconstructed timetree; these ``congruent'' models cannot be distinguished from one another solely based on the tree. 
 
 Each congruence class is uniquely described by the ``pulled diversification rate'' (PDR; Louca et al 2018), defined as \eqn{PDR=\lambda-\mu+\lambda^{-1}d\lambda/d\tau} (where \eqn{\tau} is time before present) as well as the product \eqn{\rho\lambda_o} (where \eqn{\lambda_o} is the present-day speciation rate). That is, two HBD models are congruent if and only if they have the same PDR and the same product \eqn{\rho\lambda_o}. This function is designed to estimate the generating congruence class for the tree, by fitting the PDR on a grid of discrete times as well as the product \eqn{\rho\lambda_o}.
 }
 \usage{
-fit_hbd_class_on_grid(tree, 
+fit_hbd_pdr_on_grid(  tree, 
                       oldest_age        = NULL,
                       age_grid          = NULL,
                       min_PDR           = -Inf,
@@ -30,7 +30,7 @@ fit_hbd_class_on_grid(tree,
 }
 \arguments{
 \item{tree}{
-An ultrametric timetree of class "phylo", representing the time-calibrated reconstructed phylogeny of a set of extant species.
+An ultrametric timetree of class "phylo", representing the time-calibrated phylogeny of a set of extant species.
 }
 \item{oldest_age}{
 Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age, and the classical formula by Morlon et al. (2011) is used.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBD model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
@@ -66,7 +66,7 @@ Numeric, optionally specifying a fixed value for the product \eqn{\rho\lambda_o}
 Integer between 0 and 3 (inclusive), specifying the polynomial degree of the PDR between age-grid points. If 0, then the PDR is considered piecewise constant, if 1 then the PDR is considered piecewise linear, if 2 or 3 then the PDR is considered to be a spline of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended.
 }
 \item{condition}{
-Character, either "crown", "stem" or "none", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is generally not recommended.
+Character, either "crown" or "stem", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time, when calculating the likelihood. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -87,7 +87,7 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 
 
 \details{
-It is generally advised to provide as much information to the function \code{fit_hbd_class_on_grid} as possible, including reasonable lower and upper bounds (\code{min_PDR}, \code{max_PDR}, \code{min_rholambda0} and \code{max_rholambda0}) and a reasonable parameter guess (\code{guess_PDR} and \code{guess_rholambda0}). It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of the PDR over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small.
+It is generally advised to provide as much information to the function \code{fit_hbd_pdr_on_grid} as possible, including reasonable lower and upper bounds (\code{min_PDR}, \code{max_PDR}, \code{min_rholambda0} and \code{max_rholambda0}) and a reasonable parameter guess (\code{guess_PDR} and \code{guess_rholambda0}). It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of the PDR over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small.
 }
 
 
@@ -114,7 +114,7 @@ Numeric, specifying the fitted or fixed product \eqn{\rho\lambda0}.
 \item{guess_PDR}{
 Numeric vector of size Ngrid, specifying the initial guess for the PDR at each age-grid point.
 }
-\item{guess_mu}{
+\item{guess_rholambda0}{
 Numeric, specifying the initial guess for \eqn{\rho\lambda0}.
 }
 \item{age_grid}{
@@ -153,7 +153,7 @@ S. Louca et al. (2018). Bacterial diversification through geological time. Natur
 
 \code{\link{fit_hbd_model_on_grid}}
 
-\code{\link{fit_hbd_class_parametric}}
+\code{\link{fit_hbd_pdr_parametric}}
 }
 
 \examples{
@@ -183,7 +183,7 @@ PDRs = lambdas - mus - (lambda_slopes/lambdas)
 # Fit PDR on grid
 Ngrid     = 10
 age_grid  = seq(from=0,to=root_age,length.out=Ngrid)
-fit = fit_hbd_class_on_grid(tree, 
+fit = fit_hbd_pdr_on_grid(tree, 
           age_grid    = age_grid,
           min_PDR     = -100,
           max_PDR     = +100,

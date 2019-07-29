@@ -85,6 +85,7 @@ Logical, indicating whether the calculation was successful. If \code{FALSE}, the
 \item{PND}{Numeric vector of size NG, listing the pulled normalized diversity (PND, in units 1/time) at the ages given in \code{ages[]}. The PND is defined as \eqn{PND=(N/N(0))\cdot\lambda(0)/\lambda}.}
 \item{SER}{Numeric vector of size NG, listing the ``shadow extinction rate'' (SER, in units 1/time) at the ages given in \code{ages[]}. The SER is defined as \eqn{SER=\rho\lambda(0)-PDR}.}
 \item{PER}{Numeric vector of size NG, listing the ``pulled extinction rate'' (PER, in units 1/time) at the ages given in \code{ages[]}. The PER is defined as \eqn{SER=\lambda(0)-PDR} (Louca et al. 2018).}
+\item{PSR}{Numeric vector of size NG, listing the ``pulled speciation rate'' (PSR, in units 1/time) at the ages given in \code{ages[]}. The PSR is defined as \eqn{PSR=\lambda\cdot(1-Pmissing)}.}
 \item{rholambda0}{Non-negative numeric, specifying the product of the sampling fraction and the present-day speciation rate, \eqn{\rho\cdot\lambda(0)}.}
 }
 

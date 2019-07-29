@@ -424,3 +424,16 @@ get_all_branching_ages = function(tree){
 	return(branch_ages);
 }
 
+
+
+# given a piecewise linear function f(x), defined on some x-grid, calculate its antiderivative A(x):=\int_{Xstart}^x f(u) du for an arbitrary number of target x values
+# this function is most efficient when the requested target x-values are monotonically increasing or decreasing
+get_antiderivative_of_piecewise_linear_function = function(	Xgrid,		# numeric vector of size NG, listing x-values in ascending order
+															Xstart,		# numeric, lower end of the integration, i.e. x-value where antiderivative is set to zero
+															Ygrid,		# numeric vector of size NG, listing y-values in ascending order
+															splines_degree,	# integer, either 0,1,2 or 3, specifying the splines degree assumed for Y between grid points
+															Xtarget){	# numeric vector of size N, specifying the target x values on which to evaluate the antiderivative
+	A = get_antiderivative_CPP(	Xgrid, Xstart, Ygrid, splines_degree, Xtarget);
+	return(A);
+}
+

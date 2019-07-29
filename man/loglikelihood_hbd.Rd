@@ -4,7 +4,7 @@
 Galculate the log-likelihood of a homogenous birth-death model.
 }
 \description{
-Given a rooted ultrametric timetree, and a homogenous birth-death (HBD) model, i.e., with speciation rate \eqn{\lambda}, extinction rate \eqn{\mu} and sampling fraction \eqn{\rho}, calculate the likelihood of the tree under the model. The speciation and extinction rates may be time-dependent. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Alternatively to \eqn{\lambda} and \eqn{\mu}, the likelihood may also be calculated based on the pulled diversification rate (PDR; Louca et al. 2018) and the product \eqn{\rho\cdot\lambda(0)}. In either case, the time-profiles of \eqn{\lambda}, \eqn{\mu} or the PDR are specified as piecewise polynomially functions (splines), defined on a discrete grid of ages.
+Given a rooted ultrametric timetree, and a homogenous birth-death (HBD) model, i.e., with speciation rate \eqn{\lambda}, extinction rate \eqn{\mu} and sampling fraction \eqn{\rho}, calculate the likelihood of the tree under the model. The speciation and extinction rates may be time-dependent. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Alternatively to \eqn{\lambda} and \eqn{\mu}, the likelihood may also be calculated based on the pulled diversification rate (PDR; Louca et al. 2018) and the product \eqn{\rho\cdot\lambda(0)}, or based on the pulled speciation rate (PSR). In either case, the time-profiles of \eqn{\lambda}, \eqn{\mu}, the PDR or the PSR are specified as piecewise polynomially functions (splines), defined on a discrete grid of ages.
 }
 \usage{
 loglikelihood_hbd(tree, 
@@ -15,6 +15,7 @@ loglikelihood_hbd(tree,
                   lambda          = NULL,
                   mu              = NULL,
                   PDR             = NULL,
+                  PSR             = NULL,
                   splines_degree  = 1,
                   condition       = "stem",
                   relative_dt     = 1e-3)
@@ -36,26 +37,29 @@ Strictly positive numeric, specifying the product of the sampling fraction (\eqn
 Numeric vector, listing discrete ages (time before present) on which either \eqn{\lambda} and \eqn{\mu}, or the PDR, are specified. Listed ages must be strictly increasing, and must cover at least the full considered age interval (from 0 to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the speciation rate, extinction rate and PDR are assumed to be time-independent.
 }
 \item{lambda}{
-Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing speciation rates (in units 1/time) at the ages listed in \code{age_grid}. Speciation rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then \code{PDR} and \code{rholambda0} must be provided.
+Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing speciation rates (in units 1/time) at the ages listed in \code{age_grid}. Speciation rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then either \code{PDR} and \code{rholambda0}, or \code{PSR} alone, must be provided.
 }
 \item{mu}{
-Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing extinction rates (in units 1/time)at the ages listed in \code{age_grid}. Extinction rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then \code{PDR} and \code{rholambda0} must be provided.
+Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing extinction rates (in units 1/time)at the ages listed in \code{age_grid}. Extinction rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then \code{PDR} and \code{rholambda0}, or \code{PSR} alone, must be provided.
 }
 \item{PDR}{
-Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing pulled diversification rates (in units 1/time) at the ages listed in \code{age_grid}. PDRs can be negative or positive, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then \code{lambda} and \code{mu} must be provided.
+Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing pulled diversification rates (in units 1/time) at the ages listed in \code{age_grid}. PDRs can be negative or positive, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then either \code{lambda} and \code{mu}, or \code{PSR} alone, must be provided.
+}
+\item{PSR}{
+Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing pulled speciation rates (in units 1/time) at the ages listed in \code{age_grid}. PSRs should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then either \code{lambda} and \code{mu}, or \code{PDR} and \code{rholambda0}, must be provided.
 }
 \item{splines_degree}{
-Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided \code{lambda}, \code{mu} and \code{PDR} between grid points in \code{age_grid}. For example, if \code{splines_degree==1}, then the provided \code{lambda}, \code{mu} and \code{PDR} are interpreted as piecewise-linear curves; if \code{splines_degree==2} they are interpreted as quadratic splines; if \code{splines_degree==3} they are interpreted as cubic splines. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on.
+Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided \code{lambda}, \code{mu}, \code{PDR} and \code{PSR} (whichever applicable) between grid points in \code{age_grid}. For example, if \code{splines_degree==1}, then the provided \code{lambda}, \code{mu}, \code{PDR} and \code{PSR} are interpreted as piecewise-linear curves; if \code{splines_degree==2} they are interpreted as quadratic splines; if \code{splines_degree==3} they are interpreted as cubic splines. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on.
 }
 \item{condition}{
-Character, either "crown", "stem" or "none" (the last one is only available if \code{lambda} and \code{mu} are given), specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended.
+Character, either "crown", "stem" or "none" (the last one is only available if \code{lambda} and \code{mu} are given), specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended and is only available when \code{lambda} and \code{mu} are provided.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 }
 }
 \details{
-This function supports two alternative parameterizations of HBD models, either using the speciation and extinction rates and sampling fraction (\eqn{\lambda}, \eqn{\mu} and \eqn{\rho}), or using the pulled diversification rate (PDR) and the product \eqn{\rho\cdot\lambda(0)} (sampling fraction times present-day speciation rate). The latter is better seen as a parameterization of congruence classes, i.e. sets of models that have the same likelihood, rather than specific models, since multiple combinations of \eqn{\lambda}, \eqn{\mu} and \eqn{\rho} can have the same PDR and product \eqn{\rho\cdot\lambda(0)} (Louca and Pennell, in review).
+This function supports two alternative parameterizations of HBD models, either using the speciation and extinction rates and sampling fraction (\eqn{\lambda}, \eqn{\mu} and \eqn{\rho}), or using the pulled diversification rate (PDR) and the product \eqn{\rho\cdot\lambda(0)} (sampling fraction times present-day speciation rate), or using the pulled speciation rate (PSR). The latter two options should be interpreted as a parameterization of congruence classes, i.e. sets of models that have the same likelihood, rather than specific models, since multiple combinations of \eqn{\lambda}, \eqn{\mu} and \eqn{\rho} can have identical PDRs, \eqn{\rho\cdot\lambda(0)} and PSRs (Louca and Pennell, in review).
 
 For large trees the asymptotic time complexity of this function is O(Nips). The tree may include monofurcations as well as multifurcations, and the likelihood formula accounts for those (i.e., as if monofurcations were omitted and multifurcations were expanded into bifurcations).
 }
@@ -78,7 +82,7 @@ H. Morlon, T. L. Parsons, J. B. Plotkin (2011). Reconciling molecular phylogenie
 
 S. Louca et al. (2018). Bacterial diversification through geological time. Nature Ecology & Evolution. 2:1458-1467.
 
-S. Louca and M. W. Pennell (manuscript in review)
+S. Louca and M. W. Pennell (in review as of 2019)
 }
 
 \seealso{
@@ -88,7 +92,9 @@ S. Louca and M. W. Pennell (manuscript in review)
 
 \code{\link{fit_hbd_model_on_grid}}
 
-\code{\link{fit_hbd_class_on_grid}}
+\code{\link{fit_hbd_pdr_on_grid}}
+
+\code{\link{fit_hbd_pdr_parametric}}
 }
 
 \examples{

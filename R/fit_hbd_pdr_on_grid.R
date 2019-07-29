@@ -1,4 +1,4 @@
-# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree
+# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree, by fitting the pulled diversification rate (PDR)
 # An HBD model is defined by a time-dependent speciation rate (lambda), a time-dependent extinction rate (mu) and a rarefaction (rho, subsampling fraction)
 # However, for each specific model and a given timetree there exists a continuum of alternative models that would all generate the same deterministic lineages-through-time (LTT) curve (when calculated backward in time), and all of these models actually have the same likelihood.
 # Hence, each model is part of an "equivalence class" of models, and likelihood-based approaches can only discern between model classes, but not between the individual model members in a class
@@ -7,7 +7,7 @@
 #
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
-fit_hbd_class_on_grid = function(	tree, 
+fit_hbd_pdr_on_grid = function(	tree, 
 									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
 									age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which the PDR is defined as a piecewise linear curve. If NULL, the PDR is assumed to be time-independent.
 									min_PDR				= -Inf,		# optional lower bound for the fitted PDRs. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
@@ -129,15 +129,15 @@ fit_hbd_class_on_grid = function(	tree,
 			input_age_grid 	= age_grid;
 			input_PDRs 		= PDRs
 		}
-		results = get_HBD_class_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
-													oldest_age			= oldest_age,
-													rholambda0 			= rholambda0,
-													age_grid 			= input_age_grid,
-													PDRs 				= input_PDRs,
-													splines_degree		= splines_degree,
-													condition			= condition,
-													relative_dt			= relative_dt,
-													runtime_out_seconds	= max_model_runtime);
+		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+												oldest_age			= oldest_age,
+												rholambda0 			= rholambda0,
+												age_grid 			= input_age_grid,
+												PDRs 				= input_PDRs,
+												splines_degree		= splines_degree,
+												condition			= condition,
+												relative_dt			= relative_dt,
+												runtime_out_seconds	= max_model_runtime);
 		if(!results$success) return(Inf);
 		LL = results$loglikelihood;
 		if(is.na(LL) || is.nan(LL)) return(Inf);

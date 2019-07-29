@@ -1,9 +1,9 @@
-# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree, by estimating functional form parameters
+# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree, by estimating functional form parameters for the pulled diversification rate (PDR)
 # An HBD congruence class is defined by a time-dependent pulled diversification rate (PDR) and the product rho*lambda(0) (sampling fraction times present-day speciation rate)
 #
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
-fit_hbd_class_parametric = function(tree, 
+fit_hbd_pdr_parametric = function(tree, 
 									param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
 									param_guess			= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
 									param_min			= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
@@ -80,10 +80,11 @@ fit_hbd_class_parametric = function(tree,
 	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
 	
 	# check if functionals are valid at least on the initial guess
-	PDR_guess = PDR(0,param_guess)
+	PDR_guess = PDR(age_grid,param_guess)
 	rholambda0_guess = rholambda0(param_guess)
-	if(!is.finite(PDR_guess)) return(list(success=FALSE, error=sprintf("PDR is not a valid number for guessed parameters, at age 0")));
+	if(!all(is.finite(PDR_guess))) return(list(success=FALSE, error=sprintf("PDR is not a valid number for guessed parameters, at some ages")));
 	if(!is.finite(rholambda0_guess)) return(list(success=FALSE, error=sprintf("rholambda0 is not a valid number for guessed parameters")));
+	if(length(PDR_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("PDR function must return vectors of the same length as the input ages")));
 						
 	#################################
 	# PREPARE PARAMETERS TO BE FITTED
@@ -129,15 +130,15 @@ fit_hbd_class_parametric = function(tree,
 			input_age_grid 	= age_grid;
 			input_PDRs		= PDRs
 		}
-		results = get_HBD_class_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
-													oldest_age			= oldest_age,
-													rholambda0			= input_rholambda0,
-													age_grid 			= input_age_grid,
-													PDRs 				= input_PDRs,
-													splines_degree		= 1,
-													condition			= condition,
-													relative_dt			= relative_dt,
-													runtime_out_seconds	= max_model_runtime);
+		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+												oldest_age			= oldest_age,
+												rholambda0			= input_rholambda0,
+												age_grid 			= input_age_grid,
+												PDRs 				= input_PDRs,
+												splines_degree		= 1,
+												condition			= condition,
+												relative_dt			= relative_dt,
+												runtime_out_seconds	= max_model_runtime);
 		if(!results$success) return(Inf);
 		LL = results$loglikelihood;
 		if(is.na(LL) || is.nan(LL) || is.infinite(LL)) return(Inf);
