@@ -9,21 +9,23 @@ Given an ultrametric timetree, fit a homogenous birth-death (HBD) model in which
 \usage{
 fit_hbd_model_parametric( tree, 
                           param_values,
-                          param_guess       = NULL,
-                          param_min         = -Inf,
-                          param_max         = +Inf,
-                          param_scale       = NULL,
-                          oldest_age        = NULL,
+                          param_guess        = NULL,
+                          param_min          = -Inf,
+                          param_max          = +Inf,
+                          param_scale        = NULL,
+                          oldest_age         = NULL,
+                          age0               = 0,
                           lambda,
                           mu,
-                          rho,
-                          age_grid          = NULL,
-                          condition         = "stem",
-                          relative_dt       = 1e-3,
-                          Ntrials           = 1,
-                          Nthreads          = 1,
-                          max_model_runtime = NULL,
-                          fit_control       = list())
+                          rho0,
+                          age_grid           = NULL,
+                          condition          = "stem",
+                          relative_dt        = 1e-3,
+                          Ntrials            = 1,
+                          max_start_attempts = 1,
+                          Nthreads           = 1,
+                          max_model_runtime  = NULL,
+                          fit_control        = list())
 }
 \arguments{
 \item{tree}{
@@ -47,14 +49,17 @@ Optional numeric vector of size NP, specifying typical scales for model paramete
 \item{oldest_age}{
 Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age, and the classical formula by Morlon et al. (2011) is used.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBD model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
 }
+\item{age0}{
+Non-negative numeric, specifying the youngest age (time before present) to consider for fitting, and with respect to which \code{rho} is defined. If \code{age0>0}, then \code{rho0} refers to the sampling fraction at age \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are included in the tree. See below for more details.
+}
 \item{lambda}{
 Function specifying the speciation rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with strictly positive entries.
 }
 \item{mu}{
 Function specifying the extinction rate at any given age and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with non-negative entries.
 }
-\item{rho}{
-Function specifying the sampling fraction (fraction of extant species sampled) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a numeric between 0 (exclusive) and 1 (inclusive).
+\item{rho0}{
+Function specifying the sampling fraction (fraction of extant species sampled at \code{age0}) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a numeric between 0 (exclusive) and 1 (inclusive).
 }
 \item{age_grid}{
 Numeric vector, specifying ages at which the \code{lambda} and \code{mu} functionals should be evaluated. This age grid must be fine enough to capture the possible variation in \eqn{\lambda} and \eqn{\mu} over time, within the permissible parameter range. If of size 1, then lambda & mu are assumed to be time-independent.
@@ -68,6 +73,9 @@ Strictly positive numeric (unitless), specifying the maximum relative time step 
 }
 \item{Ntrials}{
 Integer, specifying the number of independent fitting trials to perform, each starting from a random choice of model parameters. Increasing \code{Ntrials} reduces the risk of reaching a non-global local maximum in the fitting objective.
+}
+\item{max_start_attempts}{
+Integer, specifying the number of times to attempt finding a valid start point (per trial) before giving up on that trial. Randomly choosen extreme start parameters may occasionally result in Inf/undefined likelihoods, so this option allows the algorithm to keep looking for valid starting points.
 }
 \item{Nthreads}{
 Integer, specifying the number of parallel threads to use for performing multiple fitting trials simultaneously. This should generally not exceed the number of available CPUs on your machine. Parallel computing is not available on the Windows platform.
@@ -114,6 +122,9 @@ Integer, number of fitted (i.e., non-fixed) model parameters.
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
 }
+\item{BIC}{
+The Bayesian information criterion for the fitted model, defined as \eqn{\log(n)k-2\log(L)}, where \eqn{k} is the number of fitted parameters, \eqn{n} is the number of data points (number of branching times), and \eqn{L} is the maximized likelihood.
+}
 \item{converged}{
 Logical, specifying whether the maximum likelihood was reached after convergence of the optimization algorithm. Note that in some cases the maximum likelihood may have been achieved by an optimization path that did not yet converge (in which case it's advisable to increase \code{iter.max} and/or \code{eval.max}).
 }
@@ -122,6 +133,21 @@ Integer, specifying the number of iterations performed during the optimization p
 }
 \item{Nevaluations}{
 Integer, specifying the number of likelihood evaluations performed during the optimization path that yielded the maximum likelihood.
+}
+\item{trial_start_objectives}{
+Numeric vector of size \code{Ntrials}, listing the initial objective values (e.g., loglikelihoods) for each fitting trial, i.e. at the start parameter values.
+}
+\item{trial_objective_values}{
+Numeric vector of size \code{Ntrials}, listing the final maximized objective values (e.g., loglikelihoods) for each fitting trial.
+}
+\item{trial_Nstart_attempts}{
+Integer vector of size \code{Ntrials}, listing the number of start attempts for each fitting trial, until a starting point with valid likelihood was found.
+}
+\item{trial_Niterations}{
+Integer vector of size \code{Ntrials}, listing the number of iterations needed for each fitting trial.
+}
+\item{trial_Nevaluations}{
+Integer vector of size \code{Ntrials}, listing the number of likelihood evaluations needed for each fitting trial.
 }
 }
 
@@ -191,7 +217,7 @@ fit = fit_hbd_model_parametric(	tree,
                       param_scale   = 1, # all params are in the order of 1
                       lambda        = lambda_function,
                       mu            = mu_function,
-                      rho           = rho_function,
+                      rho0          = rho_function,
                       age_grid      = age_grid,
                       Ntrials       = 10,    # perform 10 fitting trials
                       Nthreads      = 2,     # use 2 CPUs

@@ -15,6 +15,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 								 added_periodic				= FALSE,	# (logical) if TRUE, added pc birth & death rates are extended periodically if needed. If FALSE, they are extended with zeros.
 								 tip_basename				= "",		# basename for tips (e.g. "tip."). 
 								 node_basename				= NULL,		# basename for nodes (e.g. "node."). If NULL, then nodes will not have any labels.
+								 edge_basename				= NULL,		# basename for edge (e.g. "edge."). If NULL, then edges will not have any labels.
 								 include_birth_times		= FALSE,
 								 include_death_times		= FALSE){
 	if(is.null(max_tips) && is.null(max_time) && is.null(max_time_eq)) return(list(success=FALSE, error="ERROR: At least one of max_tips and/or max_time and/or max_time_eq must be non-NULL"));
@@ -30,9 +31,9 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	if(is.null(parameters$rarefaction)) 			parameters$rarefaction = 1;
 
 	if(parameters$rarefaction<=0 || parameters$rarefaction>1) return(list(success=FALSE, error="Rarefaction parameter must be between 0 (non-inclusive) and 1 (inclusive)."));
-	if(length(added_rates_times)!=length(added_birth_rates_pc)) stop(sprintf("Number of added birth_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_birth_rates_pc),length(added_rates_times)));
-	if(length(added_rates_times)!=length(added_death_rates_pc)) stop(sprintf("Number of added death_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_death_rates_pc),length(added_rates_times)));
-	
+	if((!is.null(added_birth_rates_pc)) && (length(added_rates_times)!=length(added_birth_rates_pc))) stop(sprintf("Number of added birth_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_birth_rates_pc),length(added_rates_times)));
+	if((!is.null(added_death_rates_pc)) && (length(added_rates_times)!=length(added_death_rates_pc))) stop(sprintf("Number of added death_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_death_rates_pc),length(added_rates_times)));
+
 	results = generate_random_tree_CPP(	max_tips					= (if(is.null(max_tips)) -1 else max_tips),
 										max_time					= (if(is.null(max_time)) -1 else max_time),
 										max_time_since_equilibrium	= (if(is.null(max_time_eq)) -1 else max_time_eq),
@@ -54,9 +55,11 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	if(!results$success) return(list(success=FALSE, error=results$error)); # something went wrong
 	Ntips	= results$Ntips
 	Nnodes 	= results$Nnodes
+	Nedges 	= results$Nedges
 	tree = list(Nnode 		= Nnodes,
 				tip.label 	= paste(tip_basename, 1:Ntips, sep=""),
 				node.label 	= (if(is.null(node_basename)) NULL else paste(node_basename, 1:Nnodes, sep="")),
+				edge.label 	= (if(is.null(edge_basename)) NULL else paste(edge_basename, 1:Nedges, sep="")),
 				edge 		= matrix(results$tree_edge,ncol=2,byrow=TRUE) + 1,
 				edge.length = results$edge_length,
 				root 		= results$root+1)

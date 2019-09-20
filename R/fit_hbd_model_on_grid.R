@@ -11,19 +11,20 @@
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
 fit_hbd_model_on_grid = function(	tree, 
 									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
+									age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting and with respect to which rho is defined (rho(age0) is the fraction of lineages extant at age0 that are included in the tree)
 									age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which the lambda is defined as a piecewise linear curve. If NULL, the lambda is assumed to be time-independent.
 									min_lambda			= 0,		# optional lower bound for the fitted lambdas. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
 									max_lambda			= +Inf,		# optional upper bound for the fitted lambdas. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the upper bound at each age-grid point.
 									min_mu				= 0,		# optional lower bound for the fitted mus. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
 									max_mu				= +Inf,		# optional upper bound for the fitted mus. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the upper bound at each age-grid point.
-									min_rho				= 1e-10,	# optional lower bound for the fitted rho. Note that rho is always within (0,1]
-									max_rho				= 1,		# optional upper bound for the fitted rho
+									min_rho0			= 1e-10,	# optional lower bound for the fitted rho. Note that rho is always within (0,1]
+									max_rho0			= 1,		# optional upper bound for the fitted rho
 									guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages) or a numeric vector of size NG specifying an initial guess for the lambda at each age-grid point (can include NAs)
 									guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages) or a numeric vector of size NG specifying an initial guess for the mu at each age-grid point (can include NAs)
-									guess_rho			= 1,		# initial guess for the product rho*lambda(0). Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
+									guess_rho0			= 1,		# initial guess for rho. Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
 									fixed_lambda		= NULL,		# optional fixed lambda values, on one or more of the age grid points. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed) or a numeric vector of size NG (some or all lambdas are fixed, can include NAs).
 									fixed_mu			= NULL,		# optional fixed mu values, on one or more of the age grid points. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed) or a numeric vector of size NG (some or all mus are fixed, can include NAs).
-									fixed_rho			= NULL,		# optional fixed value for rho. If non-NULL and non-NA, then rho is not fitted. 
+									fixed_rho0			= NULL,		# optional fixed value for rho. If non-NULL and non-NA, then rho is not fitted. 
 									const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
@@ -33,24 +34,33 @@ fit_hbd_model_on_grid = function(	tree,
 									Nthreads			= 1,
 									max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 									fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
-	Ntips	= length(tree$tip.label);
-	Nnodes	= tree$Nnode;
+	# basic error checking
+	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
+	root_age = get_tree_span(tree)$max_distance
+	if(is.null(oldest_age)) oldest_age = root_age;
+	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 is older than the root age (%g)",root_age)));
+	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
+
+	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
+	if(age0>0){
+		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
+		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
+		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
+		if(!is.null(age_grid)) age_grid 	= age_grid - age0
+		root_age = root_age - age0
+	}
 
 	# pre-compute some tree stats
-	lineage_counter = count_lineages_through_time(tree, Ntimes=log2(Ntips), include_slopes=TRUE);
+	lineage_counter  = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), include_slopes=TRUE);
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1)
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
 
-	# basic input checking
-	if((Ntips<2) || (Nnodes<2)){
-		# tree is trivial (~empty)
-		return(list(success = FALSE, error="Tree is too small"));
-	}
+	# more error checking
 	if(!(condition %in% c("stem","crown","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', or 'stem' or 'none' (not recommended)",condition)))
-	if(is.null(fixed_rho)) fixed_rho = NA;
-	if((!is.na(fixed_rho)) && ((fixed_rho<=0) || (fixed_rho>1))) return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the accepted range (0,1].",fixed_rho)));
-	if(is.null(oldest_age)) oldest_age = root_age;
+	if(is.null(fixed_rho0)) fixed_rho0 = NA;
+	if((!is.na(fixed_rho0)) && ((fixed_rho0<=0) || (fixed_rho0>1))) return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the accepted range (0,1].",fixed_rho0)));
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
 	if(is.null(age_grid) || (length(age_grid)<=1)){
 		if((!is.null(guess_lambda)) && (length(guess_lambda)>1)) return(list(success = FALSE, error = sprintf("Invalid number of guessed lambdas; since no age grid was provided, you must provide a single (constant) guess_lambda or none at all")));
@@ -62,20 +72,20 @@ fit_hbd_model_on_grid = function(	tree,
 		if((!is.null(guess_lambda)) && (length(guess_lambda)!=1) && (length(guess_lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed lambdas (%d); since an age grid of size %d was provided, you must either provide one or %d lambdas",length(guess_lambda),NG)));
 		if((!is.null(guess_mu)) && (length(guess_mu)!=1) && (length(guess_mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed mus (%d); since an age grid of size %d was provided, you must either provide one or %d mus",length(guess_mu),NG)));
 		if((length(age_grid)>1) && (age_grid[NG]>oldest_age-1e-5*(age_grid[NG]-age_grid[NG-1]))) age_grid[NG] = max(age_grid[NG],oldest_age); # if age_grid "almost" covers oldest_age (i.e. up to rounding errors), then fix the remaining difference
-		if((length(age_grid)>1) && ((age_grid[1]>0) || (age_grid[NG]<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (0 - %g)",age_grid[1],tail(age_grid,1),oldest_age)));
+		if((length(age_grid)>1) && (age_grid[1]<1e-5*(age_grid[2]-age_grid[1]))) age_grid[1] = min(age_grid[1],0); # if age_grid "almost" covers present-day (i.e. up to rounding errors), then fix the remaining difference
 	}
 	if(is.null(max_model_runtime)) max_model_runtime = 0;
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Extected one of 0,1,2,3.")));
 	if(NG==1) splines_degree = 1; # no point in using splines since lambda & mu are assumed to be time-independent
 	
 	# reformat shape of input params to an internally standardized format
-	min_rho = max(0,min_rho);
-	max_rho = max(0,max_rho);
+	min_rho0 = max(0,min_rho0);
+	max_rho0 = max(0,max_rho0);
 	if(length(min_lambda)==1) min_lambda = rep(min_lambda,times=NG);
 	if(length(max_lambda)==1) max_lambda = rep(max_lambda,times=NG);
 	if(length(min_mu)==1) min_mu = rep(min_mu,times=NG);
 	if(length(max_mu)==1) max_mu = rep(max_mu,times=NG);
-	if(is.null(guess_rho)) guess_rho = NA;
+	if(is.null(guess_rho0)) guess_rho0 = NA;
 	if(is.null(guess_lambda)){
 		guess_lambda = rep(NA,times=NG);
 	}else if(length(guess_lambda)==1){
@@ -104,8 +114,8 @@ fit_hbd_model_on_grid = function(	tree,
 # 	if(any(fixed_mu[!is.na(fixed_mu)]<min_mu[!is.na(fixed_mu)]) || any(fixed_mu[!is.na(fixed_mu)]>max_mu[!is.na(fixed_mu)])){
 # 		return(list(success = FALSE, error=sprintf("Some fixed mus are outside of the requested bounds")));
 # 	}
-# 	if((!is.na(fixed_rho)) && ((fixed_rho<min_rho) || (fixed_rho>max_rho))){
-# 		return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the requested bounds (%g - %g)",fixed_rho,min_rho,max_rho)));
+# 	if((!is.na(fixed_rho0)) && ((fixed_rho0<min_rho0) || (fixed_rho0>max_rho0))){
+# 		return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the requested bounds (%g - %g)",fixed_rho0,min_rho0,max_rho0)));
 # 	}
 	
 						
@@ -113,9 +123,9 @@ fit_hbd_model_on_grid = function(	tree,
 	# PREPARE PARAMETERS TO BE FITTED
 	
 	# guess reasonable start params, if not provided
-	if(is.na(guess_rho)) guess_rho = 1;
+	if(is.na(guess_rho0)) guess_rho0 = 1;
 	default_guess_PDR 	 				= mean(lineage_counter$relative_slopes); # a reasonable guesstimate for the average PDR is the average of the relative LTT-slope
-	default_guess_lambda 				= tail(lineage_counter$relative_slopes,1); # a reasonable guesstimate for the present-day lambda is the relative LTT-slope at age=0
+	default_guess_lambda 				= tail(lineage_counter$relative_slopes,1); # a reasonable guesstimate for lambda is the relative LTT-slope at age=0
 	guess_lambda[is.na(guess_lambda)] 	= default_guess_lambda;
 	default_guess_mu 					= max(0,default_guess_lambda - default_guess_PDR);
 	guess_mu[is.na(guess_mu)] 			= default_guess_mu;
@@ -123,17 +133,17 @@ fit_hbd_model_on_grid = function(	tree,
 	# make sure initial guess is within the imposed bounds
 	guess_lambda = pmin(max_lambda, pmax(min_lambda, guess_lambda));
 	guess_mu	 = pmin(max_mu, pmax(min_mu, guess_mu));
-	guess_rho 	 = min(max_rho, max(min_rho, guess_rho))
+	guess_rho0 	 = min(max_rho0, max(min_rho0, guess_rho0))
 	
 	# determine which parameters are to be fitted
 	# convention: parameters are indexed as follows: [lambda[], mu[], rho]
-	fixed_param_values 	= c(fixed_lambda, fixed_mu, fixed_rho); # may contain NAs, corresponding to non-fixed parameters
+	fixed_param_values 	= c(fixed_lambda, fixed_mu, fixed_rho0); # may contain NAs, corresponding to non-fixed parameters
 	fitted_params		= which(is.na(fixed_param_values))
 	fixed_params		= which(!is.na(fixed_param_values))
-	guess_param_values 	= c(guess_lambda, guess_mu, guess_rho); # should contain a valid numeric for each parameter, even if the parameter is fixed
+	guess_param_values 	= c(guess_lambda, guess_mu, guess_rho0); # should contain a valid numeric for each parameter, even if the parameter is fixed
 	guess_param_values[fixed_params] = fixed_param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
-	min_param_values	= c(min_lambda,min_mu,min_rho);
-	max_param_values	= c(max_lambda,max_mu,max_rho);
+	min_param_values	= c(min_lambda,min_mu,min_rho0);
+	max_param_values	= c(max_lambda,max_mu,max_rho0);
 
 	# determine free (i.e. independent) fitted parameters
 	# for example, if lambda is enforced to be time-independent, this reduces the number of free parameters
@@ -143,7 +153,7 @@ fit_hbd_model_on_grid = function(	tree,
 	NFmu			= sum(is.na(fixed_mu))		# number of non-fixed mu
 	fitted2free		= (if(NFlambda==0) c() else (if(const_lambda) rep(1,times=NFlambda) else c(1:NFlambda)))
 	fitted2free		= c(fitted2free, (if(NFmu==0) c() else tail(fitted2free,1)+(if(const_mu) rep(1,times=NFmu) else c(1:NFmu))))
-	fitted2free		= c(fitted2free, (if(is.na(fixed_rho)) tail(fitted2free,1)+1 else c()))
+	fitted2free		= c(fitted2free, (if(is.na(fixed_rho0)) tail(fitted2free,1)+1 else c()))
 	Nfree			= length(unique(fitted2free)); # number of free (i.e. independently) fitted parameters
 	free2fitted		= lapply(1:Nfree, FUN=function(frp) which(fitted2free==frp))
 	
@@ -155,7 +165,7 @@ fit_hbd_model_on_grid = function(	tree,
 	}else{ 
 		scale_mu[scale_mu==0] = mean(scale_mu); 
 	}
-	scale_rho 	 = abs(guess_rho);
+	scale_rho 	 = abs(guess_rho0);
 	if(scale_rho==0) scale_rho = 1;
 	param_scales = c(rep(scale_lambda,times=NG),rep(scale_mu,times=NG),scale_rho);
 	
@@ -217,7 +227,7 @@ fit_hbd_model_on_grid = function(	tree,
 		# randomly choose start values for fitted params
 		start_values = sapply(1:Nfree, FUN = function(frp) guess_param_values[fitted_params[free2fitted[[frp]][1]]])
 		if(trial>1){
-			boxed   = which(!(is.infinite(lower_bounds) || is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
+			boxed   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
 			unboxed = complement(Nfree, boxed);
 			if(length(boxed)>0) start_values[boxed] = lower_bounds[boxed] + (upper_bounds[boxed]-lower_bounds[boxed]) * runif(n=length(boxed),min=0,max=1)
 			if(length(unboxed)>0) start_values[unboxed]	= 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
@@ -260,6 +270,9 @@ fit_hbd_model_on_grid = function(	tree,
 	loglikelihood		= objective_value
 	fitted_param_values = expand_free_fitted_params(fits[[best]]$fparam_values)
 	if(is.null(objective_value) || any(is.na(fitted_param_values)) || any(is.nan(fitted_param_values))) return(list(success=FALSE, error=sprintf("Some fitted parameters are NaN")));
+
+	# reverse any time shift due to earlier tree trimming
+	age_grid = age_grid + age0
 		
 	# return results
 	return(list(success					= TRUE,
@@ -271,10 +284,11 @@ fit_hbd_model_on_grid = function(	tree,
 				fitted_rho				= fitted_param_values[2*NG+1], 
 				guess_lambda			= guess_param_values[1:NG],
 				guess_mu				= guess_param_values[(NG+1):(NG+NG)],
-				guess_rho				= guess_param_values[2*NG+1],
+				guess_rho0				= guess_param_values[2*NG+1],
 				age_grid				= age_grid,
 				NFP						= Nfree,
 				AIC						= 2*Nfree - 2*loglikelihood,
+				BIC						= log(sum((sorted_node_ages<=oldest_age) & (sorted_node_ages>=age0)))*Nfree - 2*loglikelihood,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations));

@@ -2,45 +2,61 @@
 # An HBD model is defined by a time-dependent speciation rate (lambda), a time-dependent extinction rate (mu) and a rarefaction (rho, subsampling fraction)
 # However, for each specific model and a given timetree there exists a continuum of alternative models that would all generate the same deterministic lineages-through-time (LTT) curve (when calculated backward in time), and all of these models actually have the same likelihood.
 # Hence, each model is part of an "equivalence class" of models, and likelihood-based approaches can only discern between model classes, but not between the individual model members in a class
-# It turns out that each HBD model-class is uniquely defined by its "pulled diversification rate" (PDR) and the product rho*lambda(0)=:rholambda0.
+# It turns out that each HBD model-class is uniquely defined by its "pulled diversification rate" (PDR) and the product rho(age0)*lambda(age0)=:rholambda0, where rho(age0) is the fraction of lineages extant at age0 that are represented in the tree.
 # This function thus fits model-classes, rather than models, by fitting the PDR and the parameter rholambda0.
+#
+# This function can optionally fit the congruence class by considering only the age interval [age0, oldest_age].
+# oldest_age is enforced by (mathematically) cutting the tree into multiple subtrees stemming at age oldest_age (omitting anything older) and treating each subtree as an independent realization of the same stochastic BD process
+# age0 is enforced by (actually) trimming the tree at age0 (omitting anything younger than age0) and fitting the HBD class to the new (shorter) timetree. 
+# In that case, the fitted rholambda0 is actually the product Phi(age0)*lambda(age0), where Phi(age0) is the probability that a lineage extant at age tau would be eventually included in the original timetree; Phi(age0) is essentially the sampling fraction at age0.
 #
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
 fit_hbd_pdr_on_grid = function(	tree, 
-									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
-									age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which the PDR is defined as a piecewise linear curve. If NULL, the PDR is assumed to be time-independent.
-									min_PDR				= -Inf,		# optional lower bound for the fitted PDRs. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
-									max_PDR				= +Inf,		# optional upper bound for the fitted PDRs. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the upper bound at each age-grid point.
-									min_rholambda0		= 1e-10,	# optional lower bound for the fitted rholambda0. Note that rholambda0 is always non-negative
-									max_rholambda0		= +Inf,		# optional upper bound for the fitted rholambda0
-									guess_PDR			= NULL,		# initial guess for the PDR. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant PDR at all ages) or a numeric vector of size NG specifying an initial guess for the PDR at each age-grid point (can include NAs)
-									guess_rholambda0	= NULL,		# initial guess for the product rho*lambda(0). Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
-									fixed_PDR			= NULL,		# optional fixed PDR values, on one or more of the age grid points. Either NULL (none of the PDRs are fixed), or a single scalar (all PDRs are fixed) or a numeric vector of size NG (some or all PDRs are fixed, can include NAs).
-									fixed_rholambda0	= NULL,		# optional fixed value for rholambda0. If non-NULL and non-NA, then rholambda0 is not fitted. 
-									splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by the PDR on the age grid.
-									condition			= "stem",	# one of "crown" or "stem", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
-									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
-									Ntrials				= 1,
-									Nthreads			= 1,
-									max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
-									fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
-	Ntips	= length(tree$tip.label);
-	Nnodes	= tree$Nnode;
+								oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
+								age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting and with respect to which rholambda0 is defined (i.e. rholambda0 = rho(age0)*lambda(age0))
+								age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which the PDR is defined as a piecewise linear curve. If NULL, the PDR is assumed to be time-independent.
+								min_PDR				= -Inf,		# optional lower bound for the fitted PDRs. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
+								max_PDR				= +Inf,		# optional upper bound for the fitted PDRs. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the upper bound at each age-grid point.
+								min_rholambda0		= 1e-10,	# optional lower bound for the fitted rholambda0. Note that rholambda0 is always non-negative.
+								max_rholambda0		= +Inf,		# optional upper bound for the fitted rholambda0
+								guess_PDR			= NULL,		# initial guess for the PDR. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant PDR at all ages) or a numeric vector of size NG specifying an initial guess for the PDR at each age-grid point (can include NAs)
+								guess_rholambda0	= NULL,		# initial guess for the product rho*lambda(0). Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
+								fixed_PDR			= NULL,		# optional fixed PDR values, on one or more of the age grid points. Either NULL (none of the PDRs are fixed), or a single scalar (all PDRs are fixed) or a numeric vector of size NG (some or all PDRs are fixed, can include NAs).
+								fixed_rholambda0	= NULL,		# optional fixed value for rholambda0. If non-NULL and non-NA, then rholambda0 is not fitted. 
+								splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by the PDR on the age grid.
+								condition			= "stem",	# one of "crown" or "stem", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+								relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
+								Ntrials				= 1,
+								Nthreads			= 1,
+								max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
+								fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
+	# basic error checking
+	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
+	root_age = get_tree_span(tree)$max_distance
+	if(is.null(oldest_age)) oldest_age = root_age;
+	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 is older than the root age (%g)",root_age)));
+	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
 
+	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
+	if(age0>0){
+		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
+		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
+		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
+		if(!is.null(age_grid)) age_grid 	= age_grid - age0
+		root_age = root_age - age0
+	}
+								
 	# pre-compute some tree stats
+	Ntips				= length(tree$tip.label);
 	lineage_counter 	= count_lineages_through_time(tree, Ntimes=log2(Ntips), include_slopes=TRUE);
 	sorted_node_ages	= sort(get_all_branching_ages(tree));
 	root_age 		 	= tail(sorted_node_ages,1);
 	age_epsilon		 	= 1e-4*mean(tree$edge.length);
 
-	# basic error checking
-	if((Ntips<2) || (Nnodes<2)){
-		# tree is trivial (~empty)
-		return(list(success = FALSE, error="Tree is too small"));
-	}
+	# more error checking
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
-	if(is.null(oldest_age)) oldest_age = root_age;
 	if(is.null(age_grid)){
 		if((!is.null(guess_PDR)) && (length(guess_PDR)>1)) return(list(success = FALSE, error = sprintf("Invalid number of guessed PDRs; since no age grid was provided, you must provide a single (constant) guess_PDR or none at all")));
 		age_grid = 0 # single-point grid, means that PDRs are assumed time-independent
@@ -49,7 +65,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 		NG = length(age_grid)
 		if((!is.null(guess_PDR)) && (length(guess_PDR)!=1) && (length(guess_PDR)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed PDRs (%d); since an age grid of size %d was provided, you must either provide one or %d PDRs",length(guess_PDR),NG)));
 		if((length(age_grid)>1) && (age_grid[NG]>oldest_age-1e-5*(age_grid[NG]-age_grid[NG-1]))) age_grid[NG] = max(age_grid[NG],oldest_age); # if age_grid "almost" covers oldest_age (i.e. up to rounding errors), then fix the remaining difference
-		if((length(age_grid)>1) && ((age_grid[1]>0) || (age_grid[NG]<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (0 - %g)",age_grid[1],tail(age_grid,1),oldest_age)));
+		if((length(age_grid)>1) && (age_grid[1]<1e-5*(age_grid[2]-age_grid[1]))) age_grid[1] = min(age_grid[1],0); # if age_grid "almost" covers present-day (i.e. up to rounding errors), then fix the remaining difference
 	}
 	if(is.null(max_model_runtime)) max_model_runtime = 0;
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Extected one of 0,1,2,3.")));
@@ -153,7 +169,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 		# randomly choose start values for fitted params
 		start_values = guess_param_values[fitted_params]
 		if(trial>1){
-			boxed   = which(!(is.infinite(lower_bounds) || is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
+			boxed   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
 			unboxed = completement(NFP, boxed);
 			if(length(boxed)>0) start_values[boxed] = lower_bounds[boxed] + (upper_bounds[boxed]-lower_bounds[boxed]) * runif(n=length(boxed),min=0,max=1)
 			if(length(unboxed)>0) start_values[unboxed]	= 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
@@ -196,22 +212,26 @@ fit_hbd_pdr_on_grid = function(	tree,
 	loglikelihood		= objective_value
 	fitted_param_values = fixed_param_values; fitted_param_values[fitted_params] = fits[[best]]$fparam_values;
 	if(is.null(objective_value) || any(is.na(fitted_param_values)) || any(is.nan(fitted_param_values))) return(list(success=FALSE, error=sprintf("Some fitted parameters are NaN")));
-		
+	
+	# reverse any time shift due to earlier tree trimming
+	age_grid = age_grid + age0
+
 	# return results
-	return(list(success						= TRUE,
-				objective_value				= objective_value,
-				objective_name				= "loglikelihood",
-				loglikelihood				= loglikelihood,
-				fitted_PDR					= fitted_param_values[1:NG],
-				fitted_rholambda0			= fitted_param_values[NG+1], 
-				guess_PDR					= guess_param_values[1:NG],
-				guess_rholambda0			= guess_param_values[NG+1],
-				age_grid					= age_grid,
-				NFP							= NFP,
-				AIC							= 2*NFP - 2*loglikelihood,
-				converged					= fits[[best]]$converged,
-				Niterations					= fits[[best]]$Niterations,
-				Nevaluations				= fits[[best]]$Nevaluations));
+	return(list(success					= TRUE,
+				objective_value			= objective_value,
+				objective_name			= "loglikelihood",
+				loglikelihood			= loglikelihood,
+				fitted_PDR				= fitted_param_values[1:NG],
+				fitted_rholambda0		= fitted_param_values[NG+1], 
+				guess_PDR				= guess_param_values[1:NG],
+				guess_rholambda0		= guess_param_values[NG+1],
+				age_grid				= age_grid,
+				NFP						= NFP,
+				AIC						= 2*NFP - 2*loglikelihood,
+				BIC						= log(sum((sorted_node_ages<=oldest_age) & (sorted_node_ages>=age0)))*NFP - 2*loglikelihood,
+				converged				= fits[[best]]$converged,
+				Niterations				= fits[[best]]$Niterations,
+				Nevaluations			= fits[[best]]$Nevaluations));
 }
 
 

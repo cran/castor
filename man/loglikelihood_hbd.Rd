@@ -4,12 +4,13 @@
 Galculate the log-likelihood of a homogenous birth-death model.
 }
 \description{
-Given a rooted ultrametric timetree, and a homogenous birth-death (HBD) model, i.e., with speciation rate \eqn{\lambda}, extinction rate \eqn{\mu} and sampling fraction \eqn{\rho}, calculate the likelihood of the tree under the model. The speciation and extinction rates may be time-dependent. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Alternatively to \eqn{\lambda} and \eqn{\mu}, the likelihood may also be calculated based on the pulled diversification rate (PDR; Louca et al. 2018) and the product \eqn{\rho\cdot\lambda(0)}, or based on the pulled speciation rate (PSR). In either case, the time-profiles of \eqn{\lambda}, \eqn{\mu}, the PDR or the PSR are specified as piecewise polynomially functions (splines), defined on a discrete grid of ages.
+Given a rooted ultrametric timetree, and a homogenous birth-death (HBD) model, i.e., with speciation rate \eqn{\lambda}, extinction rate \eqn{\mu} and sampling fraction \eqn{\rho}, calculate the likelihood of the tree under the model. The speciation and extinction rates may be time-dependent. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Alternatively to \eqn{\lambda} and \eqn{\mu}, the likelihood may also be calculated based on the pulled diversification rate (PDR; Louca et al. 2018) and the product \eqn{\rho(0)\cdot\lambda(0)}, or based on the pulled speciation rate (PSR). In either case, the time-profiles of \eqn{\lambda}, \eqn{\mu}, the PDR or the PSR are specified as piecewise polynomially functions (splines), defined on a discrete grid of ages.
 }
 \usage{
 loglikelihood_hbd(tree, 
                   oldest_age      = NULL,
-                  rho             = NULL,
+                  age0            = 0,
+                  rho0            = NULL,
                   rholambda0      = NULL,
                   age_grid        = NULL,
                   lambda          = NULL,
@@ -27,14 +28,17 @@ A rooted ultrametric tree of class "phylo".
 \item{oldest_age}{
 Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age, and the classical formula by Morlon et al. (2011) is used.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBD model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
 }
-\item{rho}{
-Numeric between 0 (exclusive) and 1 (inclusive), specifying the sampling fraction (\eqn{\rho}, aka. "rarefaction") of the tree, i.e. the fraction of extant species included. Note that if \eqn{rho<1}, species are assumed to have been sampled randomly at equal probabilities. Can also be \code{NULL}, in which case \code{rholambda0} and \code{PDR} (see below) must be provided.
+\item{age0}{
+Non-negative numeric, specifying the youngest age (time before present) to consider for fitting, and with respect to which \code{rho} and \code{rholambda0} are defined. If \code{age0>0}, then \code{rho} refers to the sampling fraction at age \code{age0}, and \code{rholambda0} to the product between \code{rho} and the speciation rate at age \code{age0}. See below for more details.
+}
+\item{rho0}{
+Numeric between 0 (exclusive) and 1 (inclusive), specifying the sampling fraction of the tree at \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are included in the tree. Note that if \eqn{rho0<1}, lineages extant at \code{age0} are assumed to have been sampled randomly at equal probabilities. Can also be \code{NULL}, in which case \code{rholambda0} and \code{PDR} (see below) must be provided.
 }
 \item{rholambda0}{
-Strictly positive numeric, specifying the product of the sampling fraction (\eqn{\rho}) and the present-day speciation rate (\eqn{\lambda(0)}), units 1/time. Can be \code{NULL}, in which case \code{rarefaction}, \code{lambda} and \code{mu} must be provided.
+Strictly positive numeric, specifying the product of the sampling fraction and the speciation rateat \code{age0}, units 1/time. Can be \code{NULL}, in which case \code{rarefaction}, \code{lambda} and \code{mu} must be provided.
 }
 \item{age_grid}{
-Numeric vector, listing discrete ages (time before present) on which either \eqn{\lambda} and \eqn{\mu}, or the PDR, are specified. Listed ages must be strictly increasing, and must cover at least the full considered age interval (from 0 to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the speciation rate, extinction rate and PDR are assumed to be time-independent.
+Numeric vector, listing discrete ages (time before present) on which either \eqn{\lambda} and \eqn{\mu}, or the PDR, are specified. Listed ages must be strictly increasing, and must cover at least the full considered age interval (from \code{age0} to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the speciation rate, extinction rate and PDR are assumed to be time-independent.
 }
 \item{lambda}{
 Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid==NULL}), listing speciation rates (in units 1/time) at the ages listed in \code{age_grid}. Speciation rates should be non-negative, and are assumed to vary polynomially between grid points (see argument \code{splines_degree}). If \code{NULL}, then either \code{PDR} and \code{rholambda0}, or \code{PSR} alone, must be provided.
@@ -59,7 +63,9 @@ Strictly positive numeric (unitless), specifying the maximum relative time step 
 }
 }
 \details{
-This function supports two alternative parameterizations of HBD models, either using the speciation and extinction rates and sampling fraction (\eqn{\lambda}, \eqn{\mu} and \eqn{\rho}), or using the pulled diversification rate (PDR) and the product \eqn{\rho\cdot\lambda(0)} (sampling fraction times present-day speciation rate), or using the pulled speciation rate (PSR). The latter two options should be interpreted as a parameterization of congruence classes, i.e. sets of models that have the same likelihood, rather than specific models, since multiple combinations of \eqn{\lambda}, \eqn{\mu} and \eqn{\rho} can have identical PDRs, \eqn{\rho\cdot\lambda(0)} and PSRs (Louca and Pennell, in review).
+If \code{age0>0}, the input tree is essentially trimmed at \code{age0} (omitting anything younger than \code{age0}), and the is likelihood calculated for the trimmed tree while shifting time appropriately. In that case, \code{rho0} is interpreted as the sampling fraction at \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are repreented in the tree. Similarly, \code{rholambda0} is the product of the sampling fraction and \eqn{\lambda} at \code{age0}.
+
+This function supports three alternative parameterizations of HBD models, either using the speciation and extinction rates and sampling fraction (\eqn{\lambda}, \eqn{\mu} and \eqn{\rho(\tau_o)} (for some arbitrary age \eqn{\tau_o}), or using the pulled diversification rate (PDR) and the product \eqn{\rho(\tau_o)\cdot\lambda(\tau_o} (sampling fraction times speciation rate at \eqn{\tau_o}), or using the pulled speciation rate (PSR). The latter two options should be interpreted as a parameterization of congruence classes, i.e. sets of models that have the same likelihood, rather than specific models, since multiple combinations of \eqn{\lambda}, \eqn{\mu} and \eqn{\rho(\tau_o)} can have identical PDRs, \eqn{\rho(\tau_o)\cdot\lambda(\tau_o)} and PSRs (Louca and Pennell, in review).
 
 For large trees the asymptotic time complexity of this function is O(Nips). The tree may include monofurcations as well as multifurcations, and the likelihood formula accounts for those (i.e., as if monofurcations were omitted and multifurcations were expanded into bifurcations).
 }
@@ -106,7 +112,7 @@ tree   = generate_random_tree(params, max_tips=Ntips, coalescent=TRUE)$tree
 # get the loglikelihood for an HBD model with the same parameters that generated the tree
 # in particular, assuming time-independent speciation & extinction rates
 LL = loglikelihood_hbd( tree, 
-                        rho       = params$rarefaction, 
+                        rho0      = params$rarefaction, 
                         age_grid  = NULL, # assume time-independent rates
                         lambda    = params$birth_rate_factor,
                         mu        = params$death_rate_factor)
@@ -120,7 +126,7 @@ age_grid  = seq(from=0, to=100, by=0.1) # choose a sufficiently fine age grid
 lambda    = 1*exp(beta*age_grid) # define lambda on the age grid
 mu        = 0.2*lambda # assume similarly shaped but smaller mu
 LL = loglikelihood_hbd( tree, 
-                        rho       = params$rarefaction, 
+                        rho0      = params$rarefaction, 
                         age_grid  = age_grid,
                         lambda    = lambda,
                         mu        = mu)

@@ -10,19 +10,20 @@
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
 #
-simulate_deterministic_hbd = function(	Ntips, 						# number of extant species represented in the tree, i.e. after rarefaction. This is equal to the value of the LTT at present.
+simulate_deterministic_hbd = function(	LTT0, 						# number of extant species represented in the tree at age0, i.e. after rarefaction. This is equal to the value of the LTT at anchor_age.
 										oldest_age,					# numeric, specifying how far back (time before present) to simulate the model
-										rho				= 1,		# numeric within (0,1], specifying the fraction of extant diversity represented in the tree. Can also be NULL, which is equivalent to setting rarefaction=1.
-										age_grid		= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu mut be a single scalar. The returned time series will be defined on an age-grid that may be finer than this grid.
+										age0			= 0,		# numeric, specifying the age (time before present) at which LTT0, lambda0 and rho are specified. Typically this is 0 (i.e., present-day), but may also be somewhere in the past (>0)
+										rho0			= 1,		# numeric within (0,1], specifying the fraction of extant diversity represented in the tree at age0. Can also be NULL, which is equivalent to setting rarefaction=1.
+										age_grid		= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu mut be a single scalar. The returned time series will be defined on an age-grid that may be finer than this grid. If of size >=2, the age_grid must cover oldest_age and age0.
 										lambda			= NULL,		# either NULL, or a single numeric (constant speciation rate over time), or a numeric vector of size NG (listing speciation rates at each age in grid_ages[]).
 										mu				= NULL,		# either a single numeric (constant extinction rate over time), or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]), or NULL (in which case mu_over_lambda must be provided).
 										mu_over_lambda	= NULL,		# ratio mu/lambda. Either a single numeric (constant over time), or a numeric vector of size NG (listing mu/lambda at each age in grid_ages[]), or NULL (in which case mu must be provided).
 										PDR				= NULL,		# either NULL, or a single numeric (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]). Only needed if lambda is NULL.
-										lambda0			= NULL,		# either NULL, or a single numeric specifying the present-day speciation rate (i.e. at age 0). Only needed if lambda is NULL.
+										lambda0			= NULL,		# either NULL, or a single numeric specifying the speciation rate at age0. Only needed if lambda is NULL.
 										splines_degree	= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
 										relative_dt		= 1e-3){	# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.	
 	# check validity of input variables
-	if(is.null(rho)) rho = 1;
+	if(is.null(rho0)) rho0 = 1;
 	if(is.null(mu) && is.null(mu_over_lambda)) return(list(success = FALSE, error = sprintf("Missing either mu or mu_over_lambda")))
 	if(!(is.null(mu) || is.null(mu_over_lambda))) return(list(success = FALSE, error = sprintf("Expected either mu or mu_over_lambda, but not both")))
 	if(is.null(lambda)){
@@ -45,7 +46,8 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 		if(!is.null(mu_over_lambda)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}else{
 		NG = length(age_grid);
-		if((age_grid[1]>0) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age 0 and oldest_age (%g)",oldest_age)))
+		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
+		if((age_grid[1]>age0) || (age_grid[NG]<age0)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age0 (%g)",age0)))
 		if((!is.null(lambda)) && (length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since an age grid of size %d was provided, you must either provide zero, one or %d lambda",NG,NG)))
 		if((!is.null(mu)) && (length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since an age grid of size %d was provided, you must either provide one or %d mu",NG,NG)))
 		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)!=1) && (length(mu_over_lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu_over_lambda; since an age grid of size %d was provided, you must either provide one or %d mu_over_lambda",NG,NG)))
@@ -57,35 +59,39 @@ simulate_deterministic_hbd = function(	Ntips, 						# number of extant species r
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Expected one of 0,1,2,3.")))
 		
 	# simulate model backward in time
-	simulation = simulate_deterministic_HBD_model_CPP(	Ntips 			= Ntips,
+	census_age = age_grid[1]
+	simulation = simulate_deterministic_HBD_model_CPP(	census_age		= census_age,
 														oldest_age		= oldest_age,
-														rarefaction 	= rho,
 														age_grid 		= age_grid,
 														lambdas 		= (if(is.null(lambda)) numeric() else lambda),
 														mus 			= (if(is.null(mu)) numeric() else mu),
 														mu_over_lambda	= (if(is.null(mu_over_lambda)) numeric() else mu_over_lambda),
 														PDRs	 		= (if(is.null(PDR)) numeric() else PDR),
-														lambda0			= (if(is.null(lambda0)) NaN else lambda0),
+														anchor_age		= age0,
+														anchor_rho	 	= rho0,
+														anchor_lambda	= (if(is.null(lambda0)) NaN else lambda0),
+														anchor_LTT 		= LTT0,
 														splines_degree	= splines_degree,
 														relative_dt		= relative_dt);
 	if(!simulation$success) return(list(success = FALSE, error = sprintf("Could not simulate model: %s",simulation$error)))
-	rholambda0 = rho*simulation$lambda0;
+	rholambda0 = simulation$anchor_rho*simulation$anchor_lambda;
+	census_rholambda = simulation$census_rho*simulation$census_lambda;
 
 	return(list(success							= TRUE,
 				ages							= simulation$refined_age_grid, # potentially refined ages grid, on which all returned variables are defined
 				total_diversity					= simulation$total_diversity,
-				shadow_diversity				= simulation$shadow_diversity,
+				shadow_diversity				= simulation$shadow_diversity, # shadow diversity, defined w.r.t. census_age
 				Pmissing						= simulation$Pmissing,
 				Pextinct						= simulation$Pextinct,
 				LTT								= simulation$LTT,
 				lambda							= simulation$lambda,
 				mu								= simulation$mu,
 				diversification_rate			= simulation$diversification_rate,
-				PDR								= simulation$PDR,				# pulled diversification rate
-				PND								= simulation$PND,				# pulled normalized diversity
-				SER								= rholambda0 - simulation$PDR, 	# shadow extinction rate
-				PER								= simulation$lambda0 - simulation$PDR, # pulled extinction rate
-				PSR								= simulation$lambda * (1-simulation$Pmissing), # pulled speciation rate
-				rholambda0						= rholambda0));
+				PDR								= simulation$PDR,				# pulled diversification rate, defined w.r.t. census_age
+				PND								= simulation$PND,				# pulled normalized diversity, defined w.r.t. census_age
+				SER								= census_rholambda - simulation$PDR, 	# shadow extinction rate, defined w.r.t. census_age
+				PER								= simulation$census_lambda - simulation$PDR, # pulled extinction rate, defined w.r.t. census_age
+				PSR								= simulation$lambda * (1-simulation$Pmissing), # pulled speciation rate, defined w.r.t. census_age
+				rholambda0						= rholambda0)); # product rho*lambda at age0
 }
 

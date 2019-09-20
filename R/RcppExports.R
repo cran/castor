@@ -117,6 +117,10 @@ date_tree_via_RED_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length,
     .Call(`_castor_date_tree_via_RED_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, anchor_node, anchor_age)
 }
 
+tree_to_clade_list_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, postorder) {
+    .Call(`_castor_tree_to_clade_list_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, postorder)
+}
+
 sort_tree_edges_root_to_tips_CPP <- function(Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge) {
     .Call(`_castor_sort_tree_edges_root_to_tips_CPP`, Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge)
 }
@@ -155,6 +159,10 @@ collapse_tree_at_resolution_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, ed
 
 trim_tree_at_height_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, max_distance_from_root) {
     .Call(`_castor_trim_tree_at_height_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, max_distance_from_root)
+}
+
+split_tree_at_height_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_edge, split_height) {
+    .Call(`_castor_split_tree_at_height_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, root_edge, split_height)
 }
 
 extend_tree_to_height_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, new_height) {
@@ -205,12 +213,12 @@ get_phylogram_geometry_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_le
     .Call(`_castor_get_phylogram_geometry_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
-tree_to_Newick_string_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, digits, root_edge_length) {
-    .Call(`_castor_tree_to_Newick_string_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, digits, root_edge_length)
+tree_to_Newick_string_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, edge_labels, edge_numbers, digits, root_edge_length, quoting) {
+    .Call(`_castor_tree_to_Newick_string_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, edge_labels, edge_numbers, digits, root_edge_length, quoting)
 }
 
-read_Newick_string_CPP <- function(input, underscores_as_blanks) {
-    .Call(`_castor_read_Newick_string_CPP`, input, underscores_as_blanks)
+read_Newick_string_CPP <- function(input, underscores_as_blanks, interpret_quotes, look_for_edge_names, look_for_edge_numbers) {
+    .Call(`_castor_read_Newick_string_CPP`, input, underscores_as_blanks, interpret_quotes, look_for_edge_names, look_for_edge_numbers)
 }
 
 get_trait_depth_consenTRAIT_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix) {
@@ -297,8 +305,8 @@ get_MuSSE_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edg
     .Call(`_castor_get_MuSSE_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds)
 }
 
-simulate_deterministic_HBD_model_CPP <- function(Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, mu_over_lambda, PDRs, lambda0, splines_degree, relative_dt) {
-    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, Ntips, oldest_age, rarefaction, age_grid, lambdas, mus, mu_over_lambda, PDRs, lambda0, splines_degree, relative_dt)
+simulate_deterministic_HBD_model_CPP <- function(census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt) {
+    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt)
 }
 
 get_HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds) {
@@ -339,6 +347,14 @@ simulate_neutral_gene_evolution_CPP <- function(Ntips, Nnodes, Nedges, Nsites, N
 
 generate_random_tree_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times) {
     .Call(`_castor_generate_random_tree_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times)
+}
+
+generate_tree_from_branching_ages_CPP <- function(branching_ages) {
+    .Call(`_castor_generate_tree_from_branching_ages_CPP`, branching_ages)
+}
+
+get_branching_ages_from_LTT_CPP <- function(ages, LTT) {
+    .Call(`_castor_get_branching_ages_from_LTT_CPP`, ages, LTT)
 }
 
 generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates) {

@@ -59,8 +59,9 @@ Integer vector of length equal to the number of edges in the trimmed tree, with 
 %\references{
 %}
 
-%\seealso{
-%}
+\seealso{
+\code{\link{split_tree_at_height}}
+}
 
 \examples{
 # generate a random tree, include node names

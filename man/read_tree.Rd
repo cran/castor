@@ -4,16 +4,19 @@
 Load a tree from a string or file in Newick (parenthetic) format.
 }
 \description{
-Load a phylogenetic tree from a file or a string, in Newick (parenthetic) format. Any valid Newick format is acceptable.
+Load a phylogenetic tree from a file or a string, in Newick (parenthetic) format. Any valid Newick format is acceptable. Extended variants including edge labels and edge numbers are also supported.
 }
 \usage{
 read_tree(  string  = "", 
             file    = "", 
             edge_order              = "cladewise",
             include_edge_lengths    = TRUE, 
+            look_for_edge_labels    = FALSE, 
+            look_for_edge_numbers   = FALSE, 
             include_node_labels     = TRUE, 
             underscores_as_blanks   = FALSE, 
-            check_label_uniqueness  = FALSE)
+            check_label_uniqueness  = FALSE,
+            interpret_quotes        = FALSE)
 }
 
 \arguments{
@@ -27,16 +30,25 @@ Character, a path to an input text file containing a single tree in Newick forma
 Character, one of ``cladewise'' or ``pruningwise'', specifying the order in which edges should be listed in the returned tree. This does not influence the topology of the tree or the tip/node labeling, it only affects the way edges are numbered internally.
 }
 \item{include_edge_lengths}{
-Logical, specifying whether edge lengths (if available) should be included in the generated tree.
+Logical, specifying whether edge lengths (if available) should be included in the returned tree.
+}
+\item{look_for_edge_labels}{
+Logical, specifying whether edge labels may be present in the input tree. If edge labels are found, they are included in the returned tree as a character vector \code{edge.label}. Edge labels are sought inside square brackets, which are not part of the standard Newick format but used by some tree creation software (Matsen 2012). If \code{look_for_edge_labels==FALSE}, square brackets are read verbatim just like any other character.
+}
+\item{look_for_edge_numbers}{
+Logical, specifying whether edge numbers (non-negative integers) may be present in the input tree. If edge numbers are found, they are included in the returned tree as an integer vector \code{edge.number}. Edge numbers are sought inside curly braces, which are not part of the standard Newick format but used by some tree creation software (Matsen 2012). If \code{look_for_edge_numbers==FALSE}, curly braces are read verbatim just like any other character.
 }
 \item{include_node_labels}{
-Logical, specifying whether node labels (if available) should be included in the generated tree.
+Logical, specifying whether node labels (if available) should be included in the returned tree.
 }
 \item{underscores_as_blanks}{
-Logical, specifying whether underscores ("_") in tip and node labels should be replaced by spaces (" "). This is common behavior in other tree parsers. In any case, tip and node labels are also allowed to contain explicit whitespace (other than newlines).
+Logical, specifying whether underscores ("_") in tip and node labels should be replaced by spaces (" "). This is common behavior in other tree parsers. In any case, tip, node and edge labels (if available) are also allowed to contain explicit whitespace (except for newline characters).
 }
 \item{check_label_uniqueness}{
 Logical, specifying whether to check if all tip labels are unique.
+}
+\item{interpret_quotes}{
+Logical, specifying whether to interpret quotes as delimiters of tip/node/edge labels. If \code{FALSE}, then quotes are read verbatim just like any other character.
 }
 }
 
@@ -54,8 +66,9 @@ A single rooted phylogenetic tree in ``phylo'' format.
 
 \author{Stilianos Louca}
 
-%\references{
-%}
+\references{
+Frederick A. Matsen et al. (2012). A format for  phylogenetic placements. PLOS One. 7:e31009
+}
 
 \seealso{
 \code{\link{write_tree}}

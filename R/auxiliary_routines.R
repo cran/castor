@@ -437,3 +437,23 @@ get_antiderivative_of_piecewise_linear_function = function(	Xgrid,		# numeric ve
 	return(A);
 }
 
+
+
+# given a lineages-through-time curve, defined as a time series on some discrete age grid, extract the branching ages that would have generated that LTT
+# ages[] should be a 1D vector of ages (time before present) in ascending order
+# LTT[] should be a 1D vector of the same size as ages[], listing the number of lineages at each age
+# the LTT is assumed to be linear between adjacent age grid points
+# branching points will be associated with those times where the LTT passes through an integer value
+get_branching_ages_from_LTT = function(ages, LTT){
+	results = get_branching_ages_from_LTT_CPP(ages, LTT);
+	if(!results$success){
+		return(list(success=FALSE, error=results$error));
+	}else{
+		return(list(success=TRUE, branching_ages = results$branching_ages));
+	}
+}
+
+
+
+
+

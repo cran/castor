@@ -3,17 +3,23 @@ read_tree = function(	string="",
 						file="",
 						edge_order				= "cladewise", # how to order edges. Options are "cladewise" (i.e. depth-first-search) or "pruningwise" (i.e. iterating through edge[] leads a post-order traversal) or "none" (unspecified, i.e. depending on how the tree was written in the file)
 						include_edge_lengths 	= TRUE, 
+						look_for_edge_labels 	= FALSE, 
+						look_for_edge_numbers 	= FALSE, 
 						include_node_labels 	= TRUE, 
 						underscores_as_blanks 	= FALSE, 
-						check_label_uniqueness 	= FALSE){
+						check_label_uniqueness 	= FALSE,
+						interpret_quotes		= FALSE){ # whether to interpret quotes as delimiters of tip/node names, rather than reading quotes just like any other character
 	if(file!=""){
 		if(string!="") stop("ERROR: Either string or file must be specified, but not both")
 		string = readChar(file, file.info(file)$size)
 	}
 	if(!(edge_order %in% c("cladewise", "pruningwise"))) stop(sprintf("ERROR: Invalid option '%s' for edge order. Use either 'cladewise' or 'pruningwise'",edge_order))
 
-	results = read_Newick_string_CPP(	input = string, 
-										underscores_as_blanks = underscores_as_blanks)								
+	results = read_Newick_string_CPP(	input 					= string, 
+										underscores_as_blanks 	= underscores_as_blanks,
+										interpret_quotes		= interpret_quotes,
+										look_for_edge_names		= look_for_edge_labels,
+										look_for_edge_numbers	= look_for_edge_numbers);
 	if(!results$success) stop(sprintf("ERROR: Could not parse Newick string: %s",results$error))
 	if(check_label_uniqueness){
 		duplicates = which(duplicated(results$tip_names))
@@ -24,9 +30,12 @@ read_tree = function(	string="",
 				tip.label 	= results$tip_names,
 				node.label 	= (if((!include_node_labels) || all(results$node_names=="")) NULL else results$node_names),
 				edge 		= matrix(results$tree_edge+1L, ncol=2, byrow=TRUE), # unflatten row-major array
-				edge.length = (if((!include_edge_lengths) || all(is.nan(results$edge_length))) NULL else results$edge_length),
+				edge.length = (if((!include_edge_lengths) || all(is.nan(results$edge_lengths))) NULL else results$edge_lengths),
+				edge.label 	= (if((!look_for_edge_labels) || all(results$edge_names=="")) NULL else results$edge_names),
+				edge.number	= (if((!look_for_edge_numbers) || all(results$edge_numbers<0)) NULL else results$edge_numbers),
 				root 		= results$root+1L,
 				root.edge	= (if(is.nan(results$root_edge)) NULL else results$root_edge))
+	if(!is.null(tree$edge.number)) tree$edge.number[tree$edge.number<0] = NA;
 	class(tree) = "phylo";
 	attr(tree,"order") = "cladewise";
 	

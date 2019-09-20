@@ -6,6 +6,7 @@
 # This function thus fits model-classes, rather than models, by fitting the PSR on a discrete time grid.
 fit_hbd_psr_on_grid = function(	tree, 
 								oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
+								age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting
 								age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which the PSR is defined as a piecewise linear curve. If NULL, the PSR is assumed to be time-independent.
 								min_PSR				= 0,		# optional lower bound for the fitted PSRs. Either a single non-negative numeric (applying to all age-grid-points) or a non-negative numeric vector of size NG, specifying the lower bound at each age-grid point.
 								max_PSR				= +Inf,		# optional upper bound for the fitted PSRs. Either a single non-negative numeric (applying to all age-grid-points) or a non-negative numeric vector of size NG, specifying the upper bound at each age-grid point.
@@ -18,20 +19,31 @@ fit_hbd_psr_on_grid = function(	tree,
 								Nthreads			= 1,
 								max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 								fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
-	Ntips	= length(tree$tip.label);
-	Nnodes	= tree$Nnode;
+	# basic error checking
+	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
+	root_age = get_tree_span(tree)$max_distance
+	if(is.null(oldest_age)) oldest_age = root_age;
+	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 is older than the root age (%g)",root_age)));
+	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
 
+	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
+	if(age0>0){
+		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
+		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
+		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
+		if(!is.null(age_grid)) age_grid 	= age_grid - age0
+		root_age = root_age - age0
+	}
+								
 	# pre-compute some tree stats
-	lineage_counter 	= count_lineages_through_time(tree, Ntimes=log2(Ntips), include_slopes=TRUE);
+	LTT0				= length(tree$tip.label);
+	lineage_counter 	= count_lineages_through_time(tree, Ntimes=log2(LTT0), include_slopes=TRUE);
 	sorted_node_ages	= sort(get_all_branching_ages(tree));
 	root_age 		 	= tail(sorted_node_ages,1);
 	age_epsilon		 	= 1e-4*mean(tree$edge.length);
 
-	# basic error checking
-	if((Ntips<2) || (Nnodes<2)){
-		# tree is trivial (~empty)
-		return(list(success = FALSE, error="Tree is too small"));
-	}
+	# more error checking
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
 	if(is.null(oldest_age)) oldest_age = root_age;
 	if(is.null(age_grid)){
@@ -42,7 +54,7 @@ fit_hbd_psr_on_grid = function(	tree,
 		NG = length(age_grid)
 		if((!is.null(guess_PSR)) && (length(guess_PSR)!=1) && (length(guess_PSR)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed PSRs (%d); since an age grid of size %d was provided, you must either provide one or %d PSRs",length(guess_PSR),NG)));
 		if((length(age_grid)>1) && (age_grid[NG]>oldest_age-1e-5*(age_grid[NG]-age_grid[NG-1]))) age_grid[NG] = max(age_grid[NG],oldest_age); # if age_grid "almost" covers oldest_age (i.e. up to rounding errors), then fix the remaining difference
-		if((length(age_grid)>1) && ((age_grid[1]>0) || (age_grid[NG]<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (0 - %g)",age_grid[1],tail(age_grid,1),oldest_age)));
+		if((length(age_grid)>1) && (age_grid[1]<1e-5*(age_grid[2]-age_grid[1]))) age_grid[1] = min(age_grid[1],0); # if age_grid "almost" covers present-day (i.e. up to rounding errors), then fix the remaining difference
 	}
 	if(is.null(max_model_runtime)) max_model_runtime = 0;
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Extected one of 0,1,2,3.")));
@@ -132,7 +144,7 @@ fit_hbd_psr_on_grid = function(	tree,
 		# randomly choose start values for fitted params
 		start_values = guess_param_values[fitted_params]
 		if(trial>1){
-			boxed   = which(!(is.infinite(lower_bounds) || is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
+			boxed   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
 			unboxed = completement(NFP, boxed);
 			if(length(boxed)>0) start_values[boxed] = lower_bounds[boxed] + (upper_bounds[boxed]-lower_bounds[boxed]) * runif(n=length(boxed),min=0,max=1)
 			if(length(unboxed)>0) start_values[unboxed]	= 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
@@ -176,24 +188,28 @@ fit_hbd_psr_on_grid = function(	tree,
 	fitted_param_values = fixed_param_values; fitted_param_values[fitted_params] = fits[[best]]$fparam_values;
 	if(is.null(objective_value) || any(is.na(fitted_param_values)) || any(is.nan(fitted_param_values))) return(list(success=FALSE, error=sprintf("Some fitted parameters are NaN")));
 	fitted_PSR			= fitted_param_values[1:NG]
+
+	# reverse any time shift due to earlier tree trimming
+	age_grid = age_grid + age0
 	
 	# calculate deterministic LTT of fitted congruence class on the age grid
-	fitted_LTT = Ntips * exp(-get_antiderivative_of_piecewise_linear_function(age_grid, 0, fitted_PSR, splines_degree, age_grid));
+	fitted_LTT = LTT0 * exp(-get_antiderivative_of_piecewise_linear_function(age_grid, age0, fitted_PSR, splines_degree, age_grid));
 		
 	# return results
-	return(list(success						= TRUE,
-				objective_value				= objective_value,
-				objective_name				= "loglikelihood",
-				loglikelihood				= loglikelihood,
-				fitted_PSR					= fitted_PSR,
-				guess_PSR					= guess_param_values[1:NG],
-				age_grid					= age_grid,
-				fitted_LTT					= fitted_LTT,
-				NFP							= NFP,
-				AIC							= 2*NFP - 2*loglikelihood,
-				converged					= fits[[best]]$converged,
-				Niterations					= fits[[best]]$Niterations,
-				Nevaluations				= fits[[best]]$Nevaluations));
+	return(list(success					= TRUE,
+				objective_value			= objective_value,
+				objective_name			= "loglikelihood",
+				loglikelihood			= loglikelihood,
+				fitted_PSR				= fitted_PSR,
+				guess_PSR				= guess_param_values[1:NG],
+				age_grid				= age_grid,
+				fitted_LTT				= fitted_LTT,
+				NFP						= NFP,
+				AIC						= 2*NFP - 2*loglikelihood,
+				BIC						= log(sum((sorted_node_ages<=oldest_age) & (sorted_node_ages>=age0)))*NFP - 2*loglikelihood,
+				converged				= fits[[best]]$converged,
+				Niterations				= fits[[best]]$Niterations,
+				Nevaluations			= fits[[best]]$Nevaluations));
 }
 
 

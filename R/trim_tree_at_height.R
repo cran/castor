@@ -1,7 +1,7 @@
-# trim a rooted phylogenetic tree at a specific height (distance from the root)
-# Some of the tips/node/edges may be removed, some of the nodes may turn into tips and some of the kept edges may become shorter
-# Child tips/nodes of trimmed edges will always be tips in the new tree
-# This produces a "partly" ultrametric tree, i.e. by trimming/removing edges but without stretching edges
+# Given a rooted phylogenetic tree and a maximum allowed distance from the root (``height''), 
+# remove tips and nodes and shorten the remaining terminal edges so that the tree's height does not exceed the specified threshold. 
+# This corresponds to drawing the tree in rectangular layout and trimming everything beyond a specific phylogenetic distance from the root. 
+# Tips or nodes at the end of trimmed edges are kept, and the affected edges are shortened. 
 trim_tree_at_height = function(	tree, 
 								height			= Inf, 	# distance from root at which to trim
 								by_edge_count	= FALSE){

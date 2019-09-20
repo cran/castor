@@ -11,6 +11,7 @@ Each congruence class is uniquely described by the ``pulled diversification rate
 \usage{
 fit_hbd_pdr_on_grid(  tree, 
                       oldest_age        = NULL,
+                      age0              = 0,
                       age_grid          = NULL,
                       min_PDR           = -Inf,
                       max_PDR           = +Inf,
@@ -35,8 +36,11 @@ An ultrametric timetree of class "phylo", representing the time-calibrated phylo
 \item{oldest_age}{
 Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age, and the classical formula by Morlon et al. (2011) is used.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBD model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
 }
+\item{age0}{
+Non-negative numeric, specifying the youngest age (time before present) to consider for fitting, and with respect to which \code{rholambda0} is defined. If \code{age0>0}, then \code{rholambda0} refers to the product of the sampling fraction at age \code{age0} and the speciation rate at age \code{age0}. See below for more details.
+}
 \item{age_grid}{
-Numeric vector, listing ages in ascending order at which the PDR is allowed to vary independently. This grid must cover at least the age range from 0 to \code{oldest_age}. If \code{NULL} or of length <=1 (regardless of value), then the PDR is assumed to be time-independent.
+Numeric vector, listing ages in ascending order at which the PDR is allowed to vary independently. This grid must cover at least the age range from \code{age0} to \code{oldest_age}. If \code{NULL} or of length <=1 (regardless of value), then the PDR is assumed to be time-independent.
 }
 \item{min_PDR}{
 Numeric vector of length Ngrid (=\code{max(1,length(age_grid))}), or a single numeric, specifying lower bounds for the fitted PDR at each point in the age grid. If a single numeric, the same lower bound applies at all ages. Use \code{-Inf} to omit lower bounds.
@@ -87,6 +91,8 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 
 
 \details{
+If \code{age0>0}, the input tree is essentially trimmed at \code{age0} (omitting anything younger than \code{age0}), and the PDR and \code{rholambda0} are fitted to this new (shorter) tree, with time shifted appropriately. The fitted \code{rholambda0} is thus the product of the sampling fraction at \code{age0} and the speciation rate at \code{age0}. Note that the sampling fraction at \code{age0} is simply the fraction of lineages extant at \code{age0} that are represented in the timetree.
+
 It is generally advised to provide as much information to the function \code{fit_hbd_pdr_on_grid} as possible, including reasonable lower and upper bounds (\code{min_PDR}, \code{max_PDR}, \code{min_rholambda0} and \code{max_rholambda0}) and a reasonable parameter guess (\code{guess_PDR} and \code{guess_rholambda0}). It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of the PDR over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small.
 }
 
@@ -109,13 +115,13 @@ The log-likelihood of the fitted model for the given timetree.
 Numeric vector of size Ngrid, listing fitted or fixed pulled diversification rates (PDR) at each age-grid point.
 }
 \item{fitted_rholambda0}{
-Numeric, specifying the fitted or fixed product \eqn{\rho\lambda0}.
+Numeric, specifying the fitted or fixed product \eqn{\rho\lambda(0)}.
 }
 \item{guess_PDR}{
 Numeric vector of size Ngrid, specifying the initial guess for the PDR at each age-grid point.
 }
 \item{guess_rholambda0}{
-Numeric, specifying the initial guess for \eqn{\rho\lambda0}.
+Numeric, specifying the initial guess for \eqn{\rho\lambda(0)}.
 }
 \item{age_grid}{
 The age-grid on which the PDR is defined. This will be the same as the provided \code{age_grid}, unless the latter was \code{NULL} or of length <=1.
@@ -125,6 +131,9 @@ Integer, number of fitted (i.e., non-fixed) parameters. If none of the PDRs or \
 }
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
+}
+\item{BIC}{
+The Bayesian information criterion for the fitted model, defined as \eqn{\log(n)k-2\log(L)}, where \eqn{k} is the number of fitted parameters, \eqn{n} is the number of data points (number of branching times), and \eqn{L} is the maximized likelihood.
 }
 \item{converged}{
 Logical, specifying whether the maximum likelihood was reached after convergence of the optimization algorithm. Note that in some cases the maximum likelihood may have been achieved by an optimization path that did not yet converge (in which case it's advisable to increase \code{iter.max} and/or \code{eval.max}).
@@ -189,12 +198,13 @@ fit = fit_hbd_pdr_on_grid(tree,
           max_PDR     = +100,
           condition   = "crown",
           Ntrials     = 10,	# perform 10 fitting trials
-          Nthreads    = 10,	# use two CPUs
+          Nthreads    = 2,	# use two CPUs
           max_model_runtime = 1) 	# limit model evaluation to 1 second
 if(!fit$success){
   cat(sprintf("ERROR: Fitting failed: \%s\n",fit$error))
 }else{
   cat(sprintf("Fitting succeeded:\nLoglikelihood=\%g\n",fit$loglikelihood))
+  
   # plot fitted & true PDR
   plot( x     = fit$age_grid,
         y     = fit$fitted_PDR,
@@ -208,6 +218,9 @@ if(!fit$success){
         y     = PDRs,
         type  = 'l',
         col   = 'blue');
+        
+  # get fitted PDR as a function of age
+  PDR_fun = approxfun(x=fit$age_grid, y=fit$fitted_PDR)
 }
 }
 }

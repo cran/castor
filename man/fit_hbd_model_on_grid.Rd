@@ -9,19 +9,20 @@ Given an ultrametric timetree, fit a homogenous birth-death (HBD) model in which
 \usage{
 fit_hbd_model_on_grid(tree, 
                       oldest_age        = NULL,
+                      age0              = 0,
                       age_grid          = NULL,
                       min_lambda        = 0,
                       max_lambda        = +Inf,
                       min_mu            = 0,
                       max_mu            = +Inf,
-                      min_rho           = 1e-10,
-                      max_rho           = 1,
+                      min_rho0          = 1e-10,
+                      max_rho0          = 1,
                       guess_lambda      = NULL,
                       guess_mu          = NULL,
-                      guess_rho         = 1,
+                      guess_rho0        = 1,
                       fixed_lambda      = NULL,
                       fixed_mu          = NULL,
-                      fixed_rho         = NULL,
+                      fixed_rho0        = NULL,
                       const_lambda      = FALSE,
                       const_mu          = FALSE,
                       splines_degree    = 1,
@@ -39,8 +40,11 @@ An ultrametric timetree of class "phylo", representing the time-calibrated recon
 \item{oldest_age}{
 Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age, and the classical formula by Morlon et al. (2011) is used.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBD model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
 }
+\item{age0}{
+Non-negative numeric, specifying the youngest age (time before present) to consider for fitting, and with respect to which \code{rho} is defined. If \code{age0>0}, then \code{rho0} refers to the sampling fraction at age \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are included in the tree. See below for more details.
+}
 \item{age_grid}{
-Numeric vector, listing ages in ascending order, on which \eqn{\lambda} and \eqn{\mu} are allowed to vary independently. This grid must cover at least the age range from 0 to \code{oldest_age}. If \code{NULL} or of length <=1 (regardless of value), then \eqn{\lambda} and \eqn{\mu} are assumed to be time-independent.
+Numeric vector, listing ages in ascending order, on which \eqn{\lambda} and \eqn{\mu} are allowed to vary independently. This grid must cover at least the age range from \code{age0} to \code{oldest_age}. If \code{NULL} or of length <=1 (regardless of value), then \eqn{\lambda} and \eqn{\mu} are assumed to be time-independent.
 }
 \item{min_lambda}{
 Numeric vector of length Ngrid (=\code{max(1,length(age_grid))}), or a single numeric, specifying lower bounds for the fitted \eqn{\lambda} at each point in the age grid. If a single numeric, the same lower bound applies at all ages.
@@ -54,10 +58,10 @@ Numeric vector of length Ngrid, or a single numeric, specifying lower bounds for
 \item{max_mu}{
 Numeric vector of length Ngrid, or a single numeric, specifying upper bounds for the fitted \eqn{\mu} at each point in the age grid. If a single numeric, the same upper bound applies at all ages. Use \code{+Inf} to omit upper bounds.
 }
-\item{min_rho}{
+\item{min_rho0}{
 Numeric, specifying a lower bound for the fitted sampling fraction \eqn{\rho} (fraction of extant species included in the tree).
 }
-\item{max_rho}{
+\item{max_rho0}{
 Numeric, specifying an upper bound for the fitted sampling fraction \eqn{\rho}.
 }
 \item{guess_lambda}{
@@ -66,8 +70,8 @@ Initial guess for \eqn{\lambda} at each age-grid point. Either \code{NULL} (an i
 \item{guess_mu}{
 Initial guess for \eqn{\mu} at each age-grid point. Either \code{NULL} (an initial guess will be computed automatically), or a single numeric (guessing the same \eqn{\mu} at all ages) or a numeric vector of size Ngrid specifying a separate guess for \eqn{\mu} at each age-grid point. To omit an initial guess for some but not all age-grid points, set their guess values to \code{NA}. Guess values are ignored for non-fitted (i.e., fixed) parameters.
 }
-\item{guess_rho}{
-Numeric, specifying an initial guess for the sampling fraction \eqn{\rho}. Setting this to \code{NULL} or \code{NA} is the same as setting it to 1.
+\item{guess_rho0}{
+Numeric, specifying an initial guess for the sampling fraction \eqn{\rho} at \code{age0}. Setting this to \code{NULL} or \code{NA} is the same as setting it to 1.
 }
 \item{fixed_lambda}{
 Optional fixed (i.e. non-fitted) \eqn{\lambda} values on one or more age-grid points. Either \code{NULL} (\eqn{\lambda} is not fixed anywhere), or a single numeric (\eqn{\lambda} fixed to the same value at all grid points) or a numeric vector of size Ngrid (\eqn{\lambda} fixed on one or more age-grid points, use \code{NA} for non-fixed values).
@@ -75,7 +79,7 @@ Optional fixed (i.e. non-fitted) \eqn{\lambda} values on one or more age-grid po
 \item{fixed_mu}{
 Optional fixed (i.e. non-fitted) \eqn{\mu} values on one or more age-grid points. Either \code{NULL} (\eqn{\mu} is not fixed anywhere), or a single numeric (\eqn{\mu} fixed to the same value at all grid points) or a numeric vector of size Ngrid (\eqn{\mu} fixed on one or more age-grid points, use \code{NA} for non-fixed values).
 }
-\item{fixed_rho}{
+\item{fixed_rho0}{
 Numeric between 0 and 1, optionallly specifying a fixed value for the sampling fraction \eqn{\rho}. If \code{NULL} or \code{NA}, the sampling fraction \eqn{\rho} is estimated, however note that this may not always be meaningful (Stadler 2009, Stadler 2013).
 }
 \item{const_lambda}{
@@ -110,7 +114,9 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 
 
 \details{
-It is generally advised to provide as much information to the function \code{fit_hbd_model_on_grid} as possible, including reasonable lower and upper bounds (\code{min_lambda}, \code{max_lambda}, \code{min_mu}, \code{max_mu}, \code{min_rho} and \code{max_rho}) and a reasonable parameter guess (\code{guess_lambda}, \code{guess_mu} and \code{guess_rho}). It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of \eqn{\lambda} and \eqn{\mu} over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small.
+If \code{age0>0}, the input tree is essentially trimmed at \code{age0} (omitting anything younger than \code{age0}), and the various variables are fitted to this new (shorter) tree, with time shifted appropriately. For example, the fitted \code{rho0} is thus the sampling fraction at \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are represented in the timetree.
+
+It is generally advised to provide as much information to the function \code{fit_hbd_model_on_grid} as possible, including reasonable lower and upper bounds (\code{min_lambda}, \code{max_lambda}, \code{min_mu}, \code{max_mu}, \code{min_rho0} and \code{max_rho0}) and a reasonable parameter guess (\code{guess_lambda}, \code{guess_mu} and \code{guess_rho0}). It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of \eqn{\lambda} and \eqn{\mu} over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small.
 }
 
 
@@ -143,7 +149,7 @@ Numeric vector of size Ngrid, specifying the initial guess for \eqn{\lambda} at 
 \item{guess_mu}{
 Numeric vector of size Ngrid, specifying the initial guess for \eqn{\mu} at each age-grid point.
 }
-\item{guess_rho}{
+\item{guess_rho0}{
 Numeric, specifying the initial guess for \eqn{\rho}.
 }
 \item{age_grid}{
@@ -154,6 +160,9 @@ Integer, number of free (i.e., independently) fitted parameters. If none of the 
 }
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
+}
+\item{BIC}{
+The Bayesian information criterion for the fitted model, defined as \eqn{\log(n)k-2\log(L)}, where \eqn{k} is the number of fitted parameters, \eqn{n} is the number of data points (number of branching times), and \eqn{L} is the maximized likelihood.
 }
 \item{converged}{
 Logical, specifying whether the maximum likelihood was reached after convergence of the optimization algorithm. Note that in some cases the maximum likelihood may have been achieved by an optimization path that did not yet converge (in which case it's advisable to increase \code{iter.max} and/or \code{eval.max}).
@@ -218,7 +227,7 @@ fit = fit_hbd_model_on_grid(tree,
           age_grid    = age_grid,
           max_mu      = 100,
           fixed_lambda= approx(x=time_grid,y=lambdas,xout=sim$final_time-age_grid)$y,
-          fixed_rho   = rho,
+          fixed_rho0   = rho,
           condition   = "crown",
           Ntrials     = 10,	# perform 10 fitting trials
           Nthreads    = 10,	# use two CPUs
@@ -227,6 +236,7 @@ if(!fit$success){
   cat(sprintf("ERROR: Fitting failed: \%s\n",fit$error))
 }else{
   cat(sprintf("Fitting succeeded:\nLoglikelihood=\%g\n",fit$loglikelihood))
+  
   # plot fitted & true mu
   plot( x     = fit$age_grid,
         y     = fit$fitted_mu,
@@ -240,6 +250,9 @@ if(!fit$success){
         y     = mus,
         type  = 'l',
         col   = 'blue');
+        
+  # get fitted mu as a function of age
+  mu_fun = approxfun(x=fit$age_grid, y=fit$fitted_mu)
 }
 }
 }

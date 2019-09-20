@@ -220,6 +220,10 @@ inline double string2Double(const string &number){
 	return strtod(number.c_str(), NULL);
 }
 
+inline double string2Long(const string &number){
+	return strtol(number.c_str(), NULL, 0);
+}
+
 template<class TYPE> 
 string makeString(const TYPE &data){
 	ostringstream stream;
@@ -264,6 +268,27 @@ string trim_whitespace(const std::string &haystack){
 	}
 	return haystack.substr(left,right-left+1);
 }
+
+// count the number of occurrences of a char in a string, optionally restricting counts to those outside of quotes
+long count_occurrences(	const std::string	&haystack,
+						const char			needle,				// (INPUT) character to count the occurrences of
+						const bool			non_quoted_only){	// (INPUT) if true, only occurrences not bracketed by single or double quotes are counted
+	long count = 0;
+	bool open_single = false, open_double = false;
+	for(long i=0; i<haystack.size(); ++i){
+		if(haystack[i]==needle){
+			if((!non_quoted_only) || ((!open_single) && (!open_double))){
+				++count;
+			}
+		}else if((!open_single) && (haystack[i]=='"')){
+			open_double = !open_double;
+		}else if((!open_double) && (haystack[i]=='\'')){
+			open_single = !open_single;
+		}
+	}
+	return count;		
+}
+
 
 inline bool XOR(bool a, bool b){
 	return ((!a) && b) || (a && (!b));
@@ -992,6 +1017,7 @@ VALUE_TYPE polynomial_bound_abs_derivative(	const long			P,			// (INPUT) polynom
 											const VALUE_TYPE	coeff[],	// (INPUT) 1D array of size P, listing polynomial coefficients
 											const double		xmin,		// (INPUT)
 											const double		xmax){		// (INPUT)
+	if(P==0) return 0;
 	std::vector<VALUE_TYPE> Dcoeff(P);
 	for(long p=1; p<=P; ++p){
 		Dcoeff[p-1] = p*coeff[p];
@@ -5204,7 +5230,7 @@ void refine_spline(	const long					degree,						// (INPUT) polynomial degree of 
 	if(end_time<coarse_times[0]) return;
 	const long start_c = (start_time<coarse_times[0] ? 0 : find_next_left_grid_point(coarse_times, start_time, 0)); 		// coarse-grid point immediately below (or equal) to start_time
 	const long end_c   = (end_time>coarse_times.back() ? NC-1 : find_next_right_grid_point(coarse_times, end_time, NC-1));	// coarse-grid point immediately above (or equal) to end_time
-
+	
 	// determine size of refined time series
 	std::vector<long> dN(NC-1,0); // dN[c] will be the resolution (number of additional time points) of the refine time series within the coarse time interval coarse_times[c]:coarse_times[c+1]. A dN of 0 means the particular coarse time interval does not need to be refined.
 	double left_time, right_time, min_value, max_value, max_rate;
@@ -5215,10 +5241,10 @@ void refine_spline(	const long					degree,						// (INPUT) polynomial degree of 
 		max_value	= polynomial_upper_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
 		max_rate 	= polynomial_bound_abs_derivative(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
 		if((right_time-left_time)>max_time_step)	dN[c] = max(dN[c], long(ceil((right_time-left_time)/max_time_step))-1);
-		if((max_value-min_value)>max_value_step)	dN[c] = max(dN[c], long(ceil((right_time-left_time)/(max_value_step/max_rate)))-1);
+		if((max_value-min_value)>max_value_step)	dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_value_step))-1);
 		if(!isinf(max_relative_value_step)){
 			const double max_step = max_relative_value_step * 0.5*(abs(max_value)+abs(min_value));
-			if((max_value-min_value)>max_step) dN[c] = max(dN[c], long(ceil((right_time-left_time)/(max_step/max_rate)))-1);
+			if((max_step>0) && ((max_value-min_value)>max_step)) dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_step))-1);
 		}
 	}
 	const long NR = (end_c-start_c+1) + vector_sum(dN);
@@ -9560,7 +9586,7 @@ NumericVector get_child_count_per_node_CPP(	const long			Ntips,
 											const long 			Nnodes,
 											const long			Nedges,
 											const IntegerVector &tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
-	std::vector<double> node2child_count(Nnodes,0);
+	std::vector<long> node2child_count(Nnodes,0);
 	for(long e=0; e<Nedges; ++e){
 		node2child_count[tree_edge[e*2+0] - Ntips] += 1;
 	}
@@ -10293,23 +10319,28 @@ Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 	min_time = max(0.0, min_time);
 	
 	// determine distance bins
-	const double time_step = (1.0-1e-7)*(max_time-min_time)/(Ntimes-1);
+	const double time_step = (max_time-min_time)/(Ntimes-1);
 	std::vector<double> time_points(Ntimes);
 	for(long t=0; t<Ntimes; ++t){
 		time_points[t] = min_time + time_step*t;
 	}
+	time_points[Ntimes-1] = max_time; // avoid numerical rounding errors
+	const double time_epsilon = 1e-7*(max_time-min_time);
 	
 	// calculate number of clades within each time point
 	std::vector<long> diversities(Ntimes,0);
 	for(long edge=0, child, parent; edge<Nedges; ++edge){
 		parent = tree_edge[edge*2+0];
 		child  = tree_edge[edge*2+1];
-		const long last_time_point 	= min(Ntimes-1,long(floor((clade_times[child]-min_time)/time_step)));
+		const long last_time_point 	= ((clade_times[child]>max_time-time_epsilon) ? Ntimes-1 : min(Ntimes-1,long(floor((clade_times[child]-min_time)/time_step))));
 		if(last_time_point<0) continue; // edge is outside of considered time span
 		const long first_time_point = (parent<0 ? last_time_point : max(0L,long(ceil((clade_times[parent]-min_time)/time_step))));
 		if(first_time_point>Ntimes-1) continue; // edge is outside of considered time span
-		if(first_time_point==last_time_point){ ++diversities[first_time_point]; }
-		else{ for(long t=first_time_point; t<=last_time_point; ++t) ++diversities[t]; }
+		if(first_time_point==last_time_point){ 
+			++diversities[first_time_point];
+		}else{
+			for(long t=first_time_point; t<=last_time_point; ++t) ++diversities[t];
+		}
 	}
 		
 	// calculate slopes (symmetric difference coefficient)
@@ -10697,6 +10728,93 @@ Rcpp::List date_tree_via_RED_CPP(	const long				Ntips,
 	return Rcpp::List::create(	Rcpp::Named("edge_times") 	= edge_times, 	// the new edge lengths in time units, such that the 
 								Rcpp::Named("node_REDs") 	= node_REDs,
 								Rcpp::Named("success") 		= true);
+}
+
+
+
+
+// Given a phylogenetic tree in standard representation, calculate an alternative representation of the tree structure by enumerating clades and their properties
+// Main output:
+//   clades[]: 2D matrix of size Nclades x (1+Nsplits), in row-major format, with the following columns:
+//     Column 1: Parent clade index
+//     Columns 2-(Nsplits+1): Child clade indices, where Nsplits is the maximum number of splits at a node (e.g. Nsplits=2 for bifurcating trees)
+//   lengths[]: 1D array of size Nclades, listing incoming edge lengths for each clade (will be negative for the root)
+//   Rows in clades[] and entries in length[] can be ordered according to clade indices, or according to post-order traversal.
+// Negative values indicate missing values (e.g., no parent for the root, no children for tips)
+// This function is loosely analogous (but not identical) to the function phybase::read.tree.nodes
+// Requirements:
+//    The tree can include monofurcations and multifurcations
+//    The tree must be rooted if postorder==true
+// [[Rcpp::export]]
+Rcpp::List tree_to_clade_list_CPP( 	const long				Ntips,
+												const long 				Nnodes,
+												const long				Nedges,
+												const IntegerVector		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+												const NumericVector		&edge_length,	// (INPUT) 1D array of size Nedges, or empty (in which case each edge is interpreted as having length 1)
+												const bool				postorder){		// (INPUT) if true, nodes are reindexed in the returned lists in postorder traversal, i.e. so that the last node is the root. This is the convention used by phybase::read.tree.nodes. If false, nodes are indexed as in the original tree
+	const long Nclades = Ntips + Nnodes;
+	const bool no_edge_lengths = (edge_length.size()==0);		
+	std::vector<long> old2new_clade(Nclades); // mapping from original clade indices to new clade indices in the returned lists
+	if(postorder){
+		// index tips as in the original tree, but re-index nodes into postorder traversal, i.e. so that the last listed node is the root
+		const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge); // find root
+		if(root<0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Tree is properly rooted");
+
+		// get tree traversal route (root --> tips), excluding tips										
+		//tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+		std::vector<long> queue, node2first_edge, node2last_edge, edge_mapping;
+		get_tree_traversal_depth_first_search(	Ntips,
+												Nnodes,
+												Nedges,
+												root,
+												tree_edge,
+												false, // don't include tips
+												false,
+												queue,
+												node2first_edge,
+												node2last_edge,
+												edge_mapping);
+		
+		// calculate re-indexing mapping for nodes
+		// keep tip indices unchanged, i.e. only re-index nodes
+		for(long tip=0; tip<Ntips; ++tip){
+			old2new_clade[tip] = tip;
+		}
+		for(long q=0; q<Nnodes; ++q){
+			old2new_clade[queue[q]] = Ntips + (Nnodes-1-q);
+		}
+				
+	}else{
+		// index all clades as in the original tree
+		for(long clade=0; clade<Nclades; ++clade){
+			old2new_clade[clade] = clade;
+		}
+	}
+	
+	// count the max number of children for any node
+	std::vector<long> node2child_count(Nnodes,0);
+	for(long e=0; e<Nedges; ++e){
+		node2child_count[tree_edge[e*2+0] - Ntips] += 1;
+	}
+	const long Nsplits = vector_max(node2child_count);
+
+	// populate clades[] and lengths[], with clades potentially reassigned indices according to old2new_clade
+	std::vector<long> clades(Nclades*(Nsplits+1),-1), node2next_child(Nnodes,0);
+	std::vector<double> lengths(Nclades,-1);
+	for(long edge=0, parent, child; edge<Nedges; ++edge){
+		parent = old2new_clade[tree_edge[edge*2+0]];
+		child  = old2new_clade[tree_edge[edge*2+1]];
+		lengths[child] 		= (no_edge_lengths ? 1.0 : edge_length[edge]);
+		clades[child*3+0] 	= parent;
+		clades[parent*(Nsplits+1)+1+node2next_child[parent-Ntips]] = child;
+		++node2next_child[parent-Ntips];
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("success")		 = true,
+								Rcpp::Named("Nsplits")		 = Nsplits,
+								Rcpp::Named("clades")		 = Rcpp::wrap(clades),
+								Rcpp::Named("lengths") 		 = Rcpp::wrap(lengths),
+								Rcpp::Named("old2new_clade") = Rcpp::wrap(old2new_clade));
 }
 
 
@@ -12241,7 +12359,7 @@ Rcpp::List collapse_tree_at_resolution_CPP(	const long			Ntips,
 
 
 // Trim a phylogenetic tree by cutting off tips and nodes, so that all remaining tips have height<=max_height.
-// Note that some edge lengths will be notified (edges cut will be shortened)
+// Note that some edge lengths will be modified (edges cut will be shortened)
 // If initially all tips had height>=max_height, then the trimmed tree will be ultrametric
 // [[Rcpp::export]]
 Rcpp::List trim_tree_at_height_CPP(	const long			Ntips,
@@ -12347,6 +12465,171 @@ Rcpp::List trim_tree_at_height_CPP(	const long			Ntips,
 								Rcpp::Named("new_edge_length")	= Rcpp::wrap(new_edge_length),
 								Rcpp::Named("new_tips_ex_nodes")= Rcpp::wrap(new_tips_ex_nodes)); // new tips that used to be nodes
 }
+
+
+
+
+
+// Split a phylogenetic tree at a specific height (distance from the root), yielding multiple subtrees rooted at the split_height
+// [[Rcpp::export]]
+Rcpp::List split_tree_at_height_CPP(const long			Ntips,
+									const long 			Nnodes,
+									const long			Nedges,
+									const IntegerVector	&tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+									const NumericVector &edge_length, 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+									const double		root_edge,			// (INPUT) length of trailing edge leading into root (usually 0)
+									const double		split_height){		// (INPUT) phylogenetic distance from the root, at which to split the tree. If zero, the original tree is returned. If >tree_span, an error is returned.
+	const long Nclades = Ntips + Nnodes;
+	long parent, child, edge, node;
+	const bool unit_edge_lengths = (edge_length.size()==0);
+	
+	// find root
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+	
+	// Step 1: Determine splitting points and assign edges & clades to subtrees
+	std::vector<long> edge2subtree(Nedges,-1), clade2subtree(Nclades,-1);
+	std::vector<double> distances_from_root(Nclades,0);
+	std::vector<char> split_edge(Nedges);
+	long Nsubtrees	= 0;
+	distances_from_root[root] = 0;
+	if(split_height<=0){
+		// there will only be one subtree, namely the original tree
+		// no edge shall be split
+		Nsubtrees = 1;
+		split_edge.assign(Nedges,0);
+		edge2subtree.assign(Nedges,0);
+		clade2subtree.assign(Nclades,0);
+	}else{
+		// get tree traversal route (root --> tips), not including tips
+		tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+		// iterate through the tree (root --> tips)														
+		for(long q=0; q<traversal.queue.size(); ++q){
+			parent = traversal.queue[q];
+			if(parent<Ntips) continue;
+			node = parent - Ntips;
+			for(long e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+				edge 	= traversal.edge_mapping[e];
+				child 	= tree_edge[edge*2+1];
+				distances_from_root[child] = (unit_edge_lengths ? 1.0 : edge_length[edge]) + distances_from_root[parent];
+				split_edge[edge] = ((distances_from_root[parent]<split_height) && (distances_from_root[child]>=split_height));
+				if(split_edge[edge]){
+					// designate a new subtree, starting at this new splitting point
+					++Nsubtrees;
+					edge2subtree[edge] 	 = Nsubtrees-1;
+					clade2subtree[child] = Nsubtrees-1;
+				}else{
+					edge2subtree[edge] 	 = clade2subtree[parent];
+					clade2subtree[child] = clade2subtree[parent];		
+				}
+			}
+		}
+	}
+	
+	if(Nsubtrees==0){
+		return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("Nsubtrees") = Nsubtrees);
+	}
+	
+	// Step 2: Count Ntips, Nedges, Nnodes per subtree
+	// Also record subtree roots (in terms of old clade indices)
+	std::vector<long> NStips(Nsubtrees,0), NSnodes(Nsubtrees,0), NSclades(Nsubtrees,0), NSedges(Nsubtrees,0);
+	std::vector<long> subtree2root_clade(Nsubtrees);
+	for(long edge=0, subtree; edge<Nedges; ++edge){
+		subtree = edge2subtree[edge];
+		if(split_edge[edge]){
+			// edge is split, so actually will not belong to any subtree
+			// designate child as the subtree's root
+			subtree2root_clade[subtree] = tree_edge[2*edge+1];
+		}else if(subtree>=0){
+			++NSedges[subtree];
+		}
+	}
+	if(split_height<=0) subtree2root_clade[0] = root; // deal with special case where none of the edges were split, and the whole tree is the sole subtree
+	for(long clade=0, subtree; clade<Nclades; ++clade){
+		subtree = clade2subtree[clade];
+		if(subtree>=0){
+			if(clade<Ntips){
+				++NStips[subtree];
+			}else{
+				++NSnodes[subtree];
+			}
+			++NSclades[subtree];
+		}
+	}
+	
+	// Step 3: Calculate clade & edge offsets per subtree (e.g. for storing all subtree info into a single linear array)
+	std::vector<long> clade_offsets(Nsubtrees,0), edge_offsets(Nsubtrees,0);
+	for(long subtree=1; subtree<Nsubtrees; ++subtree){
+		clade_offsets[subtree] = clade_offsets[subtree-1] + NSclades[subtree-1];
+		edge_offsets[subtree]  = edge_offsets[subtree-1] + NSedges[subtree-1];
+	}
+	
+	// Step 4: Map subtree clade indices <--> old clade indices
+	// Since we traverse old clades in ascending order, and subtree tips are old tips, it is guaranteed that the tips of each subtree will be indexed before the subtree's nodes
+	std::vector<long> new2old_clade(clade_offsets.back()+NSclades.back()), old2new_clade(Nclades,-1);
+	std::vector<long> subtree2next_clade_index(Nsubtrees,0); // auxilliary, keeping track of next new clade index to be assigned for each subtree
+	for(long clade=0, subtree; clade<Nclades; ++clade){
+		subtree = clade2subtree[clade];
+		if(subtree>=0){
+			new2old_clade[clade_offsets[subtree] + subtree2next_clade_index[subtree]] = clade;
+			old2new_clade[clade] = subtree2next_clade_index[subtree];
+			++subtree2next_clade_index[subtree];
+		}
+	}
+	
+	// Step 5: Make sure the root of each subtree is indexed = NStips[i]
+	for(long subtree=0, temp, current_root, new_root; subtree<Nsubtrees; ++subtree){
+		if(NStips[subtree]<=1) continue; // pathological tree, no need to adjust the root index
+		current_root = old2new_clade[subtree2root_clade[subtree]];
+		new_root = NStips[subtree];
+		temp = new2old_clade[clade_offsets[subtree]+current_root];
+		new2old_clade[clade_offsets[subtree]+current_root] = new2old_clade[clade_offsets[subtree]+new_root];
+		new2old_clade[clade_offsets[subtree]+new_root] = temp;
+		// update old2new_clade[] to be consistent with the modified new2old_clade[]
+		old2new_clade[new2old_clade[clade_offsets[subtree]+current_root]] = current_root;
+		old2new_clade[new2old_clade[clade_offsets[subtree]+new_root]] = new_root;
+	}
+	
+	// Step 6: Define edges of subtrees, mapping to new clade indices of each subtree
+	std::vector<long> new2old_edge(edge_offsets.back()+NSedges.back());
+	std::vector<long> subtree2next_edge_index(Nsubtrees,0); // auxilliary, keeping track of next new clade index to be assigned for each subtree
+	std::vector<long> subtree_edges(2*(edge_offsets.back()+NSedges.back()));
+	std::vector<long> new_roots(Nsubtrees);
+	std::vector<double> new_root_edges(Nsubtrees);
+	for(long edge=0, child, subtree; edge<Nedges; ++edge){
+		subtree = edge2subtree[edge];
+		if(split_edge[edge]){
+			// this edge is actually becoming the incoming tail of the root, not an actual 2-node-connecting edge
+			child					= tree_edge[2*edge+1];
+			new_roots[subtree]  	= old2new_clade[child];
+			new_root_edges[subtree] = distances_from_root[child]-split_height;
+		}else if(subtree>=0){
+			new2old_edge[edge_offsets[subtree] + subtree2next_edge_index[subtree]] = edge;
+			subtree_edges[2*(edge_offsets[subtree]+subtree2next_edge_index[subtree]) + 0] = old2new_clade[tree_edge[2*edge+0]];
+			subtree_edges[2*(edge_offsets[subtree]+subtree2next_edge_index[subtree]) + 1] = old2new_clade[tree_edge[2*edge+1]];			
+			++subtree2next_edge_index[subtree];
+		}
+	}
+	if(split_height<=0){
+		// special case: explicitly set root info, since no edge was actually split
+		new_roots[0] = root;
+		new_root_edges[0] = root_edge;
+	}
+				
+	return Rcpp::List::create(	Rcpp::Named("success")			= true,
+								Rcpp::Named("Nsubtrees")		= Nsubtrees,
+								Rcpp::Named("NStips")			= NStips,
+								Rcpp::Named("NSnodes")			= NSnodes,
+								Rcpp::Named("NSedges")			= NSedges,
+								Rcpp::Named("new_roots")		= new_roots,		// new root clade indices for each subtree. 
+								Rcpp::Named("root_edges")		= new_root_edges,	// length of tailing edges leading into root, for each subtree.
+								Rcpp::Named("subtree_edges")	= subtree_edges,
+								Rcpp::Named("new2old_clade")	= Rcpp::wrap(new2old_clade),
+								Rcpp::Named("new2old_edge")		= Rcpp::wrap(new2old_edge),
+								Rcpp::Named("clade2subtree")	= Rcpp::wrap(clade2subtree));
+}
+
+
+
 
 
 
@@ -13501,11 +13784,16 @@ std::string tree_to_Newick_string_CPP(	const long			Ntips,
 										const NumericVector	&edge_length,		// (INPUT) 1D array of size Nedges, or empty
 										const StringVector	&tip_labels,		// (INPUT) 1D array of size Ntips, or empty
 										const StringVector	&node_labels,		// (INPUT) 1D array of size Nnodes, or empty
+										const StringVector	&edge_labels,		// (INPUT) 1D array of size Nedges, or empty
+										const IntegerVector	&edge_numbers,		// (INPUT) 1D array of size Nedges, or empty
 										const long			digits,				// (INPUT) number of digits used for printing edge lengths
-										const double		root_edge_length){	// (INPUT) optional edge length leading into the root. Not really an edge of the tree. Ignored if negative.
+										const double		root_edge_length,	// (INPUT) optional edge length leading into the root. Not really an edge of the tree. Ignored if negative.
+										const int			quoting){			// (INPUT) whether to enclose tip & node names in single quotes. 0:never, 1:always single quoting, 2:always double quoting, -1:quote only if needed, and prefer single quotes if possible, -2:quote only if needed, and prefer double quotes if possible
 	const bool has_tip_labels  	= (tip_labels.size()>0);
 	const bool has_node_labels  = (node_labels.size()>0);
 	const bool has_edge_lengths	= (edge_length.size()>0);
+	const bool has_edge_labels	= (edge_labels.size()>0);
+	const bool has_edge_numbers	= (edge_numbers.size()>0);
 	const long Nclades = Ntips + Nnodes;
 	long child,node,clade;
 	ostringstream output;
@@ -13584,17 +13872,41 @@ std::string tree_to_Newick_string_CPP(	const long			Ntips,
 	}
 		
 	// traverse output queue in reverse direction
+	string quote = (quoting==0 ? "" : (quoting==1 ? "'" : (quoting==2 ? "\"" : "")));
+	string name;
 	for(long q=queue.size()-1; q>=0; --q){
 		clade = queue[q];
 		for(long b=0; b<Nbrackets_to_close[clade]; ++b) output << "(";
+		name = "";
 		if(clade<Ntips){
-			if(has_tip_labels) output << tip_labels[clade];
+			if(has_tip_labels) name = tip_labels[clade];
 		}else{
-			node = clade - Ntips;
 			output << ")";
-			if(has_node_labels) output << node_labels[node];
+			if(has_node_labels) name = node_labels[clade - Ntips];
+		}
+		if(name!=""){
+			if(quoting==-1){
+				// quote only if needed, and prefer single quotes if possible
+				quote = ((name.find_first_of('\'')!=string::npos) ? "\"" : ((name.find_first_of("():,\"")!=string::npos) ? "'" : ""));
+			}else if(quoting==-2){
+				// quote only if needed, and prefer double quotes if possible
+				quote = ((name.find_first_of('"')!=string::npos) ? "'" : ((name.find_first_of("():,'")!=string::npos) ? "\"" : ""));			
+			}
+			output << quote << name << quote;
 		}
 		if(has_edge_lengths && (clade!=root)) output << ":" << edge_length[incoming_edge_per_clade[clade]];
+		if(has_edge_numbers && (clade!=root)) output << "{" << edge_numbers[incoming_edge_per_clade[clade]] << "}";
+		if(has_edge_labels && (clade!=root)){
+			name = edge_labels[incoming_edge_per_clade[clade]];
+			if(quoting==-1){
+				// quote only if needed, and prefer single quotes if possible
+				quote = ((name.find_first_of('\'')!=string::npos) ? "\"" : ((name.find_first_of("():,\"")!=string::npos) ? "'" : ""));
+			}else if(quoting==-2){
+				// quote only if needed, and prefer double quotes if possible
+				quote = ((name.find_first_of('"')!=string::npos) ? "'" : ((name.find_first_of("():,'")!=string::npos) ? "\"" : ""));			
+			}
+			output << "[" << quote << name << quote << "]";
+		}
 		if(!is_first_child[clade]) output << ",";
 	}
 	if(has_edge_lengths && (root_edge_length>=0)) output << ":" << root_edge_length;
@@ -13604,49 +13916,217 @@ std::string tree_to_Newick_string_CPP(	const long			Ntips,
 }
 
 
+// parse a string consisting one any subset of the following parts:
+//   edge_length (scalar number)
+//	 [edge_name] (edge name in square brackets)
+//	 [edge_number] (edge number in curly brackets)
+bool aux_Newick_parse_edge_info(	const std::string 	&input,
+									const bool			interpret_quotes,	// (INPUT) don't split within quotes. If false, quotes are read verbatim just like any other character
+									const bool			look_for_name,		// (INPUT) look for an edge name inside square brackets. If false, square brackets are interpreted verbatim like any other character.
+									const bool			look_for_number,	// (INPUT) look for an edge number inside curly braces. If false, curly braces are interpreted verbatim like any other character.
+									const long 			start,				// (INPUT) first character in input to consider
+									const long 			end,				// (INPUT) last character in input to consider
+									double				&edge_length,		// (OUTPUT) edge length. Will be NAN_D if not available
+									string				&edge_name,			// (OUTPUT) edge label. Will be empty ("") if not available
+									long				&edge_number,		// (OUTPUT) edge number. Will be -1 if not available
+									string				&error){			// (OUTPUT) error description in case of failure
+	if(end<start){
+		// no information available
+		edge_name 	= "";
+		edge_number = -1;
+		edge_length	= NAN_D;
+		return true;
+	}else if((!look_for_name) && (!look_for_number)){
+		// classical Newick format, edge info only contains edge_length
+		edge_name 	= "";
+		edge_number = -1;
+		edge_length	= string2Double(input.substr(start,end-start+1));
+		return true;
+	}
+	long length_end = -1, name_start=-1, name_end=-1, number_start=-1, number_end=-1;
+	bool single_quote_open = false, double_quote_open = false;
+	for(long i=start; i<=end; ++i){
+		if(interpret_quotes){
+			if((!single_quote_open) && (input[i]=='"')){
+				double_quote_open = !double_quote_open;
+				continue;
+			}else if((!double_quote_open) && (input[i]=='\'')){
+				single_quote_open = !single_quote_open;
+				continue;
+			}
+		}
+		if((!single_quote_open) && (!double_quote_open)){
+			if(look_for_name && (input[i]=='[')){
+				if(name_start>=0){
+					error = "Redundant opening square bracket [";
+					return false;
+				}
+				name_start = i;
+				if(length_end<0) length_end= i-1;
+			}else if(look_for_name && (input[i]==']')){
+				name_end = i;
+				if(name_start<0){
+					error = "Unexpected closing square bracket ]";
+					return false;
+				}
+				if(length_end<0) length_end= i-1;
+			}else if(look_for_number && (input[i]=='{')){
+				if(number_start>=0){
+					error = "Redundant opening curly brace {";
+					return false;
+				}
+				number_start = i;
+				if(length_end<0) length_end= i-1;
+			}else if(look_for_number && (input[i]=='}')){
+				number_end = i;
+				if(number_start<0){
+					error = "Unexpected closing curly brace }";
+					return false;
+				}
+				if(length_end<0) length_end= i-1;
+			}
+		}
+	}
+	if(length_end<0) length_end = end;
+	
+	// basic error checking
+	if(((name_start==-1) && (name_end>=0)) || ((name_start>=0) && (name_end==-1))){
+		error = "Unbalanced square brackets";
+		return false;
+	}else if(name_end<name_start){
+		error = "Redundant or misplaced square bracket [";
+		return false;
+	}else if(name_start>=end){
+		error = "Unexpected square bracket [ at end of edge info";
+		return false;
+	}
+	if(((number_start<0) && (number_end>=0)) || ((number_start>=0) && (number_end<0))){
+		error = "Unbalanced curly braces";
+		return false;
+	}else if(number_end<number_start){
+		error = "Redundant or misplaced curly brace {";
+		return false;
+	}else if(number_start>=end){
+		error = "Unexpected curly brace { at end of edge info";
+		return false;
+	}
+	
+	// extract pieces based on delimiting positions
+	if(length_end>=start){
+		edge_length	= string2Double(input.substr(start,length_end-start+1));
+	}else{
+		edge_length = NAN_D;
+	}
+	if((name_start<=name_end) && (name_end>=start)){
+		// edge_name will be enclosed in square brackets, so omit those
+		edge_name = input.substr(name_start+1,name_end-name_start-1);
+	}else{
+		edge_name = "";
+	}
+	if((number_start<=number_end) && (number_end>=start)){
+		// edge_number will be enclosed in curly braces, so omit those
+		edge_number = string2Long(input.substr(number_start+1,number_end-number_start-1));
+	}else{
+		edge_number = -1;
+	}
+
+	// trim flanking quotes from edge_name if needed
+	if(interpret_quotes){
+		const long L = edge_name.length();
+		if((L>0) && (((edge_name[0]=='"') && (edge_name[L-1]=='"')) || ((edge_name[0]=='\'') && (edge_name[L-1]=='\'')))){
+			edge_name = edge_name.substr(1,L-2);
+		}
+	}
+	return true;
+}
+
+
+
 // auxiliary routine for parsing a single edge in a Newick string
 // returns false on failure
 bool aux_Newick_extract_next_edge(	const std::string 	&input,
-									long 				&pointer,		// (INPUT/OUTPUT) will move towards the left
-									string 				&name,			// (OUTPUT) child name. Will be empty ("") if not available
-									double				&length,		// (OUTPUT) edge length. Will be NAN_D if not available
-									string				&error){		// (OUTPUT) error description in case of failure
+									const bool			interpret_quotes,	// (INPUT) don't split within quotes. If false, quotes are read verbatim just like any other character
+									const bool			look_for_name,		// (INPUT) look for an edge name inside square brackets. If false, square brackets are interpreted verbatim like any other character.
+									const bool			look_for_number,	// (INPUT) look for an edge number inside curly braces. If false, curly braces are interpreted verbatim like any other character.
+									long 				&pointer,			// (INPUT/OUTPUT) will move towards the left
+									string 				&child_name,		// (OUTPUT) child name. Will be empty ("") if not available
+									double				&edge_length,		// (OUTPUT) edge length. Will be NAN_D if not available
+									string				&edge_name,			// (OUTPUT) edge label. Will be empty ("") if not available
+									long				&edge_number,		// (OUTPUT) edge number. Will be negative if not available
+									string				&error){			// (OUTPUT) error description in case of failure
 	long left = -1, split=-1;
+	bool single_quote_open = false, double_quote_open = false;
 	for(long i=pointer; i>=0; --i){
-		if(input[i]==':') split = i;
-		if((input[i]=='(') || (input[i]==')') || (input[i]==',')){
-			left = i;
-			break;
+		if(interpret_quotes){
+			if((!single_quote_open) && (input[i]=='"')){
+				double_quote_open = !double_quote_open;
+				continue;
+			}else if((!double_quote_open) && (input[i]=='\'')){
+				single_quote_open = !single_quote_open;
+				continue;
+			}
+		}
+		if((!single_quote_open) && (!double_quote_open)){
+			if(input[i]==':'){
+				split = i;
+			}else if((input[i]=='(') || (input[i]==')') || (input[i]==',')){
+				left = i;
+				break;
+			}
 		}
 	}
 	if(left<0){
 		error = "Missing terminal character '(', ')' or ','";
 		return false;
+	}else if(single_quote_open){
+		error = "Imbalanced single quotes";
+		return false;	
+	}else if(double_quote_open){
+		error = "Imbalanced single quotes";
+		return false;	
 	}
 	if(left==pointer){
-		// no name nor length available
-		name = "";
-		length = NAN_D;
+		// no child name nor edge information available
+		child_name 	= "";
+		edge_length = NAN_D;
+		edge_name 	= "";
+		edge_number	= -1;
 		return true;
 	}
 	if(split<0){
-		// no length available, interpret whole specifier as name
-		name   = input.substr(left+1,pointer-left);
-		length = NAN_D;
+		// no edge information available, interpret whole specifier as child_name
+		child_name	= input.substr(left+1,pointer-left);
+		edge_length	= NAN_D;
+		edge_name	= "";
+		edge_number	= -1;
 	}else{
-		name   = input.substr(left+1,split-left-1);
-		length = string2Double(input.substr(split+1,pointer-split));
+		child_name = input.substr(left+1,split-left-1);
+		if(!aux_Newick_parse_edge_info(input, interpret_quotes, look_for_name, look_for_number, split+1, pointer, edge_length, edge_name, edge_number, error)){
+			error = "Misspectified edge info near '"+input.substr(left+1,pointer-left)+"': "+error;
+			return false;
+		}
+	}
+	// trim flanking quotes from child_name if needed
+	if(interpret_quotes){
+		const long L = child_name.length();
+		if((L>0) && (((child_name[0]=='"') && (child_name[L-1]=='"')) || ((child_name[0]=='\'') && (child_name[L-1]=='\'')))){
+			child_name = child_name.substr(1,L-2);
+		}
 	}
 	pointer = left;
 	return true;
 }
 
 
+
 // read a phylogenetic tree from a Newick-formatted string
 // Note: The Newick string is read from right to left and thus in depth-first-search root-->tips order. Hence the returned edges are listed in depth-first-search root-->tips order ("cladewise" in the terminology of ape).
 // [[Rcpp::export]]
 Rcpp::List read_Newick_string_CPP(	std::string	input,
-									const bool	underscores_as_blanks){
+									const bool	underscores_as_blanks,
+									const bool	interpret_quotes,
+									const bool	look_for_edge_names,
+									const bool	look_for_edge_numbers){
 	// remove any newline characters
 	input.erase(std::remove(input.begin(), input.end(), '\n'), input.end());
 	
@@ -13659,39 +14139,43 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 	}
 	
 	// estimate number of tips, nodes & edges for pre-allocation purposes
-	const long estimated_Nclades  = std::count(input.begin(), input.end(), ',') + std::count(input.begin(), input.end(), ')');
+	const long estimated_Nclades  = count_occurrences(input, ',', interpret_quotes) + count_occurrences(input, ')', interpret_quotes);
 	const long estimated_Nedges = estimated_Nclades - 1;
 	
-	
 	// pre-allocate space
-	std::vector<std::string> clade_names;
-	std::vector<double> edge_length;
-	std::vector<long> tree_edge;
+	std::vector<std::string> clade_names, edge_names;
+	std::vector<double> edge_lengths;
+	std::vector<long> tree_edge, edge_numbers;
 	clade_names.reserve(estimated_Nclades);
-	edge_length.reserve(estimated_Nedges);
+	edge_lengths.reserve(estimated_Nedges);
+	edge_names.reserve(estimated_Nedges);
+	edge_numbers.reserve(estimated_Nedges);
 	tree_edge.reserve(2*estimated_Nedges);
 	
 	// prepare auxiliary data structures
 	std::vector<long> clade_stack; // keep track of which node we are currently in. clade_stack[n+1] is a child of clade_stack[n]
 	long pointer = input.length()-1;
 	if(input[pointer]==';') --pointer;
-	std::string error, name;
-	double length, root_edge;
+	std::string error, child_name, edge_name;
+	double edge_length, root_edge;
+	long edge_number;
 	
 	// read input left<--right
 	while(pointer>=0){
 		if(clade_stack.empty() && (!clade_names.empty())){
 			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Tree appears to have multiple roots: Reached top tree level prior to reaching left-end of input string, at position "+makeString(pointer+1));
 		}
-		if(!aux_Newick_extract_next_edge(input, pointer, name, length, error)){
+		if(!aux_Newick_extract_next_edge(input, interpret_quotes, look_for_edge_names, look_for_edge_numbers, pointer, child_name, edge_length, edge_name, edge_number, error)){
 			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Invalid child specifier to the left of position "+makeString(pointer+1)+": "+error);
 		}
-		clade_names.push_back(name);
+		clade_names.push_back(child_name);
 		if(clade_stack.empty()){
 			// clade is root
-			root_edge = length;
+			root_edge = edge_length;
 		}else{
-			edge_length.push_back(length);
+			edge_lengths.push_back(edge_length);
+			edge_names.push_back(edge_name);
+			edge_numbers.push_back(edge_number);
 			tree_edge.push_back(clade_stack.back());
 			tree_edge.push_back(clade_names.size()-1);
 		}
@@ -13724,7 +14208,7 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 		
 	// re-index clades (tips & nodes) consistent with the phylo format
 	const long Nclades = clade_names.size();
-	const long Nedges  = edge_length.size();
+	const long Nedges  = edge_lengths.size();
 	std::vector<long> old2new_clade;
 	long Ntips, Nnodes;
 	reindex_clades(	Nclades,
@@ -13752,7 +14236,9 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 								Rcpp::Named("tip_names") 	= Rcpp::wrap(tip_names),
 								Rcpp::Named("node_names") 	= Rcpp::wrap(node_names),
 								Rcpp::Named("tree_edge")	= Rcpp::wrap(tree_edge),
-								Rcpp::Named("edge_length")	= Rcpp::wrap(edge_length),
+								Rcpp::Named("edge_lengths")	= Rcpp::wrap(edge_lengths),
+								Rcpp::Named("edge_names")	= Rcpp::wrap(edge_names),
+								Rcpp::Named("edge_numbers")	= Rcpp::wrap(edge_numbers),
 								Rcpp::Named("root")			= root,
 								Rcpp::Named("root_edge")	= root_edge, // length of dummy "edge" (lacking a parent) leading into root
 								Rcpp::Named("success")		= true);
@@ -17717,18 +18203,20 @@ public:
 
 
 
-// solve 2nd-order Bernoulli equation of order:
-// dY/dt = P(t)*Y + Q(t)*Y^2
+// solve 2nd-order Bernoulli equation of type:
+//   dY/dt = P(t)*Y + Q(t)*Y^2
+// with condition:
+//   Y(time0) = Y0
 void aux_solve_Bernoulli_ODE2(	const dvector	&times,		// (INPUT) 1D vector of size NT, listing times in ascending order
 								const long		Pdegree,	// (INPUT) polynomial degree of function P
-								const dvector	&Pcoeff,	// (INPUT) 2D array of size NT x Pdegree, listing polynomial coefficients of function P
+								const dvector	&Pcoeff,	// (INPUT) 2D array of size NT x (Pdegree+1), listing polynomial coefficients of function P
 								const long 		Qdegree,	// (INPUT) polynomial degree of function Q
-								const dvector	&Qcoeff,	// (INPUT) 2D array of size NT x Qdegree, listing polynomial coefficients of function Q
+								const dvector	&Qcoeff,	// (INPUT) 2D array of size NT x (Qdegree+1), listing polynomial coefficients of function Q
 								const double	time0,		// (INPUT) start time, i.e. when Y0 is given
 								const double	Y0,			// (INPUT) initial condition of Y at time0
 								dvector			&Y){		// (OUTPUT) 1D array of size NT, listing the solution Y at times[]
 	const long NT = times.size();
-	// calculate A(t):=int_0^t P(s) ds
+	// calculate A(t):=int_{time0}^t P(s) ds
 	const long Adegree = Pdegree+1; // polynomial order of A(s) between age-intervals
 	dvector A, Acoeff;
 	get_antiderivative(times, time0, Pdegree, Pcoeff, A, Acoeff);
@@ -17738,15 +18226,20 @@ void aux_solve_Bernoulli_ODE2(	const dvector	&times,		// (INPUT) 1D vector of si
 	dvector Ecoeff;
 	quadratic_approximation_of_piecewise_exp_polynomial(times, Adegree, Acoeff, Ecoeff);
 	
-	// calculate I(t):=int_0^t E(s) ds
+	// define E*Q as a piecewise polynomial function
+	long EQdegree;
+	dvector EQcoeff;
+	multiply_piecewise_polynomials(NT, Edegree, Ecoeff, Qdegree, Qcoeff, EQdegree, EQcoeff);
+										
+	// calculate I(t):=int_{time0}^t E(s)*Q(s) ds
 	dvector I, Icoeff;
-	get_antiderivative(times, time0, Edegree, Ecoeff, I, Icoeff);
+	get_antiderivative(times, time0, EQdegree, EQcoeff, I, Icoeff);
 	
 	// calculate solution Y
-	// Y(t) = Y0*exp(A(t))/(1 - Q(t)*Y0*I(t)
+	// Y(t) = Y0*exp(A(t))/(1 - Y0*I(t)
 	Y.resize(NT);
 	for(long t=0; t<NT; ++t){
-		Y[t] = Y0*exp(polynomial_value(Adegree, &Acoeff[t*(Adegree+1)+0], times[t]))/(1 - Y0*polynomial_value(Qdegree, &Qcoeff[t*(Qdegree+1)+0], times[t])*I[t]);
+		Y[t] = Y0*exp(polynomial_value(Adegree, &Acoeff[t*(Adegree+1)+0], times[t]))/(1 - Y0*I[t]);
 	}
 }
 
@@ -17754,29 +18247,32 @@ void aux_solve_Bernoulli_ODE2(	const dvector	&times,		// (INPUT) 1D vector of si
 // Calculate various deterministic features of a homogenous birth-death (HBD) model
 // Two HBD models are defined as being "equivalent" iff they have the same deterministic LTT
 // Some of the features calculated by this function are the same for all equivalent models, including:
-//	 The deterministic LTT
+//	 The deterministic LTT, with respect to some census_age
 //   The deterministic shadow diversity
 //   The deterministic pulled diversification rate
 // The function also calculates features of the model that are not necessarily the same for all equivalent models, such as the deterministic total diversity or the lineage-extinction probability
 // [[Rcpp::export]]
-Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IBPUT) number of sampled extant species, i.e. after rarefaction. This is equal to the LTT at present.
+Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			// (INPUT) age (time before present) with respect to which the returned LTT, Pextinct, Pmissing, PNDs, shadow_diversity, census_lambda and census_rho will apply. Typically this is 0, but could also be >0.
 												const double				oldest_age,			// (INPUT) oldest age to consider. Must be within the provided age_grid[]
-												const double				rarefaction,		// (INPUT) number within (0,1], specifying the rarefaction (subsampling fraction) of the timetree, i.e. what fraction of extant diversity is represented in the timetree
-												const std::vector<double>	&age_grid,			// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus will be defined on this age grid. This age grid must cover at least the range [0,oldest_age].
-												const std::vector<double>	&lambdas,			// (INPUT) 1D array of size NG, listing (per-capita) speciation rates on the age-grid.
+												const std::vector<double>	&age_grid,			// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus will be defined on this age grid. This age grid must cover at least the range [census_age,oldest_age].
+												const std::vector<double>	&lambdas,			// (INPUT) 1D array of size NG, listing (per-capita) speciation rates on the age-grid. Either lambdas[] or PDRs[] must be provided.
 												const std::vector<double>	&mus,				// (INPUT) 1D array of size NG, listing (per-capita) extinction rates on the age-grid. Either mus or mu_over_lambda must be provided.
 												const std::vector<double>	mu_over_lambda,		// (INPUT) 1D array of size NG, listing the ratio between mus and lambdas. Either mus or mu_over_lambda must be provided.
 												const std::vector<double>	&PDRs,				// (INPUT) optional 1D array of size NG, listing pulled diversification rates (PDRs) on the age-grid. Only needed if lambdas[] is empty; if both PDRs[] and lambdas[] are provided, their consistency is NOT verified and both are used as-is.
-												double						lambda0,			// (INPUT) present-day speciation rate (i.e. at age 0). Only needed if lambdas[] is empty. If both lambdas[] and lambda0 are provided, lambda0 is re-calculated from the provided lambdas.
+												const double				anchor_age,			// (INPUT) age (time before present) at which the provided anchor_rho and anchor_LTT and anchor_lambda apply. For example, the fraction of lineages extant at age anchor_age that are present in the tree is equal to anchor_rho.
+												const double				anchor_rho,			// (INPUT) number within (0,1], specifying the anchor_rho (subsampling fraction) of the timetree at age anchor_rho_age, i.e. what fraction of diversity extant at age anchor_rho_age is represented in the timetree
+												double						anchor_lambda,		// (INPUT) speciation rate at age anchor_age. Only needed if lambdas[] is empty. If both lambdas[] and anchor_lambda are provided, anchor_lambda is re-calculated from the provided lambdas.
+												const double				anchor_LTT,			// (INPUT) number of sampled lineages at anchor_age, i.e. taking into account anchor_rho.
 												const long					splines_degree,		// (INPUT) either 1, 2 or 3, specifying the degree of the splines defined by the lambdas, mus and PDRs on the age grid.
 												const double				relative_dt){		// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 	if((oldest_age<age_grid[0]) || (oldest_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies outside of the provided age_grid");
-	const bool got_lambdas 	= (!lambdas.empty());
-	const bool got_PDRs		= (!PDRs.empty());
-	const bool got_mus		= (!mus.empty());
-	const double age0 		= 0;
-	const double age_span 	= age_grid.back()-age_grid[0];
-	if((!got_lambdas) && ((!got_PDRs) || isnan(lambda0))) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Insufficient information; requiring either lambdas or PDRs & lambda0");
+	if((census_age<age_grid[0]) || (census_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "census_age lies outside of the provided age_grid");
+	if((anchor_age<age_grid[0]) || (anchor_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "anchor_age lies outside of the provided age_grid");
+	const bool got_lambdas 		= (!lambdas.empty());
+	const bool got_PDRs			= (!PDRs.empty());
+	const bool got_mus			= (!mus.empty());
+	const double age_span 		= age_grid.back()-age_grid[0];
+	if((!got_lambdas) && ((!got_PDRs) || isnan(anchor_lambda))) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Insufficient information; requiring either lambdas or PDRs & anchor_lambda");
 		
 	// refine age_grid as needed, based on the variation in the diversification_rates or PDRs profile
 	// also define or refine diversification_rates, PDRs, lambdas & mus onto that refined grid
@@ -17805,14 +18301,15 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 		coarse_diversification_coeff = coarse_lambda_coeff; coarse_diversification_coeff -= coarse_mu_coeff;
 		
 		// refine time grid
+		const double mean_abs_diversification_rate = vector_abs_mean(coarse_diversification_rates);
 		refine_spline(	splines_degree,
 						age_grid,
 						coarse_diversification_coeff,
-						0,
+						age_grid[0],
 						oldest_age,
-						max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),	// max_time_step
-						0.01*vector_abs_mean(coarse_diversification_rates),						// max_value_step
-						0.01, 																	// max_relative_value_step
+						max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),				// max_time_step
+						(mean_abs_diversification_rate==0 ? INFTY_D : 0.01*mean_abs_diversification_rate),	// max_value_step
+						0.01, 																				// max_relative_value_step
 						refined_age_grid,
 						refined_diversification_coeff);
 		NT = refined_age_grid.size();
@@ -17850,14 +18347,15 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 
 		// refine time grid based on provided PDR
 		dvector refined_PDR_coeff;
-		const double mean_turnover_rate = vector_abs_mean(PDRs) + (got_mus ? vector_abs_mean(mus) : 0.0) + lambda0;
+		const double mean_turnover_rate = vector_abs_mean(PDRs) + (got_mus ? vector_abs_mean(mus) : 0.0) + anchor_lambda;
+		const double mean_abs_PDR = vector_abs_mean(PDRs);
 		refine_spline(	splines_degree,
 						age_grid,
 						coarse_PDR_coeff,
-						0,
+						age_grid[0],
 						oldest_age,
 						max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),	// max_time_step
-						0.01*vector_abs_mean(PDRs),												// max_value_step
+						(mean_abs_PDR==0 ? INFTY_D : 0.01*mean_abs_PDR),						// max_value_step
 						0.01, 																	// max_relative_value_step
 						refined_age_grid,
 						refined_PDR_coeff);
@@ -17880,15 +18378,19 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 			mu_degree = splines_degree;
 			refine_spline(splines_degree, age_grid, coarse_mu_coeff, refined_age_grid, refined_mu_coeff, refined_mus);
 						
-			// calculate lambda
+			// calculate lambda as solution to the Bernoulli equation:
+			//    dlambda/dt = P(t)*lambda + Q(t)*lambda^2
+			// with initial condition:
+			//    lambda(anchor_age) = anchor_lambda
+			// where in this case P=PDR+mu and Q=-1
 			dvector Qcoeff(NT,-1);
 			aux_solve_Bernoulli_ODE2(	refined_age_grid,	
 										splines_degree,			
 										refined_PDR_coeff+refined_mu_coeff,
 										0, // Qdegree
 										Qcoeff,
-										age0,
-										lambda0,
+										anchor_age,
+										anchor_lambda,
 										refined_lambdas);
 	
 		}else{
@@ -17902,7 +18404,11 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 			dvector refined_mu_over_lambda_coeff;
 			refine_spline(splines_degree, age_grid, coarse_mu_over_lambda_coeff, refined_age_grid, refined_mu_over_lambda_coeff);
 
-			// calculate lambda
+			// calculate lambda as solution to the Bernoulli equation:
+			//    dlambda/dt = P(t)*lambda + Q(t)*lambda^2
+			// with initial condition:
+			//    lambda(anchor_age) = anchor_lambda
+			// where in this case P=PDR and Q=mu_over_lambda-1
 			dvector Qcoeff = refined_mu_over_lambda_coeff;
 			for(long t=0; t<NT; ++t){ Qcoeff[t*(splines_degree+1)+0] -= 1; }
 			aux_solve_Bernoulli_ODE2(	refined_age_grid,	
@@ -17910,8 +18416,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 										refined_PDR_coeff,
 										splines_degree, // Qdegree
 										Qcoeff,
-										age0,
-										lambda0,
+										anchor_age,
+										anchor_lambda,
 										refined_lambdas);			
 
 			// calculate mus on new grid
@@ -17946,71 +18452,90 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				Ntips,				// (IB
 	//   refined_PDRs
 	//   NT
 	
+	// determine refined grid cell covering anchor_age & census_age(for later use)
+	const long anchor_g = find_next_left_grid_point(refined_age_grid, anchor_age, 0);
+	const long census_g = find_next_left_grid_point(refined_age_grid, census_age, 0);
 
-	// determine present-day lambda (lambda0) if needed
-	if(got_lambdas){
-		const long g0 = find_next_left_grid_point(refined_age_grid, age0, 0);
-		lambda0 = polynomial_value(lambda_degree,&refined_lambda_coeff[g0*(lambda_degree+1)],age0);
-	}
+	// determine lambda at anchor_age (=anchor_lambda) and census_age if needed
+	if(got_lambdas) anchor_lambda = polynomial_value(lambda_degree,&refined_lambda_coeff[anchor_g*(lambda_degree+1)],anchor_age);
+	const double census_lambda = polynomial_value(lambda_degree,&refined_lambda_coeff[census_g*(lambda_degree+1)],census_age);
 
-	// calculate the antiderivative R(u):=int_0^u dx [lambda(x)-mu(x)]
+	// calculate the antiderivative R(u):=int_{census_age}^u dx [lambda(x)-mu(x)]
 	const long Rdegree = diversification_degree+1; // polynomial order of R(s) between age-intervals
 	std::vector<double> R, Rcoeff;
-	get_antiderivative(refined_age_grid, age0, diversification_degree, refined_diversification_coeff, R, Rcoeff);
+	get_antiderivative(refined_age_grid, census_age, diversification_degree, refined_diversification_coeff, R, Rcoeff);
 				
 	// approximate E(s):=exp(R(s)) as a quadratic function of s
 	const long Edegree = 2;
 	std::vector<double> Ecoeff;
 	quadratic_approximation_of_piecewise_exp_polynomial(refined_age_grid, Rdegree, Rcoeff, Ecoeff);
 
-	// calculate the deterministic total diversity N(t) = N(0)*exp(-R(t))
+	// calculate the deterministic total diversity N(t) = N(anchor_age)*exp(-R(t) + R(anchor_age))
 	std::vector<double> total_diversity(NT);
+	const double anchor_R = polynomial_value(Rdegree,&Rcoeff[anchor_g*(Rdegree+1)],anchor_age);
 	for(long t=0; t<NT; ++t){
-		total_diversity[t] = (Ntips/rarefaction) * exp(-R[t]);
-	}
-	
-	// calculate the deterministic shadow diversity
-	std::vector<double> shadow_diversity(NT);
-	for(long t=0; t<NT; ++t){
-		shadow_diversity[t] = total_diversity[t]*rarefaction*lambda0/refined_lambdas[t];
-	}
-	
-	// calculate the pulled normalized diversity
-	std::vector<double> PNDs(NT);
-	for(long t=0; t<NT; ++t){
-		PNDs[t] = exp(-R[t]) * lambda0/refined_lambdas[t];
-	}
+		total_diversity[t] = (anchor_LTT/anchor_rho) * exp(-R[t]+anchor_R);
+	}	
 
 	// calculate the product I(s):=exp(R(s))*lambda(s) as a piecewise polynomial
 	long Idegree;
 	std::vector<double> Icoeff; 
 	multiply_piecewise_polynomials(NT, Edegree,	Ecoeff, lambda_degree, refined_lambda_coeff, Idegree, Icoeff);
 		
-	// calculate the antiderivative L(s):=int_0^s I(u) du, as a piecewise polynomial
+	// calculate the antiderivative L(s):=int_{census_age}^s I(u) du, as a piecewise polynomial
+	const long Ldegree = Idegree+1;
 	std::vector<double> L, Lcoeff;
-	get_antiderivative(refined_age_grid, age0, Idegree, Icoeff, L, Lcoeff);
+	get_antiderivative(refined_age_grid, census_age, Idegree, Icoeff, L, Lcoeff);
 	
-	// calculate the probability of a lineage missing from the tree, Pmissing
-	// Formula taken from: [Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332]
+	// calculate census_rho, i.e. the sampling fraction that must be applied at census_age so as to satisfy the requested constraints (e.g. anchor_rho at anchor_age)
+	const double anchor_L = polynomial_value(Ldegree,&Lcoeff[anchor_g*(Ldegree+1)],anchor_age);
+	const double census_rho = anchor_rho/(exp(anchor_R) - anchor_rho*anchor_L);
+	
+	// calculate the deterministic shadow diversity
+	std::vector<double> shadow_diversity(NT);
+	for(long t=0; t<NT; ++t){
+		shadow_diversity[t] = total_diversity[t]*census_rho*census_lambda/refined_lambdas[t];
+	}
+	
+	// calculate the pulled normalized diversity
+	std::vector<double> PNDs(NT);
+	for(long t=0; t<NT; ++t){
+		PNDs[t] = exp(-R[t]) * census_lambda/refined_lambdas[t];
+	}
+	
+	// calculate the probability of a lineage missing from the tree (i.e. not censused) at census_age, 
+	// So 1-Pmissing[t] is the probability that a lineage, which was extant at age t, perists until census_age and is censused
 	std::vector<double> Pmissing(NT);
 	for(long t=0; t<NT; ++t){
-		Pmissing[t] = max(0.0,min(1.0, 1.0 - exp(R[t])/(1/rarefaction + L[t])));
+		if(refined_age_grid[t]<census_age){
+			Pmissing[t] = 1-census_rho; // lineage is younger than the census_age, so its ancestor must have existed at census_age, hence it is censused at t with probability = cencus_rho
+		}else{
+			Pmissing[t] = max(0.0,min(1.0, 1.0 - exp(R[t])/(1/census_rho + L[t])));
+		}
 	}
 	
-	// calculate the probability of a lineage becoming extinct, Pextinct
+	// calculate the probability of a lineage becoming extinct by census_age, Pextinct
+	// So 1-Pextinct[t] is the probability that a lineage, which was extant at age t, persisted until census_age (if census_age=<t) or had an ancestor at census_age (if census_age>t, in which case Pextinct=0)
 	std::vector<double> Pextinct(NT);
 	for(long t=0; t<NT; ++t){
-		Pextinct[t] = 1 - exp(R[t])/(1 + L[t]);
+		if(refined_age_grid[t]<census_age){
+			Pextinct[t] = 0; // lineage is younger than census_age, so its ancestor must surely have existed at census_age
+		}else{
+			Pextinct[t] = 1 - exp(R[t])/(1 + L[t]);
+		}
 	}
-	
-	// calculate the deterministic LTT
+		
+	// calculate the deterministic LTT of a hypothetical timetree that is sampled at census_age
 	std::vector<double> LTT(NT);
 	for(long t=0; t<NT; ++t){
 		LTT[t] = total_diversity[t] * (1-Pmissing[t]);
 	}
 		
 	return Rcpp::List::create(	Rcpp::Named("success") 					= true,
-								Rcpp::Named("lambda0")  				= lambda0,
+								Rcpp::Named("anchor_lambda")  			= anchor_lambda,
+								Rcpp::Named("census_lambda")  			= census_lambda,
+								Rcpp::Named("anchor_rho")  				= anchor_rho,
+								Rcpp::Named("census_rho")  				= census_rho,
 								Rcpp::Named("refined_age_grid")			= Rcpp::wrap(refined_age_grid),
 								Rcpp::Named("total_diversity")	 		= Rcpp::wrap(total_diversity),
 								Rcpp::Named("shadow_diversity") 		= Rcpp::wrap(shadow_diversity),	// the same for all congruent models
@@ -18047,11 +18572,11 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 	const long NB = branching_ages.size();
 	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
 	const double age0 = 0;
-	
+		
 	// basic error checking
 	if((NB==0) || age_grid.empty()) return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("error") = "Not enough input data (zero branching ages and/or empty age-grid");
 	if((age_grid[0]>age0) || (age_grid.back()<oldest_age)) return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("error") = "Age-grid does not cover the entire considered age interval [0:oldest_age]");
-	
+		
 	// get splines representation of lambdas & mus
 	dvector coarse_lambda_coeff, coarse_mu_coeff, coarse_diversification_coeff, coarse_diversification_rates;
 	const long lambda_degree			= splines_degree;
@@ -18064,6 +18589,7 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 	
 	// refine age_grid as needed
 	const double mean_turnover_rate = vector_mean(lambdas) + vector_mean(mus);
+	const double mean_abs_diversification_rate = vector_abs_mean(coarse_diversification_rates);
 	const double age_span = age_grid.back()-age_grid[0];
 	dvector refined_diversification_coeff, refined_age_grid;
 	refine_spline(	diversification_degree,
@@ -18071,9 +18597,9 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 					coarse_diversification_coeff,
 					age0,
 					oldest_age,
-					max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),	// max_time_step
-					0.01*vector_abs_mean(coarse_diversification_rates),						// max_value_step
-					0.01, 																	// max_relative_value_step
+					max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),				// max_time_step
+					(mean_abs_diversification_rate==0 ? INFTY_D : 0.01*mean_abs_diversification_rate),	// max_value_step
+					0.01, 																				// max_relative_value_step
 					refined_age_grid,
 					refined_diversification_coeff);	
 	const long NRG = refined_age_grid.size();
@@ -18155,7 +18681,7 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 	}else if(condition=="crown"){
     	LL -= Nsubtrees*(log(node_lambda) + 2*log(1-oldest_E));
 	}
-	
+		
 	return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("loglikelihood") = LL);
 }
 
@@ -18201,9 +18727,9 @@ Rcpp::List get_HBD_PDR_loglikelihood_CPP(	const std::vector<double>	&branching_a
 					coarse_PDR_coeff,
 					age0,
 					oldest_age,
-					max(1e-8*age_span,min(0.1*age_span,relative_dt/PDR_scale)),	// max_time_step
-					0.01*PDR_scale,												// max_value_step
-					0.01, 																	// max_relative_value_step
+					max(1e-8*age_span,min(0.1*age_span,relative_dt/PDR_scale)),		// max_time_step
+					(PDR_scale==0 ? INFTY_D : 0.01*PDR_scale),						// max_value_step
+					0.01, 															// max_relative_value_step
 					refined_age_grid,
 					refined_PDR_coeff);	
 	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted grid refinement because the maximum allowed runtime was reached");
@@ -19097,6 +19623,7 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		// if total_rate==0, move a bit ahead in time and hope that the rate will soon change
 		if(total_rate==0){
 			time += time_epsilon;
+			total_rate = 1/time_epsilon; // set to some low value to get through loop condition
 			continue;
 		}
 		
@@ -19191,6 +19718,162 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 								Rcpp::Named("birth_times")		= Rcpp::wrap(birth_times),
 								Rcpp::Named("death_times")		= Rcpp::wrap(death_times));
 }
+
+
+
+// Given a list of Nnodes branching ages (time before present), generate a random phylogenetic coalescent (ultrametric) tree with Nnodes+1 tips
+// The oldest branching age will thus be the root age
+// tips are guaranteed to be connected in random order, i.e. this function can also be used to connect a random set of tips into a tree.
+// nodes will be indexed in chronological order (i.e. in order of decreasing age). In particular, node 0 will be the root.
+bool generate_tree_from_branching_ages(	const std::vector<double>	&branching_ages,// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order). Note that branching_ages[n] will not necessarily be the age of the n-th node in the generated tree (i.e. node indices may be mixed up)
+										long						&Ntips,			// (OUTPUT) the number of tips in the generated tree
+										long						&Nedges,		// (OUTPUT) the number of edges in the generated tree
+										long						&root,			// (OUTPUT) the clade index of the root. This will always be equal to Ntips.
+										std::vector<long>			&tree_edge,		// (OUTPUT) 2D array of size Nedges x 2 in row-major format, listing tree edges
+										std::vector<double>			&edge_length,	// (OUTPUT) 1D array of size Nedges, listing edge lengths
+										std::string					&error){		// (OUTPUT) error message in case of failure
+	error = "";
+	const long Nnodes = branching_ages.size();
+	if(Nnodes<=0){ error = "No branching points provided"; return false; }
+	if(branching_ages.back()<branching_ages[0]){ error = "Branching ages must be in ascending order"; return false; }
+	
+	Ntips = Nnodes + 1;
+	const long Nclades = Ntips + Nnodes;
+	Nedges = Nclades-1;
+	tree_edge.resize(Nedges*2);
+	edge_length.resize(Nedges);
+	
+	// iterate through branching points, randomly connecting two clades/lineages everytime
+	long next_edge = 0;
+	std::vector<long> orphan_nodes; // pool of nodes created but not yet connected to a parent
+	orphan_nodes.reserve(Nnodes);
+	std::vector<long> orphan_tips(Ntips);
+	for(long tip=0; tip<Ntips; ++tip){ orphan_tips[tip] = tip; }  // pool of tips not yet connected to a parent
+	long orphan1, orphan2, child1, child2, Norphan_tips, Norphans, node, temp;
+	for(long b=0; b<Nnodes; ++b){
+		// pick two random orphan clades to connect (pick without replacement)
+		Norphan_tips 	= orphan_tips.size();
+		Norphans 		= Norphan_tips + orphan_nodes.size();
+		orphan1 		= uniformIntWithin(0,Norphans-1);
+		orphan2 		= uniformIntWithin(0,Norphans-2);
+		if(orphan2>=orphan1) orphan2 += 1;
+		if(orphan2<orphan1){
+			// make sure orphan2>orphan1, needed for proper removal from lists at the end
+			temp = orphan1;
+			orphan1 = orphan2;
+			orphan2 = temp;	
+		}
+		// determine the clade indices corresponding to orphan1 & orphan2
+		if(orphan1<Norphan_tips){
+			child1 = orphan_tips[orphan1];
+		}else{
+			child1 = Ntips + orphan_nodes[orphan1-Norphan_tips];
+		}
+		if(orphan2<Norphan_tips){
+			child2 = orphan_tips[orphan2];
+		}else{
+			child2 = Ntips + orphan_nodes[orphan2-Norphan_tips];
+		}
+		// determine the node index corresponding to this branching age
+		node = Nnodes - 1 - b; // nodes are assigned indices in chronological order (i.e. in order of decreasing age), whereas branching ages are provided in increasing order
+		// connect child1 & child2 to the new node (whose age is branching_ages[b])
+		edge_length[next_edge] 	 = branching_ages[b] - (child1<Ntips ? 0 : branching_ages[Nnodes-1-(child1-Ntips)]);
+		tree_edge[next_edge*2+0] = Ntips+node;
+		tree_edge[next_edge*2+1] = child1;
+		++next_edge;
+		edge_length[next_edge]   = branching_ages[b] - (child2<Ntips ? 0 : branching_ages[Nnodes-1-(child2-Ntips)]);
+		tree_edge[next_edge*2+0] = Ntips+node;
+		tree_edge[next_edge*2+1] = child2;
+		++next_edge;
+		// update inventories of orphan nodes
+		// first remove orphan2, under the assumption that orphan2>orphan1 (so that orphan1 indexing is not messed up)
+		if(orphan2<Norphan_tips){
+			remove_item_from_vector(orphan_tips, orphan2);
+		}else{
+			remove_item_from_vector(orphan_nodes, orphan2-Norphan_tips);
+		}
+		if(orphan1<Norphan_tips){
+			remove_item_from_vector(orphan_tips, orphan1);
+		}else{
+			remove_item_from_vector(orphan_nodes, orphan1-Norphan_tips);
+		}
+		orphan_nodes.push_back(node);
+	}
+			
+	return true;						
+}
+			
+			
+
+// Rcpp wrapper function for generate_tree_from_branching_ages()
+// [[Rcpp::export]]
+Rcpp::List generate_tree_from_branching_ages_CPP(	const std::vector<double>	&branching_ages){	// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order). Note that branching_ages[n] will not necessarily be the age of the n-th node in the generated tree (i.e. node indices may be mixed up)
+	long Ntips, Nedges, root;
+	std::string error;
+	std::vector<long> tree_edge;
+	std::vector<double> edge_length;
+	const bool OK = generate_tree_from_branching_ages(branching_ages, Ntips, root, Nedges, tree_edge, edge_length, error);
+	if(OK){
+		return Rcpp::List::create(	Rcpp::Named("success") 		= true,
+									Rcpp::Named("tree_edge") 	= Rcpp::wrap(tree_edge),
+									Rcpp::Named("edge_length")	= Rcpp::wrap(edge_length),
+									Rcpp::Named("Nnodes") 		= branching_ages.size(),
+									Rcpp::Named("Ntips") 		= Ntips,
+									Rcpp::Named("Nedges") 		= Nedges,
+									Rcpp::Named("root") 		= root);
+	}else{
+		return Rcpp::List::create( Rcpp::Named("success") = false, Rcpp::Named("error") = error);
+	}
+}
+
+
+
+
+// given a lineages-through-time curve of some hypothetical timetree, defined as a time series on some discrete age grid, extract the branching ages that would have resulted in that LTT
+// The LTT is assumed to be linear between adjacent age grid points
+// branching points will be associated with those times where the LTT passes through an integer value
+// [[Rcpp::export]]
+Rcpp::List get_branching_ages_from_LTT_CPP(	const std::vector<double>	&ages,		// (INPUT) 1D vector of size Nages, listing ages (time before present) in ascending order
+											const std::vector<double>	&LTT){		// (INPUT) 1D vector of size Nages, listing the number of lineages (value of the LTT) in the tree. Note that since ages are ascending, LTT values must be in descending order
+		const long Nages = LTT.size();
+		if(Nages<=1) return Rcpp::List::create( Rcpp::Named("success") = false, Rcpp::Named("error") = "Insufficient time points provided for LTT");
+		const double LTT0 = LTT[0];
+		const double age0 = ages[0];
+		std::vector<double>	branching_ages;
+		branching_ages.reserve(max(2l,long(LTT[0]-LTT.back()+1)));
+		long last_jump_value = -1, focal_y;
+		double last_jump_age = -1, focal_age;
+		for(long a=0; a<Nages; ++a){
+			if(last_jump_value<0){
+				// still looking for the first integer value
+				if(long(LTT[a])==LTT[a]){
+					last_jump_value = LTT[a];
+					last_jump_age	= ages[a];
+				}else if(long(LTT[a])<long(LTT0)){
+					// crossed an integer, so estimate crossing point
+					last_jump_value = long(LTT0);
+					last_jump_age = age0 + (last_jump_value-LTT0)*(ages[a]-age0)/(LTT[a]-LTT0);
+				}
+			}
+			if(last_jump_age<0) continue;
+			if(last_jump_value-LTT[a]>=1){
+				// at least one integer was passed between the last jump and ages[a]
+				focal_age 	= last_jump_age;
+				focal_y		= last_jump_value;
+				for(long y=last_jump_value-1; y>=LTT[a]; --y){
+					focal_age 	= last_jump_age + (y-last_jump_value)*(ages[a]-last_jump_age)/(LTT[a]-last_jump_value);
+					focal_y 	= y;
+					branching_ages.push_back(focal_age);
+				}
+				last_jump_age 	= focal_age;
+				last_jump_value = focal_y;
+			}
+		}
+		
+		return Rcpp::List::create(	Rcpp::Named("success") = true, 
+									Rcpp::Named("branching_ages") = branching_ages);
+}
+
 
 
 

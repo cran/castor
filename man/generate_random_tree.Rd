@@ -24,6 +24,7 @@ generate_random_tree(parameters           = list(),
                      added_periodic       = FALSE,
                      tip_basename         = "", 
                      node_basename        = NULL,
+                     edge_basename        = NULL,
                      include_birth_times  = FALSE,
                      include_death_times  = FALSE)
 
@@ -91,6 +92,9 @@ Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then t
 }
 \item{node_basename}{
 Character. Prefix to be used for node labels (e.g. "node."). If \code{NULL}, no node labels will be included in the tree.
+}
+\item{edge_basename}{
+Character. Prefix to be used for edge labels (e.g. "edge."). Edge labels (if included) are stored in the character vector \code{edge.label}. If \code{NULL}, no edge labels will be included in the tree.
 }
 \item{include_birth_times}{
 Logical. If \code{TRUE}, then the times of speciation events (in order of occurrence) will also be returned.
