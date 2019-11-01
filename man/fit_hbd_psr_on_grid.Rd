@@ -10,20 +10,24 @@ Each congruence class is uniquely described by the ``pulled speciation rate'' (P
 }
 \usage{
 fit_hbd_psr_on_grid(  tree, 
-                      oldest_age        = NULL,
-                      age0              = 0,
-                      age_grid          = NULL,
-                      min_PSR           = 0,
-                      max_PSR           = +Inf,
-                      guess_PSR         = NULL,
-                      fixed_PSR         = NULL,
-                      splines_degree    = 1,
-                      condition         = "stem",
-                      relative_dt       = 1e-3,
-                      Ntrials           = 1,
-                      Nthreads          = 1,
-                      max_model_runtime = NULL,
-                      fit_control       = list())
+                      oldest_age            = NULL,
+                      age0                  = 0,
+                      age_grid              = NULL,
+                      min_PSR               = 0,
+                      max_PSR               = +Inf,
+                      guess_PSR             = NULL,
+                      fixed_PSR             = NULL,
+                      splines_degree        = 1,
+                      condition             = "stem",
+                      relative_dt           = 1e-3,
+                      Ntrials               = 1,
+                      Nbootstraps           = 0,
+                      Ntrials_per_bootstrap = NULL,
+                      Nthreads              = 1,
+                      max_model_runtime     = NULL,
+                      fit_control           = list(),
+                      verbose               = FALSE,
+                      verbose_prefix        = "")
 }
 \arguments{
 \item{tree}{
@@ -62,6 +66,12 @@ Strictly positive numeric (unitless), specifying the maximum relative time step 
 \item{Ntrials}{
 Integer, specifying the number of independent fitting trials to perform, each starting from a random choice of model parameters. Increasing \code{Ntrials} reduces the risk of reaching a non-global local maximum in the fitting objective.
 }
+\item{Nbootstraps}{
+Integer, specifying an optional number of bootstrap samplings to perform, for estimating standard errors and confidence intervals of maximum-likelihood fitted parameters. If 0, no bootstrapping is performed. Typical values are 10-100. At each bootstrap sampling, a random timetree is generated under the birth-death model according to the fitted PSR, the parameters are estimated anew based on the generated tree, and subsequently compared to the original fitted parameters. Each bootstrap sampling will use roughly the same information and similar computational resources as the original maximum-likelihood fit (e.g., same number of trials, same optimization parameters, same initial guess, etc).
+}
+\item{Ntrials_per_bootstrap}{
+Integer, specifying the number of fitting trials to perform for each bootstrap sampling. If \code{NULL}, this is set equal to \code{max(1,Ntrials)}. Decreasing \code{Ntrials_per_bootstrap} will reduce computation time, at the expense of potentially inflating the estimated confidence intervals; in some cases (e.g., for very large trees) this may be useful if fitting takes a long time and confidence intervals are very narrow anyway. Only relevant if \code{Nbootstraps>0}.
+}
 \item{Nthreads}{
 Integer, specifying the number of parallel threads to use for performing multiple fitting trials simultaneously. This should generally not exceed the number of available CPUs on your machine. Parallel computing is not available on the Windows platform.
 }
@@ -70,6 +80,12 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 }
 \item{fit_control}{
  Named list containing options for the \code{nlminb} optimization routine, such as \code{iter.max}, \code{eval.max} or \code{rel.tol}. For a complete list of options and default values see the documentation of \code{nlminb} in the \code{stats} package.
+}
+\item{verbose}{
+Logical, specifying whether to print progress reports and warnings to the screen. Note that errors always cause a return of the function (see return values \code{success} and \code{error}).
+}
+\item{verbose_prefix}{
+Character, specifying the line prefix for printing progress reports to the screen.
 }
 }
 
@@ -119,6 +135,21 @@ Integer, specifying the number of iterations performed during the optimization p
 }
 \item{Nevaluations}{
 Integer, specifying the number of likelihood evaluations performed during the optimization path that yielded the maximum likelihood.
+}
+\item{standard_errors}{
+If \code{Nbootstraps>0}, this will be a numeric vector of size NGrid, listing bootstrap-estimated standard errors for the fitted PSR at each grid point.
+}
+\item{CI50lower}{
+If \code{Nbootstraps>0}, this will be a numeric vector of size Ngrid, listing bootstrap-estimated lower bounds of the 50-percent confidence intervals for the fitted PSR at each grid point.
+}
+\item{CI50upper}{
+Similar to \code{CI50lower}, listing upper bounds of 50-percentile confidence intervals.
+}
+\item{CI95lower}{
+Similar to \code{CI50lower}, listing lower bounds of 95-percentile confidence intervals.
+}
+\item{CI95upper}{
+Similar to \code{CI95lower}, listing upper bounds of 95-percentile confidence intervals.
 }
 }
 

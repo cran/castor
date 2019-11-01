@@ -34,18 +34,19 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 		if(!is.null(PDR)) return(list(success = FALSE, error = sprintf("PDR must not be explicitly provided when lambda are provided (due to potential ambiguity)")))
 	}
 	if(is.null(age_grid) || (length(age_grid)<=1)){
-		if((!is.null(lambda)) && (length(lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since no age grid was provided, you must either provide a single (constant) lambda or none")))
-		if((!is.null(mu)) && (length(mu)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since no age grid was provided, you must provide a single (constant) mu")))
+		if((!is.null(lambda)) && (length(lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of lambda values; since no age grid was provided, you must either provide a single (constant) lambda or none")))
+		if((!is.null(mu)) && (length(mu)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu values; since no age grid was provided, you must provide a single (constant) mu")))
 		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu_over_lambda; since no age grid was provided, you must provide a single (constant) mu_over_lambda")))
 		# create dummy age grid
 		NG 			= 2;
-		age_grid	= seq(from=0,to=oldest_age,length.out=NG)
+		age_grid	= seq(from=0,to=1.01*oldest_age,length.out=NG)
 		if(!is.null(lambda)) lambda = rep(lambda,times=NG);
 		if(!is.null(PDR)) PDR = rep(PDR,times=NG);
 		if(!is.null(mu)) mu = rep(mu,times=NG);
 		if(!is.null(mu_over_lambda)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}else{
 		NG = length(age_grid);
+		if(age_grid[1]>tail(age_grid,1))return(list(success = FALSE, error = sprintf("Values in age_grid must be strictly increasing")))
 		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
 		if((age_grid[1]>age0) || (age_grid[NG]<age0)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age0 (%g)",age0)))
 		if((!is.null(lambda)) && (length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since an age grid of size %d was provided, you must either provide zero, one or %d lambda",NG,NG)))
@@ -56,7 +57,7 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 		if((!is.null(mu)) && (length(mu)==1)) mu = rep(mu,times=NG);
 		if((!is.null(mu_over_lambda)) && (length(mu_over_lambda)==1)) mu_over_lambda = rep(mu_over_lambda,times=NG);
 	}
-	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Expected one of 0,1,2,3.")))
+	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
 		
 	# simulate model backward in time
 	census_age = age_grid[1]

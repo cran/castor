@@ -56,6 +56,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	Ntips	= results$Ntips
 	Nnodes 	= results$Nnodes
 	Nedges 	= results$Nedges
+	extant_tips = results$extant_tips + 1
 	tree = list(Nnode 		= Nnodes,
 				tip.label 	= paste(tip_basename, 1:Ntips, sep=""),
 				node.label 	= (if(is.null(node_basename)) NULL else paste(node_basename, 1:Nnodes, sep="")),
@@ -71,12 +72,13 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	if(parameters$resolution>0){
 		root_age = results$final_time - results$root_time
 		if(parameters$resolution>=root_age) return(list(success=FALSE, error=sprintf("Collapsing at resolution %g is impossible for the generated tree (root age %g)", parameters$resolution, root_age)))
-		collapsing 	= collapse_tree_at_resolution(tree,  resolution = parameters$resolution, shorten = FALSE, rename_collapsed_nodes = FALSE, criterion = 'max_tip_depth')
-		tree 		= collapsing$tree
-		Ncollapsed 	= Ntips - length(tree$tip.label)
-		results$root_time = results$root_time + collapsing$root_shift; # update root time, in case root has changed
-		Ntips  	= length(tree$tip.label)
-		Nnodes 	= tree$Nnode
+		collapsing 			= collapse_tree_at_resolution(tree,  resolution = parameters$resolution, shorten = FALSE, rename_collapsed_nodes = FALSE, criterion = 'max_tip_depth')
+		tree 				= collapsing$tree
+		Ncollapsed 			= Ntips - length(tree$tip.label)
+		results$root_time 	= results$root_time + collapsing$root_shift; # update root time, in case root has changed
+		Ntips  				= length(tree$tip.label)
+		Nnodes 				= tree$Nnode
+		extant_tips 		= extant_tips[collapsing$new2old_clade[1:Ntips]]
 	}
 	
 	# rarefy if needed
@@ -84,12 +86,13 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	if(parameters$rarefaction<1){
 		rarefaction_depth = parameters$rarefaction*Ntips;
 		if(rarefaction_depth<2) return(list(success=FALSE, error=sprintf("Rarefaction (%g) is too low for the generated tree (%d tips)", parameters$rarefaction,Ntips)))
-		rarefaction = castor::get_subtree_with_tips(tree, only_tips=sample.int(n=Ntips, size=rarefaction_depth, replace=FALSE), omit_tips=FALSE, collapse_monofurcations=TRUE)
-		tree 		= rarefaction$subtree
-		Nrarefied 	= Ntips - length(tree$tip.label)
-		results$root_time = results$root_time + rarefaction$root_shift; # update root time, in case root has changed
-		Ntips  = length(tree$tip.label)
-		Nnodes = tree$Nnode
+		rarefaction 		= castor::get_subtree_with_tips(tree, only_tips=sample.int(n=Ntips, size=rarefaction_depth, replace=FALSE), omit_tips=FALSE, collapse_monofurcations=TRUE)
+		tree 				= rarefaction$subtree
+		Nrarefied 			= Ntips - length(tree$tip.label)
+		results$root_time 	= results$root_time + rarefaction$root_shift; # update root time, in case root has changed
+		Ntips  				= length(tree$tip.label)
+		Nnodes 				= tree$Nnode
+		extant_tips 		= extant_tips[rarefaction$new2old_tip[1:Ntips]]
 	}
 	
 	if(coalescent){
@@ -102,6 +105,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 				root_time			= results$root_time,
 				final_time			= results$final_time,
 				equilibrium_time	= results$equilibrium_time,
+				extant_tips			= extant_tips,
 				Nbirths		 		= results$Nbirths,
 				Ndeaths				= results$Ndeaths,
 				Ncollapsed			= Ncollapsed,	# number of tips removed by collapsing at the specified resolution

@@ -85,12 +85,13 @@ fit_tree_model = function(	tree,
 													
 	# get diversity-vs-time curve on a time grid
 	grid_times = seq(from=(if(max_age>0) max(0,events$max_distance_from_root-max_age) else 0.0), to=(if(min_age>0) max(0,events$max_distance_from_root-min_age) else events$max_distance_from_root*(1-1e-3/grid_size)), length.out=grid_size)
-	tree_diversities_on_grid = count_clades_at_times_CPP(	Ntips,
-															Nnodes,
-															Nedges,
+	tree_diversities_on_grid = count_clades_at_times_CPP(	Ntips		= Ntips,
+															Nnodes		= Nnodes,
+															Nedges		= Nedges,
 															tree_edge	= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
 															edge_length	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
-															grid_times);
+															times		= grid_times,
+															degree		= 1);
 	tree_diversity_slopes_on_grid = first_derivative(grid_times, tree_diversities_on_grid)
 	
 	# pre-calculate discovery fraction on time grid & events

@@ -351,6 +351,8 @@ fit_musse = function(	tree,
 	
 	# at this point, all start parameters (first_guess/first_guess_compr) are assumed to be well defined (non-NA), either based on provided/fixed start values and/or based on some guesstimates
 	# now proceed with the fitting trials
+
+	if(verbose) cat(sprintf("%sPreparing fitting of full model..\n",verbose_prefix))
 			
 	# determine typical parameter scales
 	param_scales = lapply(first_guess,function(x) abs(x))

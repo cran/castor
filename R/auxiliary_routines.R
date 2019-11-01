@@ -356,6 +356,7 @@ guesstimate_Mk_transition_rates_via_max_parsimony_ASR = function(	tree,
 	
 	# only consider subtree with known tip states
 	known_tips = which(!is.na(tip_states));
+	if(length(known_tips)<=1) return(list(success=FALSE, error=sprintf("All or almost all tips have unknown or ambiguous state")))
 	if(length(known_tips)<length(tip_states)){
 		extraction	= get_subtree_with_tips(tree, only_tips=known_tips, omit_tips=FALSE, collapse_monofurcations=TRUE, force_keep_root=TRUE);
 		tree		= extraction$subtree;
@@ -426,16 +427,28 @@ get_all_branching_ages = function(tree){
 
 
 
-# given a piecewise linear function f(x), defined on some x-grid, calculate its antiderivative A(x):=\int_{Xstart}^x f(u) du for an arbitrary number of target x values
+# given a piecewise polynomial (splines) function f(x), defined as a time series on some x-grid, calculate its antiderivative A(x):=\int_{Xstart}^x f(u) du for an arbitrary number of target x values
 # this function is most efficient when the requested target x-values are monotonically increasing or decreasing
-get_antiderivative_of_piecewise_linear_function = function(	Xgrid,		# numeric vector of size NG, listing x-values in ascending order
-															Xstart,		# numeric, lower end of the integration, i.e. x-value where antiderivative is set to zero
-															Ygrid,		# numeric vector of size NG, listing y-values in ascending order
-															splines_degree,	# integer, either 0,1,2 or 3, specifying the splines degree assumed for Y between grid points
-															Xtarget){	# numeric vector of size N, specifying the target x values on which to evaluate the antiderivative
+get_antiderivative_of_splines_function = function(	Xgrid,			# numeric vector of size NG, listing x-values in ascending order
+													Xstart,			# numeric, lower end of the integration, i.e. x-value where antiderivative is set to zero
+													Ygrid,			# numeric vector of size NG, listing y-values along Xgrid
+													splines_degree,	# integer, either 0,1,2 or 3, specifying the splines degree assumed for Y between grid points
+													Xtarget){		# numeric vector of size N, specifying the target x values on which to evaluate the antiderivative. The function is most efficient if Xtarget are in ascending or descending order.
 	A = get_antiderivative_CPP(	Xgrid, Xstart, Ygrid, splines_degree, Xtarget);
 	return(A);
 }
+
+
+# given a piecewise polynomial (splines) function f(x), defined as a time series on some x-grid, calculate its first derivative A(x):=df(x)/dx at an arbitrary number of target x values
+# this function is most efficient when the requested target x-values are monotonically increasing or decreasing
+get_derivative_of_splines_function = function(	Xgrid,			# numeric vector of size NG, listing x-values in ascending order
+												Ygrid,			# numeric vector of size NG, listing y-values along Xgrid
+												splines_degree,	# integer, either 0,1,2 or 3, specifying the splines degree assumed for Y between grid points
+												Xtarget){		# numeric vector of size N, specifying the target x values on which to evaluate the derivative. The function is most efficient if Xtarget are in ascending or descending order.
+	D = get_derivative_CPP(Xgrid, Ygrid, splines_degree, Xtarget);
+	return(D);
+}
+
 
 
 
@@ -453,6 +466,146 @@ get_branching_ages_from_LTT = function(ages, LTT){
 	}
 }
 
+
+# given some density curve on an X-interval, define a non-uniform X-grid on that interval so that the density of grid points reflects the requested density
+# this can be used for example to define an age grid, with the grid density reflecting the number of lineages in a timetree at any given age, e.g. for fitting purposes
+# the density curve is specified as a piecewise linear function. The density must be non-negative, and have non-zero total area under the curve.
+get_inhomogeneous_grid_1D = function(	Xstart,
+										Xend, 
+										Ngrid, 		# integer, number of grid points to return, including the edges Xstart & Xend
+										densityX, 	# numeric vector of size ND, listing X-values for defining the density, in ascending order
+										densityY,	# numeric vector of size ND, listing density values at densityX. 
+										extrapolate = FALSE){	# extrapolate density grid as needed, to cover Xstart & Xend. The density will be extrapolated as a constant.
+	if(Ngrid<2){
+		stop(sprintf("Ngrid must be at least 2"));
+	}else if(densityX[1]>=tail(densityX,1)){
+		stop(sprintf("Values in densityX must be strictly increasing"))
+	}
+	if(Xstart<densityX[1]){
+		if(extrapolate){
+			densityX = c(Xstart,densityX);
+			densityY = c(densityY[1], densityY);
+		}else{
+			stop(sprintf("Xstart (%g) is not covered by the density grid (which starts at %g). Consider setting extrapolate=TRUE.",Xstart,densityX[1]));
+		}
+	}else if(Xend>tail(densityX,1)){
+		if(extrapolate){
+			densityX = c(densityX,Xend);
+			densityY = c(densityY,tail(densityY,1));
+		}else{
+			stop(sprintf("Xend (%g) is not covered by the density grid (which ends at %g). Consider setting extrapolate=TRUE.",Xend,tail(densityX,1)));
+		}
+	}
+	return(get_inhomogeneous_grid_1D_CPP(	Xstart		= Xstart, 
+											Xend		= Xend, 
+											Ngrid		= Ngrid, 
+											densityX	= densityX, 
+											densityY	= densityY, 
+											xepsilon	= 0.0000001*(Xend-Xstart)/Ngrid));
+}
+
+
+
+# calculate the pulled speciation rate (PSR) of an HBD congruence class for a given pulled diversification rate (PDR) and product rho*lambda(0)
+get_PSR_from_PDR_HBD = function(oldest_age,
+								age_grid,				# numeric vector of size NG, listing grid ages in ascending order. Must cover at least age0 and oldest_age.
+								PDR				= 0,	# numeric vector of size NG, listing PDRs on the corresponding grid points
+								age0			= 0,	# non-negative numeric, specifying the age at which rholambda0 is given, i.e. rholambda0=rho(age0)*lambda(age0)
+								rholambda0		= 1,	# positive numeric, product rho(age0)*lambda(age0), where rho is the sampling fraction and lambda is the speciation rate
+								splines_degree	= 1,	# either 1, 2 or 3, specifying the degree of the splines defined by the PDR on the age grid.
+								relative_dt		= 1e-3,	# numeric, maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
+								include_nLTT0	= FALSE){	# (logical) whether to also calculate the ratio nLTT0:=LTT(age0)/LTT(present-day)
+	# basic error checking
+	if(is.null(PDR)) stop("Missing PDR")
+	if(is.null(age_grid) || (length(age_grid)<=1)){
+		if((!is.null(PDR)) && (length(PDR)!=1)) return(list(success=FALSE, error=sprintf("Invalid number of PDR values; since no age grid was provided, you must provide a single (constant) PDR")))
+		# create dummy age grid
+		NG 			= 2;
+		age_grid	= seq(from=0,to=oldest_age,length.out=NG)
+		if(!is.null(PDR)) PDR = rep(PDR,times=NG);
+	}else{
+		NG = length(age_grid);
+		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success=FALSE, error=sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
+		if((age_grid[1]>age0) || (age_grid[NG]<age0)) return(list(success=FALSE, error=sprintf("Age grid must cover the entire requested age interval, including age0 (%g)",age0)))
+		if(include_nLTT0 && (age_grid[1]>0) || (age_grid[NG]<0)) return(list(success=FALSE, error=sprintf("Age grid must cover the present-day age (0) in order to calculate nLTT0")))
+		if((!is.null(PDR)) && (length(PDR)!=1) && (length(PDR)!=NG)) return(list(success=FALSE, error=sprintf("Invalid number of PDR values; since an age grid of size %d was provided, you must either provide one or %d PDR",NG,NG)))
+		if((!is.null(PDR)) && (length(PDR)==1)) PDR = rep(PDR,times=NG);
+	}
+	if(rholambda0<=0) return(list(success=FALSE, error=sprintf("rholambda0 must be strictly positive; instead, got %g",rholambda0)))
+	if(!(splines_degree %in% c(0,1,2,3))) return(list(success=FALSE, error=sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
+	if(age_grid[1]>tail(age_grid,1)) return(list(success=FALSE, error=sprintf("Values in age_grid must be strictly increasing")))
+
+	# calculate PSR
+	results = get_PSR_from_PDR_HBD_CPP(	age0			= age0,
+										oldest_age 		= oldest_age,
+										age_grid		= age_grid,
+										PDR				= PDR,
+										rholambda0		= rholambda0,
+										splines_degree	= splines_degree,
+										relative_dt		= relative_dt,
+										include_nLTT0	= include_nLTT0)
+	if(results$success){
+		return(list(success	= TRUE, 
+					ages	= results$refined_age_grid,	# numeric vector listing (potentially refined) grid ages, spanning [max(0,age_grid[1]), oldest_age]
+					PSR		= results$PSR, 				# numeric vector of the same size as ages[], listing the PSR on the refined grid
+					nLTT0	= (if(include_nLTT0) results$nLTT0 else NULL)))
+	}else{
+		return(list(success=FALSE, error=results$error))
+	}
+}
+
+
+
+
+
+# calculate the pulled speciation rate (PSR) of an HBD model for a given speciation rate (lambda), extinction rate (mu) and the sampling fraction (rho0) at some age0>=0
+get_PSR_of_HBD_model = function(oldest_age,					# oldest age until which to calculate the PSR
+								age_grid		= NULL,		# numeric vector of size NG, listing grid ages in ascending order. Must cover at least age0 and oldest_age. Can also be NULL, in which case the same lambda & mu are assumed everywhere.
+								lambda			= 0,		# numeric vector of size NG, listing speciation rates on the corresponding grid points. Can also be a single constant.
+								mu				= 0,		# numeric vector of size NG, listing extinction rates on the corresponding grid points. Can also be a single constant.
+								age0			= 0,		# numeric, age (time before present) at which the sampling fraction (rho) is specified
+								rho0			= 1,		# positive numeric, sampling fraction at age0
+								splines_degree	= 1,		# either 1, 2 or 3, specifying the degree of the splines defined by the PDR on the age grid.
+								relative_dt		= 1e-3){	# numeric, maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
+	# basic error checking
+	if(is.null(age_grid) || (length(age_grid)<=1)){
+		if((!is.null(lambda)) && (length(lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of lambda values (%d); since no age grid was provided, you must either provide a single (constant) lambda or none",length(lambda))))
+		if((!is.null(mu)) && (length(mu)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu values (%d); since no age grid was provided, you must provide a single (constant) mu",length(mu))))
+		# create dummy age grid
+		NG 		 = 2;
+		age_grid = seq(from=0,to=1.01*oldest_age,length.out=NG)
+		if(!is.null(lambda)) lambda = rep(lambda,times=NG);
+		if(!is.null(mu)) mu = rep(mu,times=NG);
+	}else{
+		NG = length(age_grid);
+		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
+		if((age_grid[1]>age0) || (age_grid[NG]<age0)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age0 (%g)",age0)))
+		if((!is.null(lambda)) && (length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda values (%d); since an age grid of size %d was provided, you must either provide zero, one or %d lambdas",length(lambda),NG,NG)))
+		if((!is.null(mu)) && (length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu values (%d); since an age grid of size %d was provided, you must either provide one or %d mus",length(mu),NG,NG)))
+		if((!is.null(lambda)) && (length(lambda)==1)) lambda = rep(lambda,times=NG);
+		if((!is.null(mu)) && (length(mu)==1)) mu = rep(mu,times=NG);
+	}
+	if(rho0<=0) return(list(success=FALSE, error=sprintf("rho must be strictly positive; instead, got %g",rho0)))
+	if(!(splines_degree %in% c(0,1,2,3))) return(list(success=FALSE, error=sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
+	if(age_grid[1]>tail(age_grid,1)) return(list(success=FALSE, error=sprintf("Values in age_grid must be strictly increasing")))
+
+	# calculate PSR from lambda, mu & rho0=rho(age0)
+	results = get_PSR_of_HBD_model_CPP(	age0			= age0,
+										oldest_age 		= oldest_age,
+										age_grid		= age_grid,
+										lambda			= lambda,
+										mu				= mu,
+										rho0			= rho0,
+										splines_degree	= splines_degree,
+										relative_dt		= relative_dt)
+	if(results$success){
+		return(list(success	= TRUE, 
+					ages	= results$refined_age_grid, # numeric vector listing (potentially refined) grid ages in ascending order, spanning [max(0,age_grid[1]), oldest_age]
+					PSR		= results$PSR))	# numeric vector of the same size as ages[], listing the PSR on the refined grid
+	}else{
+		return(list(success=FALSE, error=results$error))
+	}
+}
 
 
 

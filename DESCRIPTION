@@ -1,8 +1,8 @@
 Package: castor
 Type: Package
 Title: Efficient Phylogenetics on Large Trees
-Version: 1.4.3
-Date: 2019-09-15
+Version: 1.5.0
+Date: 2019-10-30
 Author: Stilianos Louca
 Maintainer: Stilianos Louca <louca@zoology.ubc.ca>
 Description: Efficient phylogenetic analyses on massive phylogenies comprising up to millions of tips. Functions include pruning, rerooting, calculation of most-recent common ancestors, calculating distances from the tree root and calculating pairwise distances. Calculation of phylogenetic signal and mean trait depth (trait conservatism), ancestral state reconstruction and hidden character prediction of discrete characters, simulating and fitting models of trait evolution, fitting and simulating diversification models, dating trees, comparing trees, and reading/writing trees in Newick format. Citation: Louca, Stilianos and Doebeli, Michael (2017) <doi:10.1093/bioinformatics/btx701>.
@@ -12,6 +12,6 @@ Imports: parallel, naturalsort, stats, nloptr
 LinkingTo: Rcpp
 RoxygenNote: 6.0.1
 NeedsCompilation: yes
-Packaged: 2019-09-15 08:06:33 UTC; StilianosLouca
+Packaged: 2019-11-01 07:31:08 UTC; StilianosLouca
 Repository: CRAN
-Date/Publication: 2019-09-20 07:20:02 UTC
+Date/Publication: 2019-11-01 22:20:07 UTC

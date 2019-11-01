@@ -131,6 +131,9 @@ Numeric, giving the final time at the end of the simulation. Note that if \code{
 \item{equilibrium_time}{
 Numeric, giving the first time where the sign of (death rate - birth rate) changed from the beginning of the simulation, i.e. when speciation/extinction equilibrium was reached. May be infinite if the simulation stoped before reaching this point.
 }
+\item{extant_tips}{
+Integer vector, listing indices of extant tips in the tree. If \code{coalescent==TRUE}, all tips will be extant.
+}
 \item{Nbirths}{
 Total number of birth events (speciations) that occurred during tree growth. This may be lower than the total number of tips in the tree if death rates were non-zero and \code{coalescent==TRUE}, or if \code{Nsplits>2}.
 }
