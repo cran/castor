@@ -22,7 +22,7 @@ loglikelihood_hbd = function(	tree,
 								PDR				= NULL,			# either NULL, or a single scalar (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]).
 								PSR				= NULL,			# either NULL, or a single scalar (constant PSR over time), or a numeric vector of size NG (listing PSR at each age in grid_ages[]).
 								splines_degree	= 1,			# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
-								condition		= "stem",		# one of "crown", "stem", "none" (or FALSE), specifying whether to condition the likelihood on the survival of the stem group, the crown group or none (not recommended, and only available when lambda/mu are provided). It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+								condition		= "auto",		# one of "crown", "stem", "auto" or "none" (or FALSE), specifying whether to condition the likelihood on the survival of the stem group, the crown group or none (not recommended, and only available when lambda/mu are provided). It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 								relative_dt		= 1e-3){		# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 	# basic input error checking
 	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
@@ -66,11 +66,12 @@ loglikelihood_hbd = function(	tree,
 	}
 	if(condition==FALSE) condition = "none"
 	if(PDR_based || PSR_based){
-		if(!(condition %in% c("stem","crown"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown' or 'stem'",condition)))
+		if(!(condition %in% c("stem","crown","auto"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', 'stem' or 'auto'",condition)))
 	}else{
-		if(!(condition %in% c("stem","crown","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', or 'stem' or 'none' (not recommended)",condition)))
+		if(!(condition %in% c("stem","crown","auto","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', 'stem', 'auto' or 'none' (not recommended)",condition)))
 	}
 	if(is.null(oldest_age)) oldest_age = root_age;
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
 	if(is.null(age_grid) || (length(age_grid)==0) || (length(age_grid)==1)){
 		if(PDR_based){
 			if(length(PDR)!=1) return(list(success = FALSE, error = sprintf("Invalid number of PDR; since no non-trivial age grid was provided, you must provide a single (constant) PDR")))
@@ -119,7 +120,9 @@ loglikelihood_hbd = function(	tree,
 												splines_degree		= splines_degree,
 												condition			= condition,
 												relative_dt			= relative_dt,
-												runtime_out_seconds	= 0);
+												runtime_out_seconds	= 0,
+												diff_PDR			= numeric(),
+												diff_PDR_degree		= 0);
 	}else if(PSR_based){
 		results = get_HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
 												oldest_age			= oldest_age,

@@ -79,7 +79,7 @@ J. R. Zaneveld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 \code{\link{map_to_state_space}}
 }
 
-\examples{
+\examples{\dontrun{
 # generate random tree
 Ntips = 10
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
@@ -101,7 +101,7 @@ estimated_tip_states = max.col(likelihoods[1:Ntips,])
 
 # print estimated tip states
 print(estimated_tip_states)
-}
+}}
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{maximum parsimony}

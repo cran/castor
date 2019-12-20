@@ -18,7 +18,7 @@ loglikelihood_hbd(tree,
                   PDR             = NULL,
                   PSR             = NULL,
                   splines_degree  = 1,
-                  condition       = "stem",
+                  condition       = "auto",
                   relative_dt     = 1e-3)
 }
 \arguments{
@@ -56,7 +56,7 @@ Numeric vector, of the same size as \code{age_grid} (or size 1 if \code{age_grid
 Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided \code{lambda}, \code{mu}, \code{PDR} and \code{PSR} (whichever applicable) between grid points in \code{age_grid}. For example, if \code{splines_degree==1}, then the provided \code{lambda}, \code{mu}, \code{PDR} and \code{PSR} are interpreted as piecewise-linear curves; if \code{splines_degree==2} they are interpreted as quadratic splines; if \code{splines_degree==3} they are interpreted as cubic splines. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on.
 }
 \item{condition}{
-Character, either "crown", "stem" or "none" (the last one is only available if \code{lambda} and \code{mu} are given), specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended and is only available when \code{lambda} and \code{mu} are provided.
+Character, either "crown", "stem", "auto" or "none" (the last one is only available if \code{lambda} and \code{mu} are given), specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended and is only available when \code{lambda} and \code{mu} are provided. If "auto", the condition is chosen according to the recommendations mentioned earlier.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.

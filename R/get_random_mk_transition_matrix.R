@@ -1,4 +1,4 @@
-# create a random transition matrix for a fixed-rates continuous-time Markov model of discrete character evolution
+# create a random transition rate matrix for a fixed-rates continuous-time Markov model of discrete character evolution
 # rate_model can be "ER", "SYM", "ARD" or "SUEDE"
 # 0<=min_rate<=max_rate
 get_random_mk_transition_matrix = function(Nstates, rate_model, min_rate=0, max_rate=1){

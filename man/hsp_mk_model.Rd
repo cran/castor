@@ -126,7 +126,7 @@ J. R. Zaneveld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 \code{\link{map_to_state_space}}
 }
 
-\examples{
+\examples{\dontrun{
 # generate random tree
 Ntips = 1000
 tree  = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
@@ -154,7 +154,7 @@ cat(sprintf("Universal (ER) transition rate=\%g\n",results$transition_matrix[1,2
 
 # print estimated states for first 20 tips
 print(estimated_tip_states[1:20])
-}
+}}
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{Mk model}

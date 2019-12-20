@@ -47,13 +47,13 @@ hsp_empirical_probabilities = function(	tree,
 	likelihoods_known 							= rep(FALSE, times=(Ntips+Nnodes))
 	likelihoods_known[known2all_tips] 			= TRUE;
 	likelihoods_known[known2all_nodes + Ntips] 	= TRUE;
-	likelihoods = apply_MPR_to_missing_clades_CPP(	Ntips				= Ntips,
-													Nnodes				= Nnodes,
-													Nedges				= nrow(tree$edge),
-													Nstates				= Nstates,
-													tree_edge			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
-													likelihoods_known	= likelihoods_known,
-													likelihoods			= as.vector(t(likelihoods))); # flatten in row-major format	
+	likelihoods = apply_attributes_to_descendants_CPP(	Ntips				= Ntips,
+														Nnodes				= Nnodes,
+														Nedges				= nrow(tree$edge),
+														Nattributes			= Nstates,
+														tree_edge			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+														attributes_known	= likelihoods_known,
+														attributes			= as.vector(t(likelihoods))); # flatten in row-major format	
 	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
 		

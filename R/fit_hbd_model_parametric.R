@@ -15,7 +15,7 @@ fit_hbd_model_parametric = function(tree,
 									mu,								# function handle, mapping age & model_parameters to the current extinction rate, (age,param_values) --> mu. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
 									rho0,							# function handle, mapping model_parameters to the sampling fraction at age0 (aka. rarefaction), (param_values) --> rho. Must be defined for all parameters within the imposed bounds.
 									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the lambda and mu functionals should be evaluated. This age grid must be fine enough to capture the possible variation in lambda() and mu() over time. If NULL or of length 1, then lambda & mu are assumed to be time-independent.
-									condition			= "stem",	# one of "crown" or "stem", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+									condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 									Ntrials				= 1,		# number of fitting trials to perform, each time starting with random parameter values
 									max_start_attempts	= 1,		# number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to to keep looking for valid starting points.
@@ -29,7 +29,8 @@ fit_hbd_model_parametric = function(tree,
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
 		root_age = get_tree_span(tree)$max_distance
-		if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 is older than the root age (%g)",root_age)));
+		if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
+		if((!is.null(oldest_age)) && (oldest_age<age0)) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
 		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
 		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
@@ -44,6 +45,8 @@ fit_hbd_model_parametric = function(tree,
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
 
 	# more input error checking
+	if(!(condition %in% c("crown","stem","auto","none"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown', 'none' or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
 	NP 					= length(param_values);
 	max_start_attempts 	= max(1,max_start_attempts)
 	Ntrials 			= max(1,Ntrials)
@@ -51,7 +54,6 @@ fit_hbd_model_parametric = function(tree,
 	if((!is.null(age_grid)) && (age_grid[1]>tail(age_grid,1))) age_grid = rev(age_grid); # avoid common errors where age_grid is in reverse order
 	if(is.null(oldest_age)) oldest_age = root_age;
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
-	if(!(condition %in% c("stem","crown","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', or 'stem' or 'none' (not recommended)",condition)))
 	if(is.null(age_grid)) age_grid = 0;
 	param_names = names(param_values);
 	if(is.null(param_guess)){
@@ -180,10 +182,14 @@ fit_hbd_model_parametric = function(tree,
 		while(Nstart_attempts<max_start_attempts){
 			start_values = param_guess[fitted_params]
 			if(trial>1){
-				boxed   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
-				unboxed = completement(NFP, boxed);
-				if(length(boxed)>0) start_values[boxed] = lower_bounds[boxed] + (upper_bounds[boxed]-lower_bounds[boxed]) * runif(n=length(boxed),min=0,max=1)
-				if(length(unboxed)>0) start_values[unboxed]	= 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
+				boxed_left	= which((!is.infinite(lower_bounds)) & is.infinite(upper_bounds))
+				boxed_right	= which((!is.infinite(upper_bounds)) & is.infinite(lower_bounds))
+				boxed_dual  = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
+				unboxed 	= which(is.infinite(lower_bounds) & is.infinite(upper_bounds))
+				if(length(boxed_dual)>0) 	start_values[boxed_dual] = lower_bounds[boxed_dual] + (upper_bounds[boxed_dual]-lower_bounds[boxed_dual]) * runif(n=length(boxed_dual),min=0,max=1)
+				if(length(unboxed)>0) 	 	start_values[unboxed]	 = 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
+				if(length(boxed_left)>0) 	start_values[boxed_left] = sapply(boxed_left, FUN=function(fp) random_semiboxed_left(lower_bound=lower_bounds[fp], default=start_values[fp], typical_scale=scales[fp], orders_of_magnitude=4))
+				if(length(boxed_right)>0) 	start_values[boxed_right]= sapply(boxed_right, FUN=function(fp) -random_semiboxed_left(lower_bound=-upper_bounds[fp], default=-start_values[fp], typical_scale=scales[fp], orders_of_magnitude=4))
 			}
 			# make sure start fparams are within bounds
 			start_values 	= pmax(lower_bounds,pmin(upper_bounds,start_values))

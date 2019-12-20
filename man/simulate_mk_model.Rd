@@ -64,7 +64,7 @@ Either \code{NULL} (if \code{include_nodes==FALSE}), or a 2D integer matrix of s
 \code{\link{simulate_bm_model}}, \code{\link{simulate_ou_model}}, \code{\link{simulate_rou_model}}
 }
 
-\examples{
+\examples{\dontrun{
 # generate a random tree
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=1000)$tree
 
@@ -75,7 +75,7 @@ tip_states = simulate_mk_model(tree, Q)$tip_states
 
 # plot histogram of simulated tip states
 barplot(table(tip_states)/length(tip_states), xlab="state")
-}
+}}
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{Mk model}

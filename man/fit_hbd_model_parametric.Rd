@@ -19,7 +19,7 @@ fit_hbd_model_parametric( tree,
                           mu,
                           rho0,
                           age_grid           = NULL,
-                          condition          = "stem",
+                          condition          = "auto",
                           relative_dt        = 1e-3,
                           Ntrials            = 1,
                           max_start_attempts = 1,
@@ -66,7 +66,7 @@ Numeric vector, specifying ages at which the \code{lambda} and \code{mu} functio
 Listed ages must be strictly increasing, and must cover at least the full considered age interval (from 0 to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the speciation rate and extinction rate is assumed to be time-independent.
 }
 \item{condition}{
-Character, either "crown", "stem" or "none", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended.
+Character, either "crown", "stem", "none" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended. If "auto", the condition is chosen according to the recommendations mentioned earlier.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time, when calculating the likelihood. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.

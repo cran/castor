@@ -26,7 +26,7 @@ fit_hbd_model_on_grid(tree,
                       const_lambda      = FALSE,
                       const_mu          = FALSE,
                       splines_degree    = 1,
-                      condition         = "stem",
+                      condition         = "auto",
                       relative_dt       = 1e-3,
                       Ntrials           = 1,
                       Nthreads          = 1,
@@ -93,7 +93,7 @@ Logical, specifying whether \eqn{\mu} should be assumed constant across the grid
 Integer between 0 and 3 (inclusive), specifying the polynomial degree of \eqn{\lambda} and \eqn{\mu} between age-grid points. If 0, then \eqn{\lambda} and \eqn{\mu} are considered piecewise constant, if 1 then \eqn{\lambda} and \eqn{\mu} are considered piecewise linear, if 2 or 3 then \eqn{\lambda} and \eqn{\mu} are considered to be splines of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended.
 }
 \item{condition}{
-Character, either "crown", "stem" or "none", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is generally not recommended.
+Character, either "crown", "stem", "none" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is generally not recommended. If "auto", the condition is chosen according to the recommendations mentioned earlier.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time, when calculating the likelihood. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -114,6 +114,8 @@ Optional numeric, specifying the maximum number of seconds to allow for each eva
 
 
 \details{
+Warning: Unless well-justified constraints are imposed on either \eqn{\lambda} and/or \eqn{\mu} and \eqn{\rho}, it is generally impossible to reliably estimate \eqn{\lambda} and \eqn{\mu} from extant timetrees alone (Louca and Pennell, 2019). This routine (and any other software that claims to estimate \eqn{\lambda} and \eqn{\mu} solely from extant timetrees) should thus be used with great suspicion. If your only source of information is an extant timetree, and you have no a priori information on how \eqn{\lambda} or \eqn{\mu} might have looked like, you should consider using the more appropriate routines \code{\link{fit_hbd_pdr_on_grid}} and \code{\link{fit_hbd_psr_on_grid}} instead.
+
 If \code{age0>0}, the input tree is essentially trimmed at \code{age0} (omitting anything younger than \code{age0}), and the various variables are fitted to this new (shorter) tree, with time shifted appropriately. For example, the fitted \code{rho0} is thus the sampling fraction at \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are represented in the timetree.
 
 It is generally advised to provide as much information to the function \code{fit_hbd_model_on_grid} as possible, including reasonable lower and upper bounds (\code{min_lambda}, \code{max_lambda}, \code{min_mu}, \code{max_mu}, \code{min_rho0} and \code{max_rho0}) and a reasonable parameter guess (\code{guess_lambda}, \code{guess_mu} and \code{guess_rho0}). It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of \eqn{\lambda} and \eqn{\mu} over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small.
@@ -135,10 +137,10 @@ The name of the objective that was maximized during fitting. Currently, only max
 The log-likelihood of the fitted model for the given timetree.
 }
 \item{fitted_lambda}{
-Numeric vector of size Ngrid, listing fitted or fixed speciation rates \eqn{\lambda} at each age-grid point.
+Numeric vector of size Ngrid, listing fitted or fixed speciation rates \eqn{\lambda} at each age-grid point. Between grid points the fitted \eqn{\lambda} should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
 }
 \item{fitted_mu}{
-Numeric vector of size Ngrid, listing fitted or fixed extinction rates \eqn{\mu} at each age-grid point.
+Numeric vector of size Ngrid, listing fitted or fixed extinction rates \eqn{\mu} at each age-grid point. Between grid points the fitted \eqn{\mu} should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
 }
 \item{fitted_rho}{
 Numeric, specifying the fitted or fixed sampling fraction \eqn{\rho}.
@@ -198,6 +200,8 @@ S. Louca et al. (2018). Bacterial diversification through geological time. Natur
 \code{\link{fit_hbd_pdr_on_grid}}
 
 \code{\link{fit_hbd_pdr_parametric}}
+
+\code{\link{fit_hbd_psr_on_grid}}
 }
 
 \examples{
@@ -221,7 +225,7 @@ cat(sprintf("Tree has \%d tips, spans \%g Myr\n",length(tree$tip.label),root_age
 
 # Fit mu on grid
 # Assume that lambda & rho are known
-Ngrid     = 10
+Ngrid     = 5
 age_grid  = seq(from=0,to=root_age,length.out=Ngrid)
 fit = fit_hbd_model_on_grid(tree, 
           age_grid    = age_grid,
@@ -230,7 +234,7 @@ fit = fit_hbd_model_on_grid(tree,
           fixed_rho0   = rho,
           condition   = "crown",
           Ntrials     = 10,	# perform 10 fitting trials
-          Nthreads    = 10,	# use two CPUs
+          Nthreads    = 2,	# use two CPUs
           max_model_runtime = 1) 	# limit model evaluation to 1 second
 if(!fit$success){
   cat(sprintf("ERROR: Fitting failed: \%s\n",fit$error))

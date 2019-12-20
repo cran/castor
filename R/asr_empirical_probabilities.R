@@ -3,7 +3,11 @@
 # Requirements:
 #   The tree must be rooted; the root should be the unique node with no parent
 #   The tree can include multifurcations as well as monofurcations
-asr_empirical_probabilities = function(tree, tip_states, Nstates=NULL, probabilities=TRUE, check_input=TRUE){
+asr_empirical_probabilities = function(	tree, 
+										tip_states,
+										Nstates=NULL,
+										probabilities=TRUE,
+										check_input=TRUE){
 	Ntips  = length(tree$tip.label)
 	Nnodes = tree$Nnode;
 

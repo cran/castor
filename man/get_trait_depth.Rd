@@ -93,7 +93,7 @@ A. C. Martiny, K. Treseder and G. Pusch (2013). Phylogenetic trait conservatism 
 \code{\link{get_trait_acf}}
 }
 
-\examples{
+\examples{\dontrun{
 # generate a random tree
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=1000)$tree
 
@@ -107,7 +107,7 @@ tip_states = tip_states - 1
 # calculate phylogenetic conservatism of trait
 results = get_trait_depth(tree, tip_states, count_singletons=FALSE, weighted=TRUE)
 cat(sprintf("Mean depth = \%g, std = \%g\n",results$mean_depth,sqrt(results$var_depth)))
-}
+}}
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{trait evolution}

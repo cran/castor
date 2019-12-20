@@ -25,7 +25,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 								fixed_PDR				= NULL,		# optional fixed PDR values, on one or more of the age grid points. Either NULL (none of the PDRs are fixed), or a single scalar (all PDRs are fixed) or a numeric vector of size NG (some or all PDRs are fixed, can include NAs).
 								fixed_rholambda0		= NULL,		# optional fixed value for rholambda0. If non-NULL and non-NA, then rholambda0 is not fitted. 
 								splines_degree			= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by the PDR on the age grid.
-								condition				= "stem",	# one of "crown" or "stem", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+								condition				= "auto",	# one of "crown" or "stem" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age<root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 								relative_dt				= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 								Ntrials					= 1,
 								Nbootstraps				= 0,		# (integer) optional number of parametric-bootstrap samples (random trees generated using the fitted PDR & rholambda0) for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
@@ -42,8 +42,11 @@ fit_hbd_pdr_on_grid = function(	tree,
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age;
-	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 is older than the root age (%g)",root_age)));
+	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
+	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
+	if(!(condition %in% c("crown","stem","auto"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown' or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
@@ -127,17 +130,19 @@ fit_hbd_pdr_on_grid = function(	tree,
 	guess_param_values[fixed_params] = fixed_param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
 	min_param_values	= c(min_PDR,min_rholambda0);
 	max_param_values	= c(max_PDR,max_rholambda0);
+	NP					= length(fixed_param_values)
 	NFP					= length(fitted_params);
 	
 	# determine typical parameter scales
 	scale_PDR = abs(guess_PDR); scale_PDR[scale_PDR==0] = mean(scale_PDR);
 	scale_rholambda0 = abs(guess_rholambda0);
 	if(scale_rholambda0==0) scale_rholambda0 = log2(LTT0)/root_age;
-	param_scales = c(rep(scale_PDR,times=NG),scale_rholambda0);
+	param_scales = c(scale_PDR,scale_rholambda0);
 
 
 	################################
 	# FITTING
+	
 	
 	# objective function: negated log-likelihood
 	# input argument is the subset of fitted parameters, rescaled according to param_scales
@@ -162,7 +167,9 @@ fit_hbd_pdr_on_grid = function(	tree,
 												splines_degree		= splines_degree,
 												condition			= condition,
 												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime);
+												runtime_out_seconds	= max_model_runtime,
+												diff_PDR			= numeric(),
+												diff_PDR_degree		= 0);
 		if(!results$success) return(Inf);
 		LL = results$loglikelihood;
 		if(is.na(LL) || is.nan(LL)) return(Inf);
@@ -170,23 +177,72 @@ fit_hbd_pdr_on_grid = function(	tree,
 	}
 	
 
+	fitted_grid_params = fitted_params[fitted_params!=(NG+1)]
+	gradient_function = function(fparam_values){
+		if(splines_degree!=1) return(NaN); # only implemented for splines_degree=1
+		param_values = fixed_param_values; param_values[fitted_params] = fparam_values * param_scales[fitted_params];
+		if(any(is.nan(param_values)) || any(is.infinite(param_values))) return(Inf); # catch weird cases where params become NaN
+		PDRs = param_values[1:NG]; 
+		rholambda0 = param_values[NG+1];
+		if(NG==1){
+			# while age-grid has only one point (i.e., PDRs are constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
+			input_age_grid 	= c(0,oldest_age);
+			input_PDRs 		= c(PDRs, PDRs);
+		}else{
+			input_age_grid 	= age_grid;
+			input_PDRs 		= PDRs
+		}
+		# calculate differentials of PDR in the directions of the various fitted parameters (fitted grid ages and PDRs)
+		diff_PDR_degree = 1
+		if(NG==1){
+			diff_PDR = (if(is.na(fixed_PDR)) c(1,0,1,0) else numeric())
+		}else{
+			diff_PDR_all = derivatives_of_grid_curve_CPP(Xgrid=age_grid, Ygrid=PDRs) # yields a 3D array of size (2*NG)*NG*2, flattened in layer-row-major format, representing the derivatives of the PDR w.r.t. the grid ages and the PDR values on the grid points
+			diff_PDR = unlist(lapply(fitted_grid_params, FUN=function(p) diff_PDR_all[((NG+p-1)*NG*(diff_PDR_degree+1) + 1):((NG+p-1)*NG*(diff_PDR_degree+1) + NG*(diff_PDR_degree+1))])) # extract only differentials along fitted parameters. Note that the first NG differentials are always omitted, because they correspond to the grid ages themselves, which are held constant in this case.
+		}
+		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+												oldest_age			= oldest_age,
+												rholambda0 			= rholambda0,
+												age_grid 			= input_age_grid,
+												PDRs 				= input_PDRs,
+												splines_degree		= splines_degree,
+												condition			= condition,
+												relative_dt			= relative_dt,
+												runtime_out_seconds	= max_model_runtime,
+												diff_PDR			= diff_PDR,
+												diff_PDR_degree		= diff_PDR_degree);
+		if(!results$success) return(rep(Inf,times=NFP));
+		gradient_full = rep(NA, times=NP)
+		gradient_full[NG+1] = results$dLL_drholambda0
+		gradient_full[fitted_grid_params] = results$dLL_dPDR
+		gradient = gradient_full[fitted_params] * param_scales[fitted_params]
+		return(-gradient);
+	}
+		
+
 	# fit with various starting points
 	fit_single_trial = function(trial){
 		scales		 = param_scales[fitted_params]
 		lower_bounds = min_param_values[fitted_params]
 		upper_bounds = max_param_values[fitted_params]
 		# randomly choose start values for fitted params
-		start_values = guess_param_values[fitted_params]
-		if(trial>1){
-			boxed   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
-			unboxed = completement(NFP, boxed);
-			if(length(boxed)>0) start_values[boxed] = lower_bounds[boxed] + (upper_bounds[boxed]-lower_bounds[boxed]) * runif(n=length(boxed),min=0,max=1)
-			if(length(unboxed)>0) start_values[unboxed]	= 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
+		if(trial==1){
+			start_values = guess_param_values[fitted_params]		
+		}else{
+			start_values = get_random_params(defaults=guess_param_values[fitted_params], lower_bounds=lower_bounds, upper_bounds=upper_bounds, scales=scales, orders_of_magnitude=4)
 		}
-		start_values = pmax(lower_bounds,pmin(upper_bounds,start_values))
+
+		# check if start values yield NaN
+		start_LL = objective_function(start_values/scales)
+		if(!is.finite(start_LL)) return(list(objective_value=NA, fparam_values = rep(NA,times=NFP), converged=FALSE, Niterations=0, Nevaluations=1));
+												
+		# fine-tune some fitting controls based on the initial model evaluation
+		if(is.null(fit_control$rel.tol)) fit_control$rel.tol = max(1e-30,min(1e-5,0.0001/abs(start_LL)))		
+				
 		# run fit
 		fit = stats::nlminb(start_values/scales, 
 							objective	= objective_function, 
+							gradient	= (if(splines_degree==1) gradient_function else NULL),
 							lower		= lower_bounds/scales, 
 							upper		= upper_bounds/scales, 
 							control		= fit_control)

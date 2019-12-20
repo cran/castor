@@ -27,8 +27,9 @@ fit_musse(tree,
           first_guess           = NULL,
           lower                 = NULL,
           upper                 = NULL,
-          root_prior            = "likelihoods",
-          root_conditioning     = "none",
+          root_prior            = "auto",
+          root_conditioning     = "auto",
+          oldest_age            = NULL,
           Ntrials               = 1,
           optim_algorithm       = "subplex",
           optim_max_iterations  = 10000,
@@ -113,10 +114,13 @@ Either \code{NULL} or a named list containing optional lower bounds for various 
 Either \code{NULL} or a named list containing optional upper bounds for various model parameters. The list can contain any or all of the elements \code{transition_matrix}, \code{birth_rates} and \code{death_rates}, structured similarly to \code{upper}. For example, \code{list(transition_matrix=2, birth_rates=c(10,NA,NA))} specifies that all transition rates between states must be 2 or less, that the birth rate \eqn{\lambda_1} must be 10 or less, and that all other model parameters have unspecified upper bound. For parameters with unspecified upper bounds, infinity is used as an upper bound. Upper bounds only apply to fitted (i.e., non-fixed) parameters.
 }
 \item{root_prior}{
-Either a character or a numeric vector of size Nstates, specifying the prior probabilities of states for the root, i.e. the weights for obtaining a single model likelihood by averaging the root's state likelihoods. If a character, then it must be one of "flat", "empirical" or "likelihoods". "empirical" means the root's prior is set to the proportions of (estimated) extant species in each state (correcting for sampling fractions and reveal fractions, if applicable). "likelihoods" means that the computed state-likelihoods of the root are used, after normalizing to obtain a probability distribution; this is the approach used in the package \code{hisse::hisse} v1.8.9 under the option \code{root.p=NULL}, and the approach in the package \code{diversitree::find.mle} v0.9-10 under the option \code{root=ROOT.OBS}. If a numeric vector, \code{root_prior} specifies custom probabilities (weights) for each state.
+Either a character or a numeric vector of size Nstates, specifying the prior probabilities of states for the root, i.e. the weights for obtaining a single model likelihood by averaging the root's state likelihoods. If a character, then it must be one of "flat", "empirical", "likelihoods", "max_likelihood" or "auto". "empirical" means the root's prior is set to the proportions of (estimated) extant species in each state (correcting for sampling fractions and reveal fractions, if applicable). "likelihoods" means that the computed state-likelihoods of the root are used, after normalizing to obtain a probability distribution; this is the approach used in the package \code{hisse::hisse} v1.8.9 under the option \code{root.p=NULL}, and the approach in the package \code{diversitree::find.mle} v0.9-10 under the option \code{root=ROOT.OBS}. If "max_likelihood", then the root's prior is set to a Dirac distribution, with full weight given to the maximum-likelihood state at the root (after applying the conditioning). If a numeric vector, \code{root_prior} specifies custom probabilities (weights) for each state. Note that if \code{root_conditioning} is "\code{madfitz}" or "\code{herr_als}" (see below), then the prior is set before the conditioning and not updated afterwards for consistency with other R packages.
 }
 \item{root_conditioning}{
-Character, specifying an optional modification to be applied to the root's state likelihoods prior to averaging. Can be "none" (no modification), "madfitz" or "herr_als". "madfitz" and "herr_als" (after van Els, Etiene and Herrera-Alsina 2018) are the options implemented in the package \code{hisse} v1.8.9, conditioning the root's state-likelihoods based on the birth-rates and the computed extinction probability (after or before averaging, respectively). See van Els (2018) for a comparison between "madfitz" and "herr_als".
+Character, specifying an optional modification to be applied to the root's state likelihoods prior to averaging. Can be "none" (no modification), "madfitz", "herr_als", "crown" or "stem". "madfitz" and "herr_als" (after van Els, Etiene and Herrera-Alsina 2018) are the options implemented in the package \code{hisse} v1.8.9, conditioning the root's state-likelihoods based on the birth-rates and the computed extinction probability (after or before averaging, respectively). See van Els (2018) for a comparison between "madfitz" and "herr_als". The option "stem" conditions the state likelihoods on the probability that the stem lineage would survive until the present. The option "crown" conditions the state likelihoods on the probability that a split occurred at \code{oldest_age} and that the two child lineages survived until the present; this option is only recommended if \code{oldest_age} is equal to the root age.
+}
+\item{oldest_age}{
+Strictly positive numeric, specifying the oldest age (time before present) to consider for fitting. If this is smaller than the tree's root age, then the tree is split into multiple subtrees at \code{oldest_age}, and each subtree is considered as an independent realization of the same diversification/evolution process whose parameters are to be estimated. The \code{root_conditioning} and \code{root_prior} are applied separately to each subtree, prior to calculating the joint (product) likelihood of all subtrees. This option can be used to restrict the fitting to a small (recent) time interval, during which the MuSSE/BiSSE assumptions (e.g., time-independent speciation/extinction/transition rates) are more likely to hold. If \code{oldest_age} is \code{NULL}, it is automatically set to the root age. In principle \code{oldest_age} may also be older than the root age.
 }
 \item{Ntrials}{
 Non-negative integer, specifying the number of trials for fitting the model, using alternative (randomized) starting parameters at each trial. A larger \code{Ntrials} reduces the risk of landing on a local non-global optimum of the likelihood function, and thus increases the chances of finding the truly best fit. If 0, then no fitting is performed, and only the first-guess (i.e., provided or guessed start params) is evaluated and returned. Hence, setting \code{Ntrials=0} can be used to obtain a reasonable set of start parameters for subsequent fitting or for Markov Chain Monte Carlo.
@@ -202,6 +206,9 @@ Integer, the number of states assumed for the model.
 }
 \item{NPstates}{
 Integer, the number of proxy states assumed for the model. Note that in the case of a BiSSE/MuSSE model, this will be the same as \code{Nstates}.
+}
+\item{root_prior}{
+Character, or numeric vector of length Nstates, specifying the root prior used.
 }
 \item{parameters}{
 Named list containing the final maximum-likelihood fitted model parameters. If \code{Ntrials>1}, then this contains the fitted parameters yielding the highest likelihood. Will contain the following elements:

@@ -5,6 +5,19 @@
 
 using namespace Rcpp;
 
+// evaluate_univariate_expression_CPP
+Rcpp::List evaluate_univariate_expression_CPP(const std::string& expression, const std::string& Xname, const std::vector<double>& X);
+RcppExport SEXP _castor_evaluate_univariate_expression_CPP(SEXP expressionSEXP, SEXP XnameSEXP, SEXP XSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::string& >::type expression(expressionSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type Xname(XnameSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type X(XSEXP);
+    rcpp_result_gen = Rcpp::wrap(evaluate_univariate_expression_CPP(expression, Xname, X));
+    return rcpp_result_gen;
+END_RCPP
+}
 // dense_binary_matrix_row2column_major_CPP
 Rcpp::List dense_binary_matrix_row2column_major_CPP(const long NR, const long NC, const Rcpp::List& dense_rows, const bool Rindexing);
 RcppExport SEXP _castor_dense_binary_matrix_row2column_major_CPP(SEXP NRSEXP, SEXP NCSEXP, SEXP dense_rowsSEXP, SEXP RindexingSEXP) {
@@ -16,6 +29,58 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const Rcpp::List& >::type dense_rows(dense_rowsSEXP);
     Rcpp::traits::input_parameter< const bool >::type Rindexing(RindexingSEXP);
     rcpp_result_gen = Rcpp::wrap(dense_binary_matrix_row2column_major_CPP(NR, NC, dense_rows, Rindexing));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_member_lists_from_group_assignments_CPP
+Rcpp::List get_member_lists_from_group_assignments_CPP(const long Ngroups, const std::vector<long>& pool2group);
+RcppExport SEXP _castor_get_member_lists_from_group_assignments_CPP(SEXP NgroupsSEXP, SEXP pool2groupSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ngroups(NgroupsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type pool2group(pool2groupSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_member_lists_from_group_assignments_CPP(Ngroups, pool2group));
+    return rcpp_result_gen;
+END_RCPP
+}
+// split_undirected_graph_CPP
+Rcpp::List split_undirected_graph_CPP(const long Nnodes, const long Nedges, const std::vector<long>& edges);
+RcppExport SEXP _castor_split_undirected_graph_CPP(SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP edgesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type edges(edgesSEXP);
+    rcpp_result_gen = Rcpp::wrap(split_undirected_graph_CPP(Nnodes, Nedges, edges));
+    return rcpp_result_gen;
+END_RCPP
+}
+// evaluate_spline_CPP
+NumericVector evaluate_spline_CPP(const std::vector<double>& Xgrid, const std::vector<double>& Ygrid, const long splines_degree, const std::vector<double>& Xtarget, const std::string& extrapolate);
+RcppExport SEXP _castor_evaluate_spline_CPP(SEXP XgridSEXP, SEXP YgridSEXP, SEXP splines_degreeSEXP, SEXP XtargetSEXP, SEXP extrapolateSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Xgrid(XgridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Ygrid(YgridSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Xtarget(XtargetSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type extrapolate(extrapolateSEXP);
+    rcpp_result_gen = Rcpp::wrap(evaluate_spline_CPP(Xgrid, Ygrid, splines_degree, Xtarget, extrapolate));
+    return rcpp_result_gen;
+END_RCPP
+}
+// derivatives_of_grid_curve_CPP
+NumericVector derivatives_of_grid_curve_CPP(const std::vector<double>& Xgrid, const std::vector<double>& Ygrid);
+RcppExport SEXP _castor_derivatives_of_grid_curve_CPP(SEXP XgridSEXP, SEXP YgridSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Xgrid(XgridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Ygrid(YgridSEXP);
+    rcpp_result_gen = Rcpp::wrap(derivatives_of_grid_curve_CPP(Xgrid, Ygrid));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -647,6 +712,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_subtrees_at_nodes_CPP
+Rcpp::List get_subtrees_at_nodes_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const std::vector<long>& new_root_nodes);
+RcppExport SEXP _castor_get_subtrees_at_nodes_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP new_root_nodesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type new_root_nodes(new_root_nodesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_subtrees_at_nodes_CPP(Ntips, Nnodes, Nedges, tree_edge, new_root_nodes));
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_subtree_with_specific_tips_CPP
 Rcpp::List get_subtree_with_specific_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const IntegerVector& tree_edge, const NumericVector& edge_length, const IntegerVector& tips_to_keep, bool collapse_monofurcations, bool force_keep_root);
 RcppExport SEXP _castor_get_subtree_with_specific_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tips_to_keepSEXP, SEXP collapse_monofurcationsSEXP, SEXP force_keep_rootSEXP) {
@@ -1259,20 +1339,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// apply_MPR_to_missing_clades_CPP
-NumericVector apply_MPR_to_missing_clades_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const IntegerVector& tree_edge, LogicalVector likelihoods_known, NumericVector likelihoods);
-RcppExport SEXP _castor_apply_MPR_to_missing_clades_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP likelihoods_knownSEXP, SEXP likelihoodsSEXP) {
+// apply_attributes_to_descendants_CPP
+NumericVector apply_attributes_to_descendants_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nattributes, const IntegerVector& tree_edge, std::vector<long> attributes_known, std::vector<double> attributes);
+RcppExport SEXP _castor_apply_attributes_to_descendants_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NattributesSEXP, SEXP tree_edgeSEXP, SEXP attributes_knownSEXP, SEXP attributesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
     Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
     Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
-    Rcpp::traits::input_parameter< const long >::type Nstates(NstatesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nattributes(NattributesSEXP);
     Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
-    Rcpp::traits::input_parameter< LogicalVector >::type likelihoods_known(likelihoods_knownSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type likelihoods(likelihoodsSEXP);
-    rcpp_result_gen = Rcpp::wrap(apply_MPR_to_missing_clades_CPP(Ntips, Nnodes, Nedges, Nstates, tree_edge, likelihoods_known, likelihoods));
+    Rcpp::traits::input_parameter< std::vector<long> >::type attributes_known(attributes_knownSEXP);
+    Rcpp::traits::input_parameter< std::vector<double> >::type attributes(attributesSEXP);
+    rcpp_result_gen = Rcpp::wrap(apply_attributes_to_descendants_CPP(Ntips, Nnodes, Nedges, Nattributes, tree_edge, attributes_known, attributes));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1342,6 +1422,24 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ASR_binomial_CPP
+Rcpp::List ASR_binomial_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& tip_states, const std::vector<double>& reveal_probs, const std::vector<double>& state0_probs, const long min_revealed);
+RcppExport SEXP _castor_ASR_binomial_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP tip_statesSEXP, SEXP reveal_probsSEXP, SEXP state0_probsSEXP, SEXP min_revealedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tip_states(tip_statesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type reveal_probs(reveal_probsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type state0_probs(state0_probsSEXP);
+    Rcpp::traits::input_parameter< const long >::type min_revealed(min_revealedSEXP);
+    rcpp_result_gen = Rcpp::wrap(ASR_binomial_CPP(Ntips, Nnodes, Nedges, tree_edge, tip_states, reveal_probs, state0_probs, min_revealed));
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_MuSSE_loglikelihood_classic_CPP
 Rcpp::List get_MuSSE_loglikelihood_classic_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const IntegerVector& tree_edge, const std::vector<double>& node_ages, const std::vector<double>& transition_rates, const std::vector<double>& speciation_rates, const std::vector<double>& extinction_rates, const std::vector<double>& initial_D_per_tip, const std::vector<double>& initial_E_per_state, const std::vector<double>& root_prior, const double runtime_out_seconds);
 RcppExport SEXP _castor_get_MuSSE_loglikelihood_classic_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP node_agesSEXP, SEXP transition_ratesSEXP, SEXP speciation_ratesSEXP, SEXP extinction_ratesSEXP, SEXP initial_D_per_tipSEXP, SEXP initial_E_per_stateSEXP, SEXP root_priorSEXP, SEXP runtime_out_secondsSEXP) {
@@ -1366,8 +1464,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_MuSSE_loglikelihood_CPP
-Rcpp::List get_MuSSE_loglikelihood_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const IntegerVector& tree_edge, const std::vector<double>& node_ages, const std::vector<double>& transition_rates, const std::vector<double>& speciation_rates, const std::vector<double>& extinction_rates, const std::vector<double>& initial_D_per_tip, const std::vector<double>& initial_E_per_state, std::vector<double>& root_prior, const std::string& root_conditioning, const bool include_ancestral_likelihoods, const bool include_warnings, const double max_condition_number, const double relative_ODE_step, const double E_value_step, const double D_temporal_resolution, const double runtime_out_seconds);
-RcppExport SEXP _castor_get_MuSSE_loglikelihood_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP node_agesSEXP, SEXP transition_ratesSEXP, SEXP speciation_ratesSEXP, SEXP extinction_ratesSEXP, SEXP initial_D_per_tipSEXP, SEXP initial_E_per_stateSEXP, SEXP root_priorSEXP, SEXP root_conditioningSEXP, SEXP include_ancestral_likelihoodsSEXP, SEXP include_warningsSEXP, SEXP max_condition_numberSEXP, SEXP relative_ODE_stepSEXP, SEXP E_value_stepSEXP, SEXP D_temporal_resolutionSEXP, SEXP runtime_out_secondsSEXP) {
+Rcpp::List get_MuSSE_loglikelihood_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const double oldest_age, const IntegerVector& tree_edge, const std::vector<double>& node_ages, const std::vector<double>& transition_rates, const std::vector<double>& speciation_rates, const std::vector<double>& extinction_rates, const std::vector<double>& initial_D_per_tip, const std::vector<double>& initial_E_per_state, const std::string& root_prior_type, const std::vector<double>& root_prior, const std::string& root_conditioning, const bool include_ancestral_likelihoods, const bool include_warnings, const double max_condition_number, const double relative_ODE_step, const double E_value_step, const double D_temporal_resolution, const double runtime_out_seconds);
+RcppExport SEXP _castor_get_MuSSE_loglikelihood_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP oldest_ageSEXP, SEXP tree_edgeSEXP, SEXP node_agesSEXP, SEXP transition_ratesSEXP, SEXP speciation_ratesSEXP, SEXP extinction_ratesSEXP, SEXP initial_D_per_tipSEXP, SEXP initial_E_per_stateSEXP, SEXP root_prior_typeSEXP, SEXP root_priorSEXP, SEXP root_conditioningSEXP, SEXP include_ancestral_likelihoodsSEXP, SEXP include_warningsSEXP, SEXP max_condition_numberSEXP, SEXP relative_ODE_stepSEXP, SEXP E_value_stepSEXP, SEXP D_temporal_resolutionSEXP, SEXP runtime_out_secondsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1375,6 +1473,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
     Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
     Rcpp::traits::input_parameter< const long >::type Nstates(NstatesSEXP);
+    Rcpp::traits::input_parameter< const double >::type oldest_age(oldest_ageSEXP);
     Rcpp::traits::input_parameter< const IntegerVector& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type node_ages(node_agesSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type transition_rates(transition_ratesSEXP);
@@ -1382,7 +1481,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<double>& >::type extinction_rates(extinction_ratesSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type initial_D_per_tip(initial_D_per_tipSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type initial_E_per_state(initial_E_per_stateSEXP);
-    Rcpp::traits::input_parameter< std::vector<double>& >::type root_prior(root_priorSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type root_prior_type(root_prior_typeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type root_prior(root_priorSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type root_conditioning(root_conditioningSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_ancestral_likelihoods(include_ancestral_likelihoodsSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_warnings(include_warningsSEXP);
@@ -1391,7 +1491,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type E_value_step(E_value_stepSEXP);
     Rcpp::traits::input_parameter< const double >::type D_temporal_resolution(D_temporal_resolutionSEXP);
     Rcpp::traits::input_parameter< const double >::type runtime_out_seconds(runtime_out_secondsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_MuSSE_loglikelihood_CPP(Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds));
+    rcpp_result_gen = Rcpp::wrap(get_MuSSE_loglikelihood_CPP(Ntips, Nnodes, Nedges, Nstates, oldest_age, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior_type, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1475,8 +1575,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_HBD_PDR_loglikelihood_CPP
-Rcpp::List get_HBD_PDR_loglikelihood_CPP(const std::vector<double>& branching_ages, const double oldest_age, const double rholambda0, const std::vector<double>& age_grid, const std::vector<double>& PDRs, const long splines_degree, const std::string& condition, const double relative_dt, const double runtime_out_seconds);
-RcppExport SEXP _castor_get_HBD_PDR_loglikelihood_CPP(SEXP branching_agesSEXP, SEXP oldest_ageSEXP, SEXP rholambda0SEXP, SEXP age_gridSEXP, SEXP PDRsSEXP, SEXP splines_degreeSEXP, SEXP conditionSEXP, SEXP relative_dtSEXP, SEXP runtime_out_secondsSEXP) {
+Rcpp::List get_HBD_PDR_loglikelihood_CPP(const std::vector<double>& branching_ages, const double oldest_age, const double rholambda0, const std::vector<double>& age_grid, const std::vector<double>& PDRs, const long splines_degree, const std::string& condition, const double relative_dt, const double runtime_out_seconds, const std::vector<double> diff_PDR, const long diff_PDR_degree);
+RcppExport SEXP _castor_get_HBD_PDR_loglikelihood_CPP(SEXP branching_agesSEXP, SEXP oldest_ageSEXP, SEXP rholambda0SEXP, SEXP age_gridSEXP, SEXP PDRsSEXP, SEXP splines_degreeSEXP, SEXP conditionSEXP, SEXP relative_dtSEXP, SEXP runtime_out_secondsSEXP, SEXP diff_PDRSEXP, SEXP diff_PDR_degreeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1489,7 +1589,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::string& >::type condition(conditionSEXP);
     Rcpp::traits::input_parameter< const double >::type relative_dt(relative_dtSEXP);
     Rcpp::traits::input_parameter< const double >::type runtime_out_seconds(runtime_out_secondsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_HBD_PDR_loglikelihood_CPP(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds));
+    Rcpp::traits::input_parameter< const std::vector<double> >::type diff_PDR(diff_PDRSEXP);
+    Rcpp::traits::input_parameter< const long >::type diff_PDR_degree(diff_PDR_degreeSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_HBD_PDR_loglikelihood_CPP(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds, diff_PDR, diff_PDR_degree));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1737,18 +1839,19 @@ BEGIN_RCPP
 END_RCPP
 }
 // generate_random_tree_Mk_rates_CPP
-Rcpp::List generate_random_tree_Mk_rates_CPP(const long max_tips, const double max_time, const double max_time_since_equilibrium, const long Nstates, const std::vector<double>& state_birth_rates, const std::vector<double>& state_death_rates, const long start_state, const std::vector<double>& transition_matrix_A, const std::vector<double>& transition_matrix_C, const bool coalescent, const long Nsplits, const bool as_generations, const bool no_full_extinction, const bool include_birth_times, const bool include_death_times, const bool include_rates);
-RcppExport SEXP _castor_generate_random_tree_Mk_rates_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP max_time_since_equilibriumSEXP, SEXP NstatesSEXP, SEXP state_birth_ratesSEXP, SEXP state_death_ratesSEXP, SEXP start_stateSEXP, SEXP transition_matrix_ASEXP, SEXP transition_matrix_CSEXP, SEXP coalescentSEXP, SEXP NsplitsSEXP, SEXP as_generationsSEXP, SEXP no_full_extinctionSEXP, SEXP include_birth_timesSEXP, SEXP include_death_timesSEXP, SEXP include_ratesSEXP) {
+Rcpp::List generate_random_tree_Mk_rates_CPP(const long max_tips, const double max_time, const double max_time_since_equilibrium, const long max_events, const long Nstates, const long start_state, const std::vector<double>& state_birth_rates, const std::vector<double>& state_death_rates, const std::vector<double>& transition_matrix_A, const std::vector<double>& transition_matrix_C, const bool coalescent, const long Nsplits, const bool as_generations, const bool no_full_extinction, const bool include_birth_times, const bool include_death_times, const bool include_rates);
+RcppExport SEXP _castor_generate_random_tree_Mk_rates_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP max_time_since_equilibriumSEXP, SEXP max_eventsSEXP, SEXP NstatesSEXP, SEXP start_stateSEXP, SEXP state_birth_ratesSEXP, SEXP state_death_ratesSEXP, SEXP transition_matrix_ASEXP, SEXP transition_matrix_CSEXP, SEXP coalescentSEXP, SEXP NsplitsSEXP, SEXP as_generationsSEXP, SEXP no_full_extinctionSEXP, SEXP include_birth_timesSEXP, SEXP include_death_timesSEXP, SEXP include_ratesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const long >::type max_tips(max_tipsSEXP);
     Rcpp::traits::input_parameter< const double >::type max_time(max_timeSEXP);
     Rcpp::traits::input_parameter< const double >::type max_time_since_equilibrium(max_time_since_equilibriumSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_events(max_eventsSEXP);
     Rcpp::traits::input_parameter< const long >::type Nstates(NstatesSEXP);
+    Rcpp::traits::input_parameter< const long >::type start_state(start_stateSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type state_birth_rates(state_birth_ratesSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type state_death_rates(state_death_ratesSEXP);
-    Rcpp::traits::input_parameter< const long >::type start_state(start_stateSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type transition_matrix_A(transition_matrix_ASEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type transition_matrix_C(transition_matrix_CSEXP);
     Rcpp::traits::input_parameter< const bool >::type coalescent(coalescentSEXP);
@@ -1758,7 +1861,34 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const bool >::type include_birth_times(include_birth_timesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_death_times(include_death_timesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_rates(include_ratesSEXP);
-    rcpp_result_gen = Rcpp::wrap(generate_random_tree_Mk_rates_CPP(max_tips, max_time, max_time_since_equilibrium, Nstates, state_birth_rates, state_death_rates, start_state, transition_matrix_A, transition_matrix_C, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times, include_rates));
+    rcpp_result_gen = Rcpp::wrap(generate_random_tree_Mk_rates_CPP(max_tips, max_time, max_time_since_equilibrium, max_events, Nstates, start_state, state_birth_rates, state_death_rates, transition_matrix_A, transition_matrix_C, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times, include_rates));
+    return rcpp_result_gen;
+END_RCPP
+}
+// generate_random_tree_tdSSE_CPP
+Rcpp::List generate_random_tree_tdSSE_CPP(const long max_tips, const double max_time, const long max_events, const long Nstates, const long start_state, const std::vector<double>& time_grid, const std::vector<double>& state_birth_rates, const std::vector<double>& state_death_rates, const std::vector<double>& transition_matrix_A, const std::vector<double>& transition_matrix_C, const long splines_degree, const bool coalescent, const long Nsplits, const bool as_generations, const bool no_full_extinction, const bool include_birth_times, const bool include_death_times);
+RcppExport SEXP _castor_generate_random_tree_tdSSE_CPP(SEXP max_tipsSEXP, SEXP max_timeSEXP, SEXP max_eventsSEXP, SEXP NstatesSEXP, SEXP start_stateSEXP, SEXP time_gridSEXP, SEXP state_birth_ratesSEXP, SEXP state_death_ratesSEXP, SEXP transition_matrix_ASEXP, SEXP transition_matrix_CSEXP, SEXP splines_degreeSEXP, SEXP coalescentSEXP, SEXP NsplitsSEXP, SEXP as_generationsSEXP, SEXP no_full_extinctionSEXP, SEXP include_birth_timesSEXP, SEXP include_death_timesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type max_tips(max_tipsSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_time(max_timeSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_events(max_eventsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nstates(NstatesSEXP);
+    Rcpp::traits::input_parameter< const long >::type start_state(start_stateSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_grid(time_gridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type state_birth_rates(state_birth_ratesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type state_death_rates(state_death_ratesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type transition_matrix_A(transition_matrix_ASEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type transition_matrix_C(transition_matrix_CSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const bool >::type coalescent(coalescentSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nsplits(NsplitsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type as_generations(as_generationsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type no_full_extinction(no_full_extinctionSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_birth_times(include_birth_timesSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_death_times(include_death_timesSEXP);
+    rcpp_result_gen = Rcpp::wrap(generate_random_tree_tdSSE_CPP(max_tips, max_time, max_events, Nstates, start_state, time_grid, state_birth_rates, state_death_rates, transition_matrix_A, transition_matrix_C, splines_degree, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1838,7 +1968,12 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_castor_evaluate_univariate_expression_CPP", (DL_FUNC) &_castor_evaluate_univariate_expression_CPP, 3},
     {"_castor_dense_binary_matrix_row2column_major_CPP", (DL_FUNC) &_castor_dense_binary_matrix_row2column_major_CPP, 4},
+    {"_castor_get_member_lists_from_group_assignments_CPP", (DL_FUNC) &_castor_get_member_lists_from_group_assignments_CPP, 2},
+    {"_castor_split_undirected_graph_CPP", (DL_FUNC) &_castor_split_undirected_graph_CPP, 3},
+    {"_castor_evaluate_spline_CPP", (DL_FUNC) &_castor_evaluate_spline_CPP, 5},
+    {"_castor_derivatives_of_grid_curve_CPP", (DL_FUNC) &_castor_derivatives_of_grid_curve_CPP, 2},
     {"_castor_get_antiderivative_CPP", (DL_FUNC) &_castor_get_antiderivative_CPP, 5},
     {"_castor_get_derivative_CPP", (DL_FUNC) &_castor_get_derivative_CPP, 4},
     {"_castor_exponentiate_matrix_for_multiple_scalings_CPP", (DL_FUNC) &_castor_exponentiate_matrix_for_multiple_scalings_CPP, 7},
@@ -1877,6 +2012,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_tree_with_collapsed_monofurcations_CPP", (DL_FUNC) &_castor_get_tree_with_collapsed_monofurcations_CPP, 6},
     {"_castor_get_subtree_with_specific_clades_CPP", (DL_FUNC) &_castor_get_subtree_with_specific_clades_CPP, 10},
     {"_castor_get_subtree_at_node_CPP", (DL_FUNC) &_castor_get_subtree_at_node_CPP, 5},
+    {"_castor_get_subtrees_at_nodes_CPP", (DL_FUNC) &_castor_get_subtrees_at_nodes_CPP, 5},
     {"_castor_get_subtree_with_specific_tips_CPP", (DL_FUNC) &_castor_get_subtree_with_specific_tips_CPP, 8},
     {"_castor_find_root_for_monophyletic_clade_CPP", (DL_FUNC) &_castor_find_root_for_monophyletic_clade_CPP, 7},
     {"_castor_find_edge_splitting_tree_CPP", (DL_FUNC) &_castor_find_edge_splitting_tree_CPP, 7},
@@ -1911,18 +2047,19 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_WMPR_ASR_CPP", (DL_FUNC) &_castor_WMPR_ASR_CPP, 12},
     {"_castor_ASR_with_fixed_rates_Markov_model_CPP", (DL_FUNC) &_castor_ASR_with_fixed_rates_Markov_model_CPP, 17},
     {"_castor_apply_fixed_rate_Markov_model_to_missing_clades_CPP", (DL_FUNC) &_castor_apply_fixed_rate_Markov_model_to_missing_clades_CPP, 12},
-    {"_castor_apply_MPR_to_missing_clades_CPP", (DL_FUNC) &_castor_apply_MPR_to_missing_clades_CPP, 7},
+    {"_castor_apply_attributes_to_descendants_CPP", (DL_FUNC) &_castor_apply_attributes_to_descendants_CPP, 7},
     {"_castor_ASR_via_squared_change_parsimony_CPP", (DL_FUNC) &_castor_ASR_via_squared_change_parsimony_CPP, 7},
     {"_castor_get_mean_state_per_node_CPP", (DL_FUNC) &_castor_get_mean_state_per_node_CPP, 6},
     {"_castor_ASR_via_independent_contrasts_CPP", (DL_FUNC) &_castor_ASR_via_independent_contrasts_CPP, 7},
     {"_castor_apply_BM_parsimony_to_missing_clades_CPP", (DL_FUNC) &_castor_apply_BM_parsimony_to_missing_clades_CPP, 6},
+    {"_castor_ASR_binomial_CPP", (DL_FUNC) &_castor_ASR_binomial_CPP, 8},
     {"_castor_get_MuSSE_loglikelihood_classic_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_classic_CPP, 13},
-    {"_castor_get_MuSSE_loglikelihood_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_CPP, 20},
+    {"_castor_get_MuSSE_loglikelihood_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_CPP, 22},
     {"_castor_simulate_deterministic_HBD_model_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_model_CPP, 13},
     {"_castor_get_PSR_from_PDR_HBD_CPP", (DL_FUNC) &_castor_get_PSR_from_PDR_HBD_CPP, 8},
     {"_castor_get_PSR_of_HBD_model_CPP", (DL_FUNC) &_castor_get_PSR_of_HBD_model_CPP, 8},
     {"_castor_get_HBD_model_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_model_loglikelihood_CPP, 10},
-    {"_castor_get_HBD_PDR_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_PDR_loglikelihood_CPP, 9},
+    {"_castor_get_HBD_PDR_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_PDR_loglikelihood_CPP, 11},
     {"_castor_get_HBD_PSR_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_PSR_loglikelihood_CPP, 8},
     {"_castor_simulate_fixed_rates_Markov_model_CPP", (DL_FUNC) &_castor_simulate_fixed_rates_Markov_model_CPP, 11},
     {"_castor_simulate_Ornstein_Uhlenbeck_model_CPP", (DL_FUNC) &_castor_simulate_Ornstein_Uhlenbeck_model_CPP, 11},
@@ -1935,7 +2072,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_generate_tree_from_PSR_CPP", (DL_FUNC) &_castor_generate_tree_from_PSR_CPP, 9},
     {"_castor_get_branching_ages_from_LTT_CPP", (DL_FUNC) &_castor_get_branching_ages_from_LTT_CPP, 2},
     {"_castor_generate_random_tree_BM_rates_CPP", (DL_FUNC) &_castor_generate_random_tree_BM_rates_CPP, 17},
-    {"_castor_generate_random_tree_Mk_rates_CPP", (DL_FUNC) &_castor_generate_random_tree_Mk_rates_CPP, 16},
+    {"_castor_generate_random_tree_Mk_rates_CPP", (DL_FUNC) &_castor_generate_random_tree_Mk_rates_CPP, 17},
+    {"_castor_generate_random_tree_tdSSE_CPP", (DL_FUNC) &_castor_generate_random_tree_tdSSE_CPP, 17},
     {"_castor_generate_gene_tree_in_species_tree_MSC_CPP", (DL_FUNC) &_castor_generate_gene_tree_in_species_tree_MSC_CPP, 14},
     {"_castor_generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP", (DL_FUNC) &_castor_generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP, 21},
     {"_castor_simulate_deterministic_HBD_MSC_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_MSC_CPP, 9},

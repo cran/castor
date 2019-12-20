@@ -1,4 +1,5 @@
 # Collapse tree nodes (and their descending subtrees) into tips, whenever all descending tips have a distance from a node below a certain phylogenetic resolution threshold (but see option criterion)
+# Nodes are traversed root-->tips and collapsed as soon as the criterion falls below the threshold (=resolution)
 # If criterion=='max_tip_depth': Any node whose distance to all its descending tips is <=resolution, will be collapsed into a single tip
 # If criterion=='sum_tip_paths': Any node whose sum-of-descending-edge-lengths is <=resolution, will be collapsed into a single tip
 # If criterion=='max_tip_pair_dist': Any node of which all pairs of descending tips have distance <=resolution, will be collapsed into a single tip
@@ -50,9 +51,10 @@ collapse_tree_at_resolution = function(	tree,
 	class(collapsed_tree) = "phylo";
 	attr(collapsed_tree,"order") = "none";
 
-	return(list(tree			= collapsed_tree, 
-				root_shift		= results$root_shift, # distance between old & new root (will always be non-negative)
-				collapsed_nodes	= collapsed_nodes,
-				new2old_clade	= new2old_clade, 
-				new2old_edge	= new2old_edge));
+	return(list(tree				= collapsed_tree, 
+				root_shift			= results$root_shift, # distance between old & new root (will always be non-negative)
+				collapsed_nodes		= collapsed_nodes,
+				farthest_tips		= results$farthest_tips+1,
+				new2old_clade		= new2old_clade, 
+				new2old_edge		= new2old_edge))
 }

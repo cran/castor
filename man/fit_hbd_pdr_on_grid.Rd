@@ -22,7 +22,7 @@ fit_hbd_pdr_on_grid(  tree,
                       fixed_PDR             = NULL,
                       fixed_rholambda0      = NULL,
                       splines_degree        = 1,
-                      condition             = "stem",
+                      condition             = "auto",
                       relative_dt           = 1e-3,
                       Ntrials               = 1,
                       Nbootstraps           = 0,
@@ -74,7 +74,7 @@ Numeric, optionally specifying a fixed value for the product \eqn{\rho\lambda_o}
 Integer between 0 and 3 (inclusive), specifying the polynomial degree of the PDR between age-grid points. If 0, then the PDR is considered piecewise constant, if 1 then the PDR is considered piecewise linear, if 2 or 3 then the PDR is considered to be a spline of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended.
 }
 \item{condition}{
-Character, either "crown" or "stem", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age.
+Character, either "crown", "stem" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. If "auto", the condition is chosen according to the recommendations mentioned earlier.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time, when calculating the likelihood. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -128,7 +128,7 @@ The name of the objective that was maximized during fitting. Currently, only max
 The log-likelihood of the fitted model for the given timetree.
 }
 \item{fitted_PDR}{
-Numeric vector of size Ngrid, listing fitted or fixed pulled diversification rates (PDR) at each age-grid point.
+Numeric vector of size Ngrid, listing fitted or fixed pulled diversification rates (PDR) at each age-grid point. Between grid points the fitted PDR should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
 }
 \item{fitted_rholambda0}{
 Numeric, specifying the fitted or fixed product \eqn{\rho\lambda(0)}.

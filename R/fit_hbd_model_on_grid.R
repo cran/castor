@@ -28,7 +28,7 @@ fit_hbd_model_on_grid = function(	tree,
 									const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
-									condition			= "stem",	# one of "crown" or "stem", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+									condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 									Ntrials				= 1,
 									Nthreads			= 1,
@@ -39,8 +39,11 @@ fit_hbd_model_on_grid = function(	tree,
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age;
-	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 is older than the root age (%g)",root_age)));
+	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
+	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
+	if(!(condition %in% c("crown","stem","auto","none"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown', 'none' or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
@@ -58,7 +61,6 @@ fit_hbd_model_on_grid = function(	tree,
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
 
 	# more error checking
-	if(!(condition %in% c("stem","crown","none"))) return(list(success = FALSE, error = sprintf("Invalid condition option '%s'; expected either 'crown', or 'stem' or 'none' (not recommended)",condition)))
 	if(is.null(fixed_rho0)) fixed_rho0 = NA;
 	if((!is.na(fixed_rho0)) && ((fixed_rho0<=0) || (fixed_rho0>1))) return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the accepted range (0,1].",fixed_rho0)));
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
@@ -152,11 +154,11 @@ fit_hbd_model_on_grid = function(	tree,
 	NFlambda		= sum(is.na(fixed_lambda)) 	# number of non-fixed lambda
 	NFmu			= sum(is.na(fixed_mu))		# number of non-fixed mu
 	fitted2free		= (if(NFlambda==0) c() else (if(const_lambda) rep(1,times=NFlambda) else c(1:NFlambda)))
-	fitted2free		= c(fitted2free, (if(NFmu==0) c() else tail(fitted2free,1)+(if(const_mu) rep(1,times=NFmu) else c(1:NFmu))))
-	fitted2free		= c(fitted2free, (if(is.na(fixed_rho0)) tail(fitted2free,1)+1 else c()))
+	fitted2free		= c(fitted2free, (if(NFmu==0) c() else (if(length(fitted2free)==0) 0 else tail(fitted2free,1))+(if(const_mu) rep(1,times=NFmu) else c(1:NFmu))))
+	fitted2free		= c(fitted2free, (if(is.na(fixed_rho0)) (if(length(fitted2free)==0) 0 else tail(fitted2free,1)) + 1 else c()))
 	Nfree			= length(unique(fitted2free)); # number of free (i.e. independently) fitted parameters
 	free2fitted		= lapply(1:Nfree, FUN=function(frp) which(fitted2free==frp))
-	
+		
 	# determine typical parameter scales
 	scale_lambda = abs(guess_lambda); scale_lambda[scale_lambda==0] = mean(scale_lambda);
 	scale_mu 	 = abs(guess_mu);
@@ -227,10 +229,14 @@ fit_hbd_model_on_grid = function(	tree,
 		# randomly choose start values for fitted params
 		start_values = sapply(1:Nfree, FUN = function(frp) guess_param_values[fitted_params[free2fitted[[frp]][1]]])
 		if(trial>1){
-			boxed   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
-			unboxed = complement(Nfree, boxed);
-			if(length(boxed)>0) start_values[boxed] = lower_bounds[boxed] + (upper_bounds[boxed]-lower_bounds[boxed]) * runif(n=length(boxed),min=0,max=1)
-			if(length(unboxed)>0) start_values[unboxed]	= 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
+			boxed_left	= which((!is.infinite(lower_bounds)) & is.infinite(upper_bounds))
+			boxed_right	= which((!is.infinite(upper_bounds)) & is.infinite(lower_bounds))
+			boxed_dual  = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
+			unboxed 	= which(is.infinite(lower_bounds) & is.infinite(upper_bounds))
+			if(length(boxed_dual)>0) 	start_values[boxed_dual] = lower_bounds[boxed_dual] + (upper_bounds[boxed_dual]-lower_bounds[boxed_dual]) * runif(n=length(boxed_dual),min=0,max=1)
+			if(length(unboxed)>0) 	 	start_values[unboxed]	 = 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
+			if(length(boxed_left)>0) 	start_values[boxed_left] = sapply(boxed_left, FUN=function(fp) random_semiboxed_left(lower_bound=lower_bounds[fp], default=start_values[fp], typical_scale=fparam_scales[fp], orders_of_magnitude=4))
+			if(length(boxed_right)>0) 	start_values[boxed_right]= sapply(boxed_right, FUN=function(fp) -random_semiboxed_left(lower_bound=-upper_bounds[fp], default=-start_values[fp], typical_scale=fparam_scales[fp], orders_of_magnitude=4))
 		}
 		start_values = pmax(lower_bounds,pmin(upper_bounds,start_values))
 		# run fit

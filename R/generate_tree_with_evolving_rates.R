@@ -82,10 +82,11 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		results = generate_random_tree_Mk_rates_CPP(max_tips					= (if(is.null(max_tips)) -1 else max_tips),
 													max_time					= (if(is.null(max_time)) -1 else max_time),
 													max_time_since_equilibrium	= (if(is.null(max_time_eq)) -1 else max_time_eq),
+													max_events					= -1,
 													Nstates						= parameters$Nstates,
+													start_state					= max(1,min(parameters$Nstates, parameters$start_state)) - 1,
 													state_birth_rates			= parameters$state_birth_rates, 
 													state_death_rates			= parameters$state_death_rates,
-													start_state					= max(1,min(parameters$Nstates, parameters$start_state)) - 1,
 													transition_matrix_A			= as.vector(t(parameters$transition_matrix)), # flatten in row-major format
 													transition_matrix_C			= numeric(), # no cladogenic transitions included in this model
 													coalescent					= coalescent,

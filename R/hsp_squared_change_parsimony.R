@@ -44,7 +44,7 @@ hsp_squared_change_parsimony = function(tree,
 														states			= states);
 		
 	return(list(success = TRUE,
-				total_sum_of_squared_changes = asr_results$TSS,
+				total_sum_of_squared_changes = asr_results$total_sum_of_squared_changes,
 				states = states))
 }
 

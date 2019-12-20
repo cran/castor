@@ -1,22 +1,21 @@
-\name{simulate_dsse}
-\alias{simulate_dsse}
-\alias{simulate_musse}
-
+\name{simulate_tdsse}
+\alias{simulate_tdsse}
 \title{
-Simulate a Discrete-State Speciation and Extinction (dSSE) model.
+Simulate a time-dependent Discrete-State Speciation and Extinction (tdSSE) model.
 }
 \description{
-Simulate a random phylogenetic tree in forward time based on a Poissonian speciation/extinction (birth/death) process, whereby birth and death rates are determined by a co-evolving discrete trait. New species are added (born) by splitting of a randomly chosen extant tip. The discrete trait, whose values determine birth/death rates, can evolve in two modes: (A) Anagenetically, i.e. according to a discrete-space continuous-time Markov process along each edge, with fixed transition rates between states, and/or (B) cladogenetically, i.e. according to fixed transition probabilities between states at each speciation event. This model class includes the Multiple State Speciation and Extinction (MuSSE) model described by FitzJohn et al. (2009), as well as the Cladogenetic SSE (ClaSSE) model described by Goldberg and Igis (2012). Optionally, the model can be turned into a Hidden State Speciation and Extinction model (Beaulieu and O'meara, 2016), by replacing the simulated tip/node states with "proxy" states, thus hiding the original states actually influencing speciation/extinction rates.
+Simulate a random phylogenetic tree in forward time based on a Poissonian speciation/extinction (birth/death) process, whereby birth and death rates are determined by a co-evolving discrete trait. New species are added (born) by splitting of a randomly chosen extant tip. The discrete trait, whose values determine birth/death rates, can evolve in two modes: (A) Anagenetically, i.e. according to a discrete-space continuous-time Markov process along each edge, with fixed or time-dependent transition rates between states, and/or (B) cladogenetically, i.e. according to fixed or time-dependent transition probabilities between states at each speciation event. This model class includes the Multiple State Speciation and Extinction (MuSSE) model described by FitzJohn et al. (2009), as well as the Cladogenetic SSE (ClaSSE) model described by Goldberg and Igis (2012). Optionally, the model can be turned into a Hidden State Speciation and Extinction model (Beaulieu and O'meara, 2016), by replacing the simulated tip/node states with "proxy" states, thus hiding the original states actually influencing speciation/extinction rates. This function is similar to \code{\link{simulate_dsse}}, the main difference being that state-specific speciation/extinction rates as well as state transition rates can be time-dependent.
 }
 \usage{
-simulate_dsse( Nstates,
+simulate_tdsse(Nstates,
                NPstates             = NULL,
                proxy_map            = NULL,
+               time_grid            = NULL,
                parameters           = list(),
+               splines_degree		= 1,
                start_state          = NULL,
                max_tips             = NULL, 
                max_time             = NULL,
-               max_time_eq          = NULL,
                max_events           = NULL,
                sampling_fractions   = NULL,
                reveal_fractions     = NULL,
@@ -28,16 +27,7 @@ simulate_dsse( Nstates,
                node_basename        = NULL,
                include_birth_times  = FALSE,
                include_death_times  = FALSE,
-               include_rates        = FALSE,
                include_labels       = TRUE)
-               
-simulate_musse(Nstates,  NPstates = NULL, proxy_map = NULL, 
-            parameters = list(), start_state = NULL, 
-            max_tips = NULL, max_time = NULL, max_time_eq = NULL, max_events = NULL, 
-            sampling_fractions = NULL, reveal_fractions = NULL, coalescent = TRUE, 
-            as_generations = FALSE, no_full_extinction = TRUE, Nsplits = 2, 
-            tip_basename = "", node_basename = NULL, include_birth_times = FALSE, 
-            include_death_times = FALSE, include_rates = FALSE, include_labels = TRUE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -50,8 +40,14 @@ Integer, optionally specifying a number of "proxy-states" that are observed inst
 \item{proxy_map}{
 Integer vector of size \code{Nstates} and with values in 1,..\code{NPstates}, specifying the correspondence between states (i.e. diversification-rate categories) and (observed) proxy-states, in a HiSSE model. Specifically, \code{proxy_map[s]} indicates which proxy-state the state s is represented by. Each proxy-state can represent multiple states (i.e. proxies are ambiguous), but each state must be represented by exactly one proxy-state. For non-HiSSE models, set this to \code{NULL}. See below for more details.
 }
+\item{time_grid}{
+Numeric vector listing discrete times in ascending order, used to define the time-dependent rates of the model. The time grid should generally cover the maximum possible simulation time, otherwise it will be polynomially extrapolated (according to \code{splines_degree}).
+}
 \item{parameters}{
-A named list specifying the dSSE model parameters, such as the anagenetic and/or cladogenetic transition rates between states and the state-dependent birth/death rates (see details below).
+A named list specifying the time-dependent model parameters, including optional anagenetic and/or cladogenetic transition rates between states, as well as the mandatory state-dependent birth/death rates (see details below).
+}
+\item{splines_degree}{
+Integer, either 0, 1, 2 or 3, specifying the polynomial degree of time-dependent model parameters (birth_rates, death_rates, transition_rates) between time-grid points. For example, \code{splines_degree=1} means that rates are to be considered linear between adjacent grid points.
 }
 \item{start_state}{
 Integer within 1,..,\code{Nstates}, specifying the initial state, i.e. of the first lineage created. If left unspecified, this is chosen randomly and uniformly among all possible states.
@@ -61,9 +57,6 @@ Maximum number of tips in the generated tree, prior to any subsampling. If \code
 }
 \item{max_time}{
 Numeric, maximum duration of the simulation. If \code{NULL} or <=0, this constraint is ignored.
-}
-\item{max_time_eq}{
-Numeric, maximum duration of the simulation, counting from the first point at which speciation/extinction equilibrium is reached, i.e. when (birth rate - death rate) changed sign for the first time. If \code{NULL} or <0, this constraint is ignored.
 }
 \item{max_events}{
 Integer, maximum number of speciation/extinction/transition events before halting the simulation. If \code{NULL}, this constraint is ignored.
@@ -98,9 +91,6 @@ Logical. If \code{TRUE}, then the times of speciation events (in order of occurr
 \item{include_death_times}{
 Logical. If \code{TRUE}, then the times of extinction events (in order of occurrence) will also be returned.
 }
-\item{include_rates}{
-Logical. If \code{TRUE}, then the per-capita birth & death rates of all tips and nodes will also be returned.
-}
 \item{include_labels}{
 Logical, specifying whether to include tip-labels and node-labels (if available) as names in the returned state vectors (e.g. \code{tip_states} and \code{node_states}). In any case, returned states are always listed in the same order as tips and nodes in the tree. Setting this to \code{FALSE} may increase computational efficiency for situations where labels are not required.
 }
@@ -108,28 +98,20 @@ Logical, specifying whether to include tip-labels and node-labels (if available)
 
 
 \details{
-The function \code{simulate_dsse} can be used to simulate a diversification + discrete-trait evolutionary process, in which birth/death (speciation/extinction) rates at each tip are determined by a tip's current "state". Lineages can transition between states anagenetically along each edge (according to fixed Markov transition rates) and/or cladogenetically at each speciation event (according to fixed transition probabilities). 
+The function \code{simulate_tdsse} can be used to simulate a diversification + discrete-trait evolutionary process, in which birth/death (speciation/extinction) rates at each tip are determined by a tip's current "state". Lineages can transition between states anagenetically along each edge (according to some Markov transition rates) and/or cladogenetically at each speciation event (according to some transition probabilities). The speciation and extinction rates, as well as the transition rates, may be specified as time-dependent variables, defined as piecewise polynomial functions (natural splines) on a temporal grid.
 
-The function \code{simulate_musse} is a simplified variant meant to simulate MuSSE/HiSSE models in the absence of cladogenetic state transitions, and is included mainly for backward-compatibility reasons. The input arguments for \code{simulate_musse} are identical to \code{simulate_dsse}, with the exception that the \code{parameters} argument must include slightly different elements (explained below).
-
-For \code{simulate_dsse}, the argument \code{parameters} should be a named list including one or more of the following elements:
+In the following, Ngrid refers to the length of the vector \code{time_grid}.
+The argument \code{parameters} should be a named list including one or more of the following elements:
 \itemize{
-\item\code{birth_rates}: Numeric vector of size Nstates, listing the per-capita birth rate (speciation rate) at each state. Can also be a single number (all states have the same birth rate).
-\item\code{death_rates}: Numeric vector of size Nstates, listing the per-capita death rate (extinction rate) at each state. Can also be a single number (all states have the same death rate).
-\item\code{transition_matrix_A}: 2D numeric matrix of size Nstates x Nstates, listing anagenetic transition rates between states along an edge. Hence, \code{transition_matrix_A[r,c]} is the probability rate for transitioning from state \code{r} to state \code{c}. Non-diagonal entries must be non-negative, diagonal entries must be non-positive, and the sum of each row must be zero.
-\item\code{transition_matrix_C}: 2D numeric matrix of size Nstates x Nstates, listing cladogenetic transition probabilities between states during a speciation event, seperately for each child. Hence, \code{transition_matrix_C[r,c]} is the probability that a child will have state \code{c}, conditional upon the occurrence of a speciation event, given that the parent had state \code{r}, and independently of all other children. Entries must be non-negative, and the sum of each row must be one.
+\item\code{birth_rates}: Numeric 2D matrix of size Nstates x Ngrid, listing the per-capita birth rate (speciation rate) at each state and at each time-grid point. Can also be a single number (same birth rate for all states and at all times).
+\item\code{death_rates}: Numeric 2D matrix of size Nstates x Ngrid, listing the per-capita death rate (extinction rate) at each state and at each time-grid point. Can also be a single number (same death rate for all states and at all times) or NULL (no deaths).
+\item\code{transition_matrix_A}: Either a 3D numeric array of size Nstates x Nstates x Ngrid, or a 2D numeric matrix of size Nstates x Nstates, listing anagenetic transition rates between states along an edge. If a 3D array, then \code{transition_matrix_A[r,c,t]} is the infinitesimal rate for transitioning from state \code{r} to state \code{c} at time \code{time_grid[t]}. If a 2D matrix, \code{transition_matrix_A[r,c]} is the time-independent infintesimal rate for transitioning from state \code{r} to state \code{c}. At each time point (i.e., a fixed \code{t}), non-diagonal entries in \code{transition_matrix_A[,,t]} must be non-negative, diagonal entries must be non-positive, and the sum of each row must be zero.
+\item\code{transition_matrix_C}: Either a 3D numeric array of size Nstates x Nstates x Ngrid, or a 2D numeric matrix of size Nstates x Nstates, listing cladogenetic transition probabilities between states during a speciation event, seperately for each child. If a 3D array, then \code{transition_matrix_C[r,c,t]} is the probability that a child emerging at time \code{time_grid[t]} will have state \code{c}, conditional upon the occurrence of a speciation event, given that the parent had state \code{r}, and independently of all other children. If a 2D matrix, then \code{transition_matrix_C[r,c]} is the (time-independent) probability that a child will have state \code{c}, conditional upon the occurrence of a speciation event, given that the parent had state \code{r}, and independently of all other children. Entries must be non-negative, and for any fixed \code{t} the sum of each row in \code{transition_matrix[,,t]} must be one.
 }
 
-For \code{simulate_musse}, the argument \code{parameters} should be a named list including one or more of the following elements:
-\itemize{
-\item\code{birth_rates}: Same as for \code{simulate_dsse}.
-\item\code{death_rates}: Same as for \code{simulate_dsse}.
-\item\code{transition_matrix}: 2D numeric matrix of size Nstates x Nstates, listing anagenetic transition rates between states. This is equivalent to \code{transition_matrix_A} in \code{simulate_dsse}.
-}
+If \code{max_time==NULL} and \code{max_events==NULL}, then the returned tree will always contain \code{max_tips} tips. If at any moment during the simulation the tree only includes a single extant tip, and if \code{no_full_extinction=TRUE} the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time} and/or \code{max_events}. If neither \code{max_time}, \code{max_tips} nor \code{max_events} is \code{NULL}, then the simulation halts as soon as the time reaches \code{max_time}, or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) reaches \code{max_tips}, or the number of speciation/extinction/transition events reaches \code{max_events} whichever occurs first. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit. Note that this code generates trees in forward time, and halts as soon as one of the halting conditions is met; the halting condition chosen affects the precise distribution from which the generated trees are drawn (Stadler 2011).
 
-If \code{max_time==NULL} and \code{max_time_eq==NULL} and \code{max_events==NULL}, then the returned tree will always contain \code{max_tips} tips. If at any moment during the simulation the tree only includes a single extant tip, and if \code{no_full_extinction=TRUE}, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time} and/or \code{max_time_eq} and/or \code{max_events}. If neither \code{max_time}, \code{max_time_eq}, \code{max_tips} nor \code{max_events} is \code{NULL}, then the simulation halts as soon as the time reaches \code{max_time}, or the time since equilibration reaches \code{max_time_eq}, or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) reaches \code{max_tips}, or the number of speciation/extinction/transition events reaches \code{max_events} whichever occurs first. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit. Note that this code generates trees in forward time, and halts as soon as one of the halting conditions is met; the halting condition chosen affects the precise distribution from which the generated trees are drawn (Stadler 2011).
-
-HiSSE models (Beaulieu and O'meara, 2016) are closely related to BiSSE/MuSSE models, the main difference being the fact that the actual diversification-modulating states are not directly observed. Hence, this function is also able to simulate HiSSE models, with appropriate choice of the input variables \code{Nstates}, \code{NPstates} and \code{proxy_map}. For example, \code{Nstates=4}, \code{NPstates=2} and \code{proxy_map=c(1,2,1,2)} specifies that states 1 and 3 are represented by proxy-state 1, and states 2 and 4 are represented by proxy-state 2. This is the original case described by Beaulieu and O'meara (2016); in their terminology, there would be 2 "hidden"" states ("0" and "1") and 2 "observed" (proxy) states ("A" and "B"), and the 4 diversification rate categories (\code{Nstates=4}) would be called "0A", "1A", "0B" and "1B", respectively. The somewhat different terminology used here allows for easier generalization to an arbitrary number of diversification-modulating states and an arbitrary number of proxy states. For example, if there are 6 diversification modulating states, represented by 3 proxy-states as 1->A, 2->A, 3->B, 4->C, 5->C, 6->C, then one would set \code{Nstates=6}, \code{NPstates=3} and \code{proxy_map=c(1,1,2,3,3,3)}.
+For additional information on simulating HiSSE models see the related function \code{\link{simulate_dsse}}.
 
 The parameter \code{transition_matrix_C} can be used to define ClaSSE models (Goldberg and Igic, 2012) or BiSSE-ness models (Magnuson-Ford and Otto, 2012), although care must be taken to properly define the transition probabilities. Here, cladogenetic transitions occur at probabilities that are defined conditionally upon a speciation event, whereas in other software they may be defined as probability rates.
 }
@@ -151,9 +133,6 @@ Note that if \code{coalescent==TRUE}, this may be later than the first speciatio
 }
 \item{final_time}{
 Numeric, giving the final time at the end of the simulation. If \code{coalescent==TRUE}, then this may be greater than the total time span of the tree (since the root of the coalescent tree need not correspond to the first speciation event).
-}
-\item{equilibrium_time}{
-Numeric, giving the first time where the sign of (death rate - birth rate) changed from the beginning of the simulation, i.e. when speciation/extinction equilibrium was reached. May be infinite if the simulation stopped before reaching this point.
 }
 \item{Nbirths}{
 Numeric vector of size Nstates, listing the total number of birth events (speciations) that occurred at each state. The sum of all entries in \code{Nbirths} may be lower than the total number of tips in the tree if death rates were non-zero and \code{coalescent==TRUE}, or if \code{Nsplits>2}.
@@ -188,12 +167,6 @@ Numeric vector, listing the times of speciation events during tree growth, in or
 \item{death_times}{
 Numeric vector, listing the times of extinction events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.
 }
-\item{clade_birth_rates}{
-Numeric vector of size Ntips+Nnodes, listing the per-capita birth rate of each tip and node in the tree. Only included if \code{include_rates==TRUE}.
-}
-\item{clade_death_rates}{
-Numeric vector of size Ntips+Nnodes, listing the per-capita death rate of each tip and node in the tree. Only included if \code{include_rates==TRUE}.
-}
 }
 
 \author{Stilianos Louca}
@@ -215,29 +188,63 @@ T. Stadler (2011). Simulating trees with a fixed number of extant species. Syste
 }
 
 \seealso{
-\code{\link{simulate_tdsse}}, 
+\code{\link{simulate_dsse}},
+\code{\link{simulate_musse}},
 \code{\link{fit_musse}}
 }
 
-\examples{
-# Simulate a tree under a BiSSE model (i.e., anagenetic transitions between two states)
-A = get_random_mk_transition_matrix(Nstates=2, rate_model="ER", max_rate=0.1)
-parameters = list(birth_rates         = c(1,1.5),
-                  death_rates         = 0.5,
-                  transition_matrix_A = A)
-simulation = simulate_dsse( Nstates       = 2, 
-                            parameters    = parameters, 
-                            max_tips      = 1000, 
-                            include_rates = TRUE)
-tree       = simulation$tree
-Ntips      = length(tree$tip.label)
+\examples{\dontrun{
+# prepare params for time-dependent BiSSE model
+# include time-dependent speciation & extinction rates
+# as well as time-dependent anagenetic transition rates
+Nstates          = 2
+reveal_fractions = c(1,0.5)
+rarefaction      = 0.5 # species sampling fraction
 
-# plot distribution of per-capita birth rates of tips
-rates = simulation$clade_birth_rates[1:Ntips]
-barplot(table(rates)/length(rates), 
-        xlab="rate", 
-        main="Distribution of pc birth rates across tips (BiSSE model)")
+time2lambda1 = function(times) rep(1,times=length(times))
+time2lambda2 = function(times) rep(2,times=length(times))
+time2mu1     = function(times) 0.5 + 2.5*exp(-((times-8)**2)/2)
+time2mu2     = function(times) 1 + 2*exp(-((times-12)**2)/2)
+time_grid    = seq(from=0, to=100, length.out=1000)
+
+time2Q12    = function(times) 1*exp(0.1*times)
+time2Q21    = function(times) 2*exp(-0.1*times)
+QA          = array(0, dim=c(Nstates,Nstates,length(time_grid)))
+QA[1,2,]    = time2Q12(time_grid)
+QA[2,1,]    = time2Q21(time_grid)
+QA[1,1,]    = -QA[1,2,]
+QA[2,2,]    = -QA[2,1,]
+
+parameters = list()
+parameters$birth_rates = rbind(time2lambda1(time_grid), time2lambda2(time_grid))
+parameters$death_rates = rbind(time2mu1(time_grid), time2mu2(time_grid))
+parameters$transition_matrix_A = QA
+
+# simulate time-dependent BiSSE model
+cat(sprintf("Simulating tMuSSE model..\n"))
+sim = castor::simulate_tdsse(Nstates            = Nstates,
+                            time_grid           = time_grid,
+                            parameters          = parameters, 
+                            splines_degree      = 1,
+                            max_tips            = 10000/rarefaction,
+                            sampling_fractions  = rarefaction,
+                            reveal_fractions    = reveal_fractions,
+                            coalescent          = TRUE,
+                            no_full_extinction  = TRUE)
+if(!sim$success){
+    cat(sprintf("ERROR: \%s\n",sim$error))
+}else{
+    # print some summary info about the generated tree
+    tree        = sim$tree
+    Ntips       = length(tree$tip.label)
+    root_age    = get_tree_span(tree)$max_distance
+    root_time   = sim$final_time - root_age
+    tip_states  = sim$tip_states
+    Nknown_tips = sum(!is.na(tip_states))
+    cat(sprintf("Note: Simulated tree has root_age = \%g\n",root_age))
+    cat(sprintf("Note: \%d tips have known state\n", Nknown_tips));
 }
+}}
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 % Only 1 keyword per line

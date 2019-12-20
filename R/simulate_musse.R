@@ -10,6 +10,7 @@ simulate_musse = function(	Nstates,							# number of discrete possible states f
 							max_tips				= NULL, 	# integer, specifying the max number of tips in the simulated tree (prior to any subsampling)
 							max_time				= NULL,
 							max_time_eq				= NULL,
+							max_events				= NULL,		# integer, specifying the max number of speciation/extinction/transition events prior to halting the simulation. Set to NULL to not impose any limit on the number of events.
 							sampling_fractions		= NULL,		# numeric vector of size NPstates, listing sampling fractions depending on state. sampling_fractions[p] = probability of including a species in the tree, if its proxy state is p
 							reveal_fractions		= NULL,		# numeric vector of size NPstates, listing reveal fractions depending on state. reveal_fractions[p] = probability of knowing a tip's proxy state, if its proxy state is p
 							coalescent 				= TRUE,
@@ -40,6 +41,7 @@ simulate_musse = function(	Nstates,							# number of discrete possible states f
 							max_tips				= max_tips,
 							max_time				= max_time,
 							max_time_eq				= max_time_eq,
+							max_events				= max_events,
 							sampling_fractions		= sampling_fractions,
 							reveal_fractions		= reveal_fractions,
 							coalescent 				= coalescent,

@@ -77,7 +77,7 @@ J. Felsenstein (2004). Inferring Phylogenies. Sinauer Associates, Sunderland, Ma
 \code{\link{map_to_state_space}}
 }
 
-\examples{
+\examples{\dontrun{
 # generate random tree
 Ntips = 10
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
@@ -93,7 +93,7 @@ node_states = max.col(results$ancestral_likelihoods)
 
 # print reconstructed node states
 print(node_states)
-}
+}}
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{maximum parsimony}

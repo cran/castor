@@ -37,8 +37,9 @@ Character, specifying the criterion to use for collapsing (i.e. how to interpret
 
 
 \details{
-The input tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child).
+The tree is traversed from root to tips and nodes are collapsed into tips as soon as the criterion equals or falls below the resolution threshold.
 
+The input tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child).
 Tip labels and uncollapsed node labels of the collapsed tree are inheritted from the original tree. If \code{rename_collapsed_nodes==FALSE}, then labels of collapsed nodes will be the node labels from the original tree (in this case the original tree should include node labels). If \code{rename_collapsed_nodes==TRUE}, each collapsed node is given the label of its farthest descending tip. If \code{shorten==TRUE}, then edge lengths are the same as in the original tree. If \code{shorten==FALSE}, then edges leading into collapsed nodes may be longer than before.
 }
 
@@ -53,6 +54,9 @@ Numeric, indicating the phylogenetic distance between the old and the new root. 
 }
 \item{collapsed_nodes}{
 Integer vector, listing indices of collapsed nodes in the original tree (subset of 1,..,Nnodes).
+}
+\item{farthest_tips}{
+Integer vector of the same length as \code{collapsed_nodes}, listing indices of the farthest tips for each collapsed node. Hence, \code{farthest_tips[n]} will be the index of a tip in the original tree that descended from node \code{collapsed_nodes[n]} and had the greatest distance from that node among all descending tips.
 }
 \item{new2old_clade}{
 Integer vector of length equal to the number of tips+nodes in the collapsed tree, with values in 1,..,Ntips+Nnodes, mapping tip/node indices of the collapsed tree to tip/node indices in the original tree.

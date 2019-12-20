@@ -610,3 +610,82 @@ get_PSR_of_HBD_model = function(oldest_age,					# oldest age until which to calc
 
 
 
+# generate a random variable bounded from below but not from above
+# used to pick random start params for fitting trials
+random_semiboxed_left = function(lower_bound, default, typical_scale, orders_of_magnitude){
+	if((default==0) && (lower_bound==0)){
+		if(typical_scale==0){
+			return(runif(n=1,min=0,max=1))
+		}else{
+			return(abs(typical_scale) * 10**runif(n=1,min=0,max=orders_of_magnitude))
+		}
+	}else if((default>lower_bound) && (default>0)){
+		return(if(rbinom(n=1,size=1,prob=0.5)==1) (default * 10**runif(n=1,min=0,max=orders_of_magnitude)) else (lower_bound + (default-lower_bound)*runif(n=1,min=0,max=1)))
+	}else if(default>lower_bound){
+		return(lower_bound + (default-lower_bound) * 10**runif(n=1,min=-orders_of_magnitude/2,max=orders_of_magnitude/2))
+	}else{
+		return(lower_bound + (0-lower_bound) * 10**runif(n=1,min=-orders_of_magnitude/2,max=orders_of_magnitude/2))
+	}
+}
+
+
+# choose random parameter values within boxed constraints
+# each lower & upper bound may be Inf
+# defaults[], lower_bounds[], upper_bounds[] and scales[] must be 1D numeric vectors of the same length, and must not include NaN or NA 
+# lower_bounds[] and upper_bounds[] may include +Inf and -Inf
+get_random_params = function(defaults, lower_bounds, upper_bounds, scales, orders_of_magnitude){
+	start_values = defaults
+	boxed_left	 = which((!is.infinite(lower_bounds)) & is.infinite(upper_bounds))
+	boxed_right	 = which((!is.infinite(upper_bounds)) & is.infinite(lower_bounds))
+	boxed_dual   = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
+	unboxed 	 = which(is.infinite(lower_bounds) & is.infinite(upper_bounds))
+	if(length(boxed_dual)>0) 	start_values[boxed_dual] = lower_bounds[boxed_dual] + (upper_bounds[boxed_dual]-lower_bounds[boxed_dual]) * runif(n=length(boxed_dual),min=0,max=1)
+	if(length(unboxed)>0) 	 	start_values[unboxed]	 = 10**runif(n=length(unboxed), min=-orders_of_magnitude/2.0, max=orders_of_magnitude/2.0) * start_values[unboxed]
+	if(length(boxed_left)>0) 	start_values[boxed_left] = sapply(boxed_left, FUN=function(fp) random_semiboxed_left(lower_bound=lower_bounds[fp], default=start_values[fp], typical_scale=scales[fp], orders_of_magnitude=orders_of_magnitude))
+	if(length(boxed_right)>0) 	start_values[boxed_right]= sapply(boxed_right, FUN=function(fp) -random_semiboxed_left(lower_bound=-upper_bounds[fp], default=-start_values[fp], typical_scale=scales[fp], orders_of_magnitude=orders_of_magnitude))
+	start_values = pmax(lower_bounds,pmin(upper_bounds,start_values))
+	return(start_values)
+}
+
+
+# given an undirected graph (nodes,edges), find its maximal connected subgraphs
+# any two nodes may be connected by zero, one or multiple edges
+# edges[] should be a 2D array of size Nedges x 2, listing source & target nodes of the graph
+get_connected_subgraphs = function(Nnodes, edges){
+	results = split_undirected_graph_CPP(Nnodes=Nnodes, Nedges=nrow(edges), edges = as.vector(t(edges))-1);
+	return(list(Nsubgraphs 		= results$Nsubgraphs,
+				subgraph2nodes	= lapply(1:results$Nsubgraphs, FUN=function(n) results$subgraph2nodes[[n]]+1),
+				subgraph2edges	= lapply(1:results$Nsubgraphs, FUN=function(n) results$subgraph2edges[[n]]+1),
+				node2subgraph	= results$node2subgraph+1,
+				edge2subgraph	= results$edge2subgraph+1));
+}
+
+
+
+# Sarting from a mapping pool-->group, calculate the reverse mapping group-->member_list
+# this function returns a list of length Ngroups, where each element is a 1D vector listing member indices
+# values in pool2group[] must be between 1 and Ngroups, or NA or <=0 (in which case the item is not affiliated with any group)
+get_member_lists_from_group_assignments = function(Ngroups, pool2group){
+	if(Ngroups==0) return(list())
+	pool2group[is.na(pool2group)] = -1;
+	results = get_member_lists_from_group_assignments_CPP(Ngroups=Ngroups, pool2group=pool2group-1)
+	return(lapply(1:Ngroups,FUN=function(g) results$group2members[[g]]+1))
+}
+
+
+
+# evaluate a mathematical expression (univariate function of X) for various X-values
+# the input X[] can either be a 1D vector or a 2D matrix
+evaluate_univariate_expression = function(expression, Xname="x", X){
+	if(is.vector(X)){
+		results = evaluate_univariate_expression_CPP(expression=expression, Xname=Xname, X=X);
+		return(list(success=results$success, error=results$error, Y=results$Y))
+	}else if(is.matrix(X)){
+		results = evaluate_univariate_expression_CPP(expression=expression, Xname=Xname, X=as.vector(t(X)));
+		if(!results$success) return(list(success=FALSE, error=results$error))
+		return(list(success=TRUE, Y=matrix(results$Y,ncol=ncol(X),byrow=TRUE)))
+	}else{
+		return(list(success=FALSE, error="Unknown data format X: Expecting either a vector or a matrix"))
+	}
+}
+
