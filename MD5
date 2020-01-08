@@ -1,6 +1,6 @@
-738dafa3e6a108a99cdf8cc773f7e28b *DESCRIPTION
-488185852ae6d432abedfd98600805ec *NAMESPACE
-4a2f9777718863223d5037ec0a8c57c4 *R/RcppExports.R
+42bc89ba3bc786161836c7f25b5ddd1d *DESCRIPTION
+7518105060ec14bce8f83ff5deb64b07 *NAMESPACE
+d1a7066ae50bbcc6080a903c35157dae *R/RcppExports.R
 90e3e84e252598a58a812a040e2bfced *R/asr_empirical_probabilities.R
 989b7786c5d618f4b4a278f60d277a71 *R/asr_independent_contrasts.R
 5766739cbd484fff29a9e045252df4d8 *R/asr_max_parsimony.R
@@ -32,6 +32,7 @@ d31942759ea90d6ca8365e075403229f *R/fit_hbd_pdr_and_grid.R
 f9d21605a3a988319deafd5d1153daba *R/fit_hbd_psr_on_grid.R
 1426d215b174240d1511b0f756a27c22 *R/fit_musse.R
 9202e805983da5833adc0d98f31367cf *R/fit_tree_model.R
+0eed8b7b366c3f7ec5f9e3e4b7536d96 *R/gamma_statistic.R
 e456b045eb2d76b45185ab98a120ffc4 *R/generate_gene_tree_msc.R
 a1c8fe0076e80b6b1ed1cbbd7f898152 *R/generate_gene_tree_msc_hgt_dl.R
 b846dcce6f2f3303fc0ee58eba09a63f *R/generate_random_tree.R
@@ -127,6 +128,7 @@ c9cbf420f100ae995dd5989655469553 *man/fit_hbd_pdr_on_grid.Rd
 b001b82c6142c99674435bb5f53c5fa7 *man/fit_hbd_psr_on_grid.Rd
 9d1eb6d724445e8cf2ea6d919638e13c *man/fit_musse.Rd
 d507c3041b9a70549c138aa0335dc5d4 *man/fit_tree_model.Rd
+ff8cf2ac6353ff644233c2bf757dd9ba *man/gamma_statistic.Rd
 1b50a86cf79d1c6e7436644fbf16f443 *man/generate_gene_tree_msc.Rd
 d26f75bcf59e5ca85c37d86186fff3a5 *man/generate_gene_tree_msc_hgt_dl.Rd
 99eea713be1c992effd119da59fab068 *man/generate_random_tree.Rd
@@ -188,8 +190,8 @@ c10add43e978486a3e629de4e3c7164e *man/tree_distance.Rd
 b47b403c5f1815c2cd0dc5601636af09 *man/tree_from_branching_ages.Rd
 6287a9db246b805a5ed2ea5f564abc2b *man/trim_tree_at_height.Rd
 2d6d4490a937045e02b449eb19aac446 *man/write_tree.Rd
-a9091b90e4bc2d98f63c7a59173a6a71 *src/RcppExports.cpp
-f2bdea8181f2dfeaeb4ea55fc1e5bbdc *src/STMathExpression.cpp
+9724d10dfcccd6fe9b297dce89df703c *src/RcppExports.cpp
+03a5d8a6232a8cd451aed767506cdac7 *src/STMathExpression.cpp
 c63909f744c3da0df38702e3b4c9c767 *src/STMathExpression.h
-81c0bca8346ec74baf1a0ab2ef935e5f *src/phylogenetics_cpp_routines.cpp
+89c279f2a99eee1f80500ebcf1e7bcdd *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

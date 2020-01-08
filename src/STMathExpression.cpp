@@ -37,20 +37,28 @@ string STMath_makeString(const TYPE &data){
 
 
 inline string &STMath_ltrim(std::string &haystack){
-        haystack.erase(haystack.begin(), std::find_if(haystack.begin(), haystack.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
-        haystack.erase(haystack.begin(), std::find_if(haystack.begin(), haystack.end(), std::ptr_fun<int, int>(std::isgraph)));
-        return haystack;
+	/* old code: C++98, deprecated
+	haystack.erase(haystack.begin(), std::find_if(haystack.begin(), haystack.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+	haystack.erase(haystack.begin(), std::find_if(haystack.begin(), haystack.end(), std::ptr_fun<int, int>(std::isgraph)));
+	*/
+	// C++11 compatible
+	haystack.erase(haystack.begin(), std::find_if(haystack.begin(), haystack.end(), [](int ch) { return !std::isspace(ch); }));
+	return haystack;
 }
 
 inline string &STMath_rtrim(std::string &haystack){
-        haystack.erase(std::find_if(haystack.rbegin(), haystack.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), haystack.end());
-        haystack.erase(std::find_if(haystack.rbegin(), haystack.rend(), std::ptr_fun<int, int>(std::isgraph)).base(), haystack.end());
-        return haystack;
+	/* old code: C++98, deprecated
+	haystack.erase(std::find_if(haystack.rbegin(), haystack.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), haystack.end());
+	haystack.erase(std::find_if(haystack.rbegin(), haystack.rend(), std::ptr_fun<int, int>(std::isgraph)).base(), haystack.end());
+	*/
+	// C++11 compatible
+	haystack.erase(std::find_if(haystack.rbegin(), haystack.rend(), [](int ch) { return !std::isspace(ch); }).base(), haystack.end());
+	return haystack;
 }
 
 
 inline string &STMath_trim(std::string &haystack){
-        return STMath_ltrim(STMath_rtrim(haystack));
+    return STMath_ltrim(STMath_rtrim(haystack));
 }
 
 

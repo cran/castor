@@ -926,7 +926,7 @@ void aux_qsortIndices(const std::vector<TYPE> &values, std::vector<long> &indice
 }
 
 
-//quick-sort (average order n*log(n)) of indices pointing to values
+//quick-sort (average order n*log(n)) of indices pointing to values, in ascending order
 //sortedIndices[] will contain the original positions of the sorted values in values[], that is
 //  values[sortedIndices[0]] <= values[sortedIndices[1]] <= ... 
 template<typename TYPE>
@@ -936,6 +936,25 @@ void qsortIndices(const std::vector<TYPE> &values, std::vector<long> &sortedIndi
 	aux_qsortIndices(values, sortedIndices, 0, sortedIndices.size()-1);
 }
 
+// similar to qsortIndices(..) but sorting in descending order
+template<typename TYPE>
+void qsortIndices_reverse(const std::vector<TYPE> &values, std::vector<long> &sortedIndices){
+	// first sort in ascending order
+	const long N = values.size();
+	sortedIndices.resize(N);
+	for(long n=0; n<N; ++n) sortedIndices[n] = n;
+	aux_qsortIndices(values, sortedIndices, 0, sortedIndices.size()-1);
+	
+	// reverse order
+	for(long n=0, m, temp; n<1+(N/2); ++n){
+		m = N-n-1;
+		if(m<=n) break;
+		// swap indices n & m
+		temp = sortedIndices[n];
+		sortedIndices[n] = sortedIndices[m];
+		sortedIndices[m] = temp;
+	}
+}
 
 // same as qsortIndices(..), but only considering a subset of the values[]
 template<typename TYPE>
@@ -12520,6 +12539,75 @@ Rcpp::List extract_fasttree_constraints_CPP( const long				Ntips,
 	return Rcpp::List::create(	Rcpp::Named("Nconstraints")		= Nconstraints,
 								Rcpp::Named("node2constraint")	= node2constraint,
 								Rcpp::Named("constraints")		= constraints);
+}
+
+
+
+// calculate the gamma-statistic for a rooted ultrametric tree
+// the tree may include multifurcations and monofurcations
+// Pybus and Harvey (2000). Testing macro-evolutionary models using incomplete molecular phylogenies. Proceedings of the Royal Society of London. Series B: Biological Sciences. 267:2267-2272. DOI:10.1098/rspb.2000.1278
+// [[Rcpp::export]]
+double get_gamma_statistic_CPP(	const long					Ntips,
+								const long 					Nnodes,
+								const long					Nedges,
+								const std::vector<long>		&tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+								const std::vector<double>	&edge_length){		// (INPUT) 1D array of size Nedges, or empty
+	const bool got_edge_lengths = (edge_length.size()>0);
+	const long Nclades = Ntips + Nnodes;
+	// find root
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+	
+	// get tree traversal (root-->tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+
+	// calculate distances from root (traverse root-->tips)
+	std::vector<double> clade_times(Nclades);
+	clade_times[root] = 0;
+	for(long q=0, clade; q<traversal.queue.size(); ++q){
+		clade = traversal.queue[q];
+		if(clade<Ntips) continue;
+		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
+			edge  = traversal.edge_mapping[e];
+			clade_times[tree_edge[2*edge+1]] = clade_times[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
+		}
+	}
+	const double max_clade_time = vector_max(clade_times);
+	
+	// calculate node ages
+	dvector node_ages(Nnodes);
+	for(long node=0; node<Nnodes; ++node){
+		node_ages[node] = max_clade_time - clade_times[node+Ntips];
+	}
+
+	// sort nodes in decreasing age (i.e., root-->tips)
+	// each node corresponds to a branching event, so nodes are sorted in chronological order of branching events
+	lvector node_order;
+	qsortIndices_reverse(node_ages, node_order);
+
+	// determine number of lineages (LTT) shortly after each branching event
+	// this code assumes that the tree is ultrametric, i.e. none of the represented lineages went extinct
+	lvector	event2LTT(Nnodes,0l);
+	for(long event=0, node; event<Nnodes; ++event){
+		node = node_order[event];
+		event2LTT[event] = (event==0 ? 1l : event2LTT[event-1]) + (traversal.node2last_edge[node]-traversal.node2first_edge[node]);
+	}
+	
+	// calculate T[n] := \sum_{k=1}^n k*g_k, where g_k is the distance of event k to the next event
+	dvector event2T(Nnodes,0l);
+	double dist;
+	for(long event=0, node; event<Nnodes; ++event){
+		node = node_order[event];
+		dist = node_ages[node_order[event]] - (event==Nnodes-1 ? 0.0 : node_ages[node_order[event+1]]);
+		event2T[event] = (event==0 ? 0.0 : event2T[event-1]) + event2LTT[event]*dist;
+	}
+	
+	// calculate gamma-statistic
+	double gamma = 0;
+	for(long event=0; event<Nnodes-1; ++event){
+		gamma += event2T[event];
+	}
+	gamma = ((gamma/(Nnodes-1.0)) - 0.5*event2T.back())/(event2T.back()/sqrt(12.0*(Nnodes-1)));
+	return gamma;
 }
 
 

@@ -157,6 +157,10 @@ extract_fasttree_constraints_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
     .Call(`_castor_extract_fasttree_constraints_CPP`, Ntips, Nnodes, Nedges, tree_edge)
 }
 
+get_gamma_statistic_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
+    .Call(`_castor_get_gamma_statistic_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
+}
+
 sort_tree_edges_root_to_tips_CPP <- function(Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge) {
     .Call(`_castor_sort_tree_edges_root_to_tips_CPP`, Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge)
 }

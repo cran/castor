@@ -630,6 +630,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_gamma_statistic_CPP
+double get_gamma_statistic_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length);
+RcppExport SEXP _castor_get_gamma_statistic_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_gamma_statistic_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sort_tree_edges_root_to_tips_CPP
 IntegerVector sort_tree_edges_root_to_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const bool depth_first_search, const bool root_to_tips, const IntegerVector& tree_edge);
 RcppExport SEXP _castor_sort_tree_edges_root_to_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP depth_first_searchSEXP, SEXP root_to_tipsSEXP, SEXP tree_edgeSEXP) {
@@ -2007,6 +2022,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_date_tree_via_RED_CPP", (DL_FUNC) &_castor_date_tree_via_RED_CPP, 7},
     {"_castor_tree_to_clade_list_CPP", (DL_FUNC) &_castor_tree_to_clade_list_CPP, 6},
     {"_castor_extract_fasttree_constraints_CPP", (DL_FUNC) &_castor_extract_fasttree_constraints_CPP, 4},
+    {"_castor_get_gamma_statistic_CPP", (DL_FUNC) &_castor_get_gamma_statistic_CPP, 5},
     {"_castor_sort_tree_edges_root_to_tips_CPP", (DL_FUNC) &_castor_sort_tree_edges_root_to_tips_CPP, 6},
     {"_castor_root_tree_at_node_CPP", (DL_FUNC) &_castor_root_tree_at_node_CPP, 5},
     {"_castor_get_tree_with_collapsed_monofurcations_CPP", (DL_FUNC) &_castor_get_tree_with_collapsed_monofurcations_CPP, 6},
