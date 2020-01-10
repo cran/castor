@@ -1,4 +1,4 @@
-42bc89ba3bc786161836c7f25b5ddd1d *DESCRIPTION
+161e26a71e84f94dd25db22271673518 *DESCRIPTION
 7518105060ec14bce8f83ff5deb64b07 *NAMESPACE
 d1a7066ae50bbcc6080a903c35157dae *R/RcppExports.R
 90e3e84e252598a58a812a040e2bfced *R/asr_empirical_probabilities.R
@@ -191,7 +191,7 @@ b47b403c5f1815c2cd0dc5601636af09 *man/tree_from_branching_ages.Rd
 6287a9db246b805a5ed2ea5f564abc2b *man/trim_tree_at_height.Rd
 2d6d4490a937045e02b449eb19aac446 *man/write_tree.Rd
 9724d10dfcccd6fe9b297dce89df703c *src/RcppExports.cpp
-03a5d8a6232a8cd451aed767506cdac7 *src/STMathExpression.cpp
+60240b89c41cf20801bd210a3aacf566 *src/STMathExpression.cpp
 c63909f744c3da0df38702e3b4c9c767 *src/STMathExpression.h
-89c279f2a99eee1f80500ebcf1e7bcdd *src/phylogenetics_cpp_routines.cpp
+10950e62cd0219fc0547984641ce1129 *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

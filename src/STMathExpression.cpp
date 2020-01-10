@@ -112,8 +112,8 @@ void MathExpression::evaluateStackEntry(long i) const{
 	case FunctionTypePiecewise2:		stackValues[i] = (stackValues[stackArguments[i][0]]<stackValues[stackArguments[i][1]] ? stackValues[stackArguments[i][2]] : stackValues[stackArguments[i][3]]); return;
 	case FunctionTypePiecewise3:		stackValues[i] = (stackValues[stackArguments[i][0]]<stackValues[stackArguments[i][1]] ? stackValues[stackArguments[i][3]] : (stackValues[stackArguments[i][0]]<stackValues[stackArguments[i][2]] ? stackValues[stackArguments[i][4]] : stackValues[stackArguments[i][5]])); return;
 	case FunctionTypeNegate:			stackValues[i] = -stackValues[stackArguments[i][0]]; return;
-	case FunctionTypeEscapeNAN:			stackValues[i] = (isnan(stackValues[stackArguments[i][0]]) ? stackValues[stackArguments[i][1]] : stackValues[stackArguments[i][0]]); return;
-	case FunctionTypeEscapeNAN2:		stackValues[i] = (isnan(stackValues[stackArguments[i][0]]) ? stackValues[stackArguments[i][2]] : stackValues[stackArguments[i][1]]); return;
+	case FunctionTypeEscapeNAN:			stackValues[i] = (std::isnan(stackValues[stackArguments[i][0]]) ? stackValues[stackArguments[i][1]] : stackValues[stackArguments[i][0]]); return;
+	case FunctionTypeEscapeNAN2:		stackValues[i] = (std::isnan(stackValues[stackArguments[i][0]]) ? stackValues[stackArguments[i][2]] : stackValues[stackArguments[i][1]]); return;
 	case FunctionTypeEscapeInf:			stackValues[i] = ((stackValues[stackArguments[i][0]]==INFTY_D) || (stackValues[stackArguments[i][0]]==-INFTY_D) ? stackValues[stackArguments[i][1]] : stackValues[stackArguments[i][0]]); return;
 	case FunctionTypeEscapeInf2:		stackValues[i] = ((stackValues[stackArguments[i][0]]==INFTY_D) ? stackValues[stackArguments[i][1]] : ((stackValues[stackArguments[i][0]]==-INFTY_D) ? stackValues[stackArguments[i][2]] : stackValues[stackArguments[i][0]])); return;
 	case FunctionTypeEvaluateVariable:	stackValues[i] = variableValues[stackArguments[i][0]]; return;

@@ -6461,7 +6461,7 @@ void refine_time_series_linear(	const std::vector<double> 	&coarse_times,				// 
 		right_value = (right_time==coarse_times[c+1] ? coarse_values[c+1] : interpolate_linear(coarse_times[c], coarse_values[c], coarse_times[c+1], coarse_values[c+1], right_time));
 		if((right_time-left_time)>max_time_step)	dN[c] = max(dN[c], long(ceil((right_time-left_time)/max_time_step))-1);
 		if((right_value-left_value)>max_value_step) 	dN[c] = max(dN[c], long(ceil((right_value-left_value)/max_value_step))-1);
-		if(!isinf(max_relative_value_step)){
+		if(!std::isinf(max_relative_value_step)){
 			const double max_step = max_relative_value_step * 0.5*(abs(right_value)+abs(left_value));
 			if((right_value-left_value)>max_step) dN[c] = max(dN[c], long(ceil((right_value-left_value)/max_step))-1);			
 		}
@@ -6529,7 +6529,7 @@ void refine_piecewise_polynomial(	const long					degree,						// (INPUT) polynom
 		max_rate 	= polynomial_bound_abs_derivative(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
 		if((right_time-left_time)>max_time_step)	dN[c] = max(dN[c], long(ceil((right_time-left_time)/max_time_step))-1);
 		if((max_value-min_value)>max_value_step)	dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_value_step))-1);
-		if(!isinf(max_relative_value_step)){
+		if(!std::isinf(max_relative_value_step)){
 			const double max_step = max_relative_value_step * 0.5*(abs(max_value)+abs(min_value));
 			if((max_step>0) && ((max_value-min_value)>max_step)) dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_step))-1);
 		}
@@ -22613,7 +22613,7 @@ Rcpp::List generate_tree_from_PSR_CPP(	const std::vector<double>	&age_grid,		// 
 	}
 		
 	// ensure branching_ages do not exceed force_max_age
-	if(!isinf(force_max_age)){
+	if(!std::isinf(force_max_age)){
 		for(long tree=0; tree<Ntrees; ++tree){
 			if(branching_ages[tree].back()>force_max_age){
 				// some branching ages exceed force_max_age, so forcefully set them to force_max_age
