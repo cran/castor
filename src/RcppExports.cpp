@@ -926,6 +926,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// extract_independent_sister_tips_CPP
+Rcpp::List extract_independent_sister_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge);
+RcppExport SEXP _castor_extract_independent_sister_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    rcpp_result_gen = Rcpp::wrap(extract_independent_sister_tips_CPP(Ntips, Nnodes, Nedges, tree_edge));
+    return rcpp_result_gen;
+END_RCPP
+}
 // congruify_trees_CPP
 Rcpp::List congruify_trees_CPP(const long RNtips, const long RNnodes, const long RNedges, const IntegerVector& Rtree_edge, const long TNtips, const long TNnodes, const long TNedges, const IntegerVector& Ttree_edge, const IntegerVector& mapping);
 RcppExport SEXP _castor_congruify_trees_CPP(SEXP RNtipsSEXP, SEXP RNnodesSEXP, SEXP RNedgesSEXP, SEXP Rtree_edgeSEXP, SEXP TNtipsSEXP, SEXP TNnodesSEXP, SEXP TNedgesSEXP, SEXP Ttree_edgeSEXP, SEXP mappingSEXP) {
@@ -1981,6 +1995,210 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// draw_SBM_geodesic_angle_CPP
+double draw_SBM_geodesic_angle_CPP(const double tD);
+RcppExport SEXP _castor_draw_SBM_geodesic_angle_CPP(SEXP tDSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type tD(tDSEXP);
+    rcpp_result_gen = Rcpp::wrap(draw_SBM_geodesic_angle_CPP(tD));
+    return rcpp_result_gen;
+END_RCPP
+}
+// simulate_SBM_on_tree_CPP
+Rcpp::List simulate_SBM_on_tree_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const double radius, const double diffusivity, const double root_theta, const double root_phi);
+RcppExport SEXP _castor_simulate_SBM_on_tree_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP radiusSEXP, SEXP diffusivitySEXP, SEXP root_thetaSEXP, SEXP root_phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const double >::type diffusivity(diffusivitySEXP);
+    Rcpp::traits::input_parameter< const double >::type root_theta(root_thetaSEXP);
+    Rcpp::traits::input_parameter< const double >::type root_phi(root_phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_SBM_on_tree_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, diffusivity, root_theta, root_phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// simulate_TSBM_on_tree_CPP
+Rcpp::List simulate_TSBM_on_tree_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const double radius, const std::vector<double>& time_grid, const std::vector<double>& diffusivities, const long splines_degree, const double root_theta, const double root_phi);
+RcppExport SEXP _castor_simulate_TSBM_on_tree_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP radiusSEXP, SEXP time_gridSEXP, SEXP diffusivitiesSEXP, SEXP splines_degreeSEXP, SEXP root_thetaSEXP, SEXP root_phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_grid(time_gridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type diffusivities(diffusivitiesSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const double >::type root_theta(root_thetaSEXP);
+    Rcpp::traits::input_parameter< const double >::type root_phi(root_phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_TSBM_on_tree_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi));
+    return rcpp_result_gen;
+END_RCPP
+}
+// SBM_LLs_of_transitions_CPP
+Rcpp::List SBM_LLs_of_transitions_CPP(const double radius, const std::vector<double>& time_steps, const std::vector<double>& distances, const std::vector<double>& diffusivities, const double max_error, const long max_Legendre_terms);
+RcppExport SEXP _castor_SBM_LLs_of_transitions_CPP(SEXP radiusSEXP, SEXP time_stepsSEXP, SEXP distancesSEXP, SEXP diffusivitiesSEXP, SEXP max_errorSEXP, SEXP max_Legendre_termsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_steps(time_stepsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type distances(distancesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type diffusivities(diffusivitiesSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_error(max_errorSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Legendre_terms(max_Legendre_termsSEXP);
+    rcpp_result_gen = Rcpp::wrap(SBM_LLs_of_transitions_CPP(radius, time_steps, distances, diffusivities, max_error, max_Legendre_terms));
+    return rcpp_result_gen;
+END_RCPP
+}
+// SBM_LLs_of_sampled_transitions_CPP
+Rcpp::List SBM_LLs_of_sampled_transitions_CPP(const double radius, const std::vector<double>& time_steps, const std::vector<double>& old_thetas, const std::vector<double>& old_phis, const std::vector<double>& new_thetas, const std::vector<double>& new_phis, const std::vector<double>& diffusivities, const long Nlat, const long Nlon, const std::vector<double>& sampling_rates, const double max_error, const long max_Legendre_terms);
+RcppExport SEXP _castor_SBM_LLs_of_sampled_transitions_CPP(SEXP radiusSEXP, SEXP time_stepsSEXP, SEXP old_thetasSEXP, SEXP old_phisSEXP, SEXP new_thetasSEXP, SEXP new_phisSEXP, SEXP diffusivitiesSEXP, SEXP NlatSEXP, SEXP NlonSEXP, SEXP sampling_ratesSEXP, SEXP max_errorSEXP, SEXP max_Legendre_termsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_steps(time_stepsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type old_thetas(old_thetasSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type old_phis(old_phisSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type new_thetas(new_thetasSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type new_phis(new_phisSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type diffusivities(diffusivitiesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nlat(NlatSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nlon(NlonSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type sampling_rates(sampling_ratesSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_error(max_errorSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Legendre_terms(max_Legendre_termsSEXP);
+    rcpp_result_gen = Rcpp::wrap(SBM_LLs_of_sampled_transitions_CPP(radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, diffusivities, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms));
+    return rcpp_result_gen;
+END_RCPP
+}
+// SBM_get_SBM_PD_functor_CPP
+Rcpp::List SBM_get_SBM_PD_functor_CPP(const double max_error, const long max_Legendre_terms);
+RcppExport SEXP _castor_SBM_get_SBM_PD_functor_CPP(SEXP max_errorSEXP, SEXP max_Legendre_termsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type max_error(max_errorSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Legendre_terms(max_Legendre_termsSEXP);
+    rcpp_result_gen = Rcpp::wrap(SBM_get_SBM_PD_functor_CPP(max_error, max_Legendre_terms));
+    return rcpp_result_gen;
+END_RCPP
+}
+// SBM_get_average_transition_angle_CPP
+double SBM_get_average_transition_angle_CPP(const double tD, const double max_error, const long max_Legendre_terms);
+RcppExport SEXP _castor_SBM_get_average_transition_angle_CPP(SEXP tDSEXP, SEXP max_errorSEXP, SEXP max_Legendre_termsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type tD(tDSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_error(max_errorSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Legendre_terms(max_Legendre_termsSEXP);
+    rcpp_result_gen = Rcpp::wrap(SBM_get_average_transition_angle_CPP(tD, max_error, max_Legendre_terms));
+    return rcpp_result_gen;
+END_RCPP
+}
+// TSBM_LL_of_transitions_CPP
+Rcpp::List TSBM_LL_of_transitions_CPP(const double radius, const std::vector<double>& MRCA_times, const std::vector<double>& child_times1, const std::vector<double>& child_times2, const std::vector<double>& distances, const std::vector<double>& time_grid, const std::vector<double>& diffusivities, const long splines_degree, const Rcpp::List& SBM_PD_functor);
+RcppExport SEXP _castor_TSBM_LL_of_transitions_CPP(SEXP radiusSEXP, SEXP MRCA_timesSEXP, SEXP child_times1SEXP, SEXP child_times2SEXP, SEXP distancesSEXP, SEXP time_gridSEXP, SEXP diffusivitiesSEXP, SEXP splines_degreeSEXP, SEXP SBM_PD_functorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type MRCA_times(MRCA_timesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type child_times1(child_times1SEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type child_times2(child_times2SEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type distances(distancesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_grid(time_gridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type diffusivities(diffusivitiesSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type SBM_PD_functor(SBM_PD_functorSEXP);
+    rcpp_result_gen = Rcpp::wrap(TSBM_LL_of_transitions_CPP(radius, MRCA_times, child_times1, child_times2, distances, time_grid, diffusivities, splines_degree, SBM_PD_functor));
+    return rcpp_result_gen;
+END_RCPP
+}
+// TSBM_LL_of_sampled_transitions_CPP
+Rcpp::List TSBM_LL_of_sampled_transitions_CPP(const double radius, const std::vector<double>& MRCA_times, const std::vector<double>& child_times1, const std::vector<double>& child_times2, const std::vector<double>& old_thetas, const std::vector<double>& old_phis, const std::vector<double>& new_thetas, const std::vector<double>& new_phis, const std::vector<double>& time_grid, const std::vector<double>& diffusivities, const long splines_degree, const long Nlat, const long Nlon, const std::vector<double>& sampling_rates, const Rcpp::List& SBM_PD_functor);
+RcppExport SEXP _castor_TSBM_LL_of_sampled_transitions_CPP(SEXP radiusSEXP, SEXP MRCA_timesSEXP, SEXP child_times1SEXP, SEXP child_times2SEXP, SEXP old_thetasSEXP, SEXP old_phisSEXP, SEXP new_thetasSEXP, SEXP new_phisSEXP, SEXP time_gridSEXP, SEXP diffusivitiesSEXP, SEXP splines_degreeSEXP, SEXP NlatSEXP, SEXP NlonSEXP, SEXP sampling_ratesSEXP, SEXP SBM_PD_functorSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type MRCA_times(MRCA_timesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type child_times1(child_times1SEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type child_times2(child_times2SEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type old_thetas(old_thetasSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type old_phis(old_phisSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type new_thetas(new_thetasSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type new_phis(new_phisSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_grid(time_gridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type diffusivities(diffusivitiesSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nlat(NlatSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nlon(NlonSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type sampling_rates(sampling_ratesSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::List& >::type SBM_PD_functor(SBM_PD_functorSEXP);
+    rcpp_result_gen = Rcpp::wrap(TSBM_LL_of_sampled_transitions_CPP(radius, MRCA_times, child_times1, child_times2, old_thetas, old_phis, new_thetas, new_phis, time_grid, diffusivities, splines_degree, Nlat, Nlon, sampling_rates, SBM_PD_functor));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_SBM_diffusivity_from_transitions_CPP
+Rcpp::List fit_SBM_diffusivity_from_transitions_CPP(const double radius, const std::vector<double>& time_steps, const std::vector<double>& distances, const double max_error, const long max_Legendre_terms, const double opt_epsilon, const long max_iterations, double min_diffusivity, double max_diffusivity, const long Nbootstraps);
+RcppExport SEXP _castor_fit_SBM_diffusivity_from_transitions_CPP(SEXP radiusSEXP, SEXP time_stepsSEXP, SEXP distancesSEXP, SEXP max_errorSEXP, SEXP max_Legendre_termsSEXP, SEXP opt_epsilonSEXP, SEXP max_iterationsSEXP, SEXP min_diffusivitySEXP, SEXP max_diffusivitySEXP, SEXP NbootstrapsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_steps(time_stepsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type distances(distancesSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_error(max_errorSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Legendre_terms(max_Legendre_termsSEXP);
+    Rcpp::traits::input_parameter< const double >::type opt_epsilon(opt_epsilonSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_iterations(max_iterationsSEXP);
+    Rcpp::traits::input_parameter< double >::type min_diffusivity(min_diffusivitySEXP);
+    Rcpp::traits::input_parameter< double >::type max_diffusivity(max_diffusivitySEXP);
+    Rcpp::traits::input_parameter< const long >::type Nbootstraps(NbootstrapsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_SBM_diffusivity_from_transitions_CPP(radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps));
+    return rcpp_result_gen;
+END_RCPP
+}
+// fit_SBM_from_sampled_transitions_CPP
+Rcpp::List fit_SBM_from_sampled_transitions_CPP(const double radius, const std::vector<double>& time_steps, const std::vector<double>& old_thetas, const std::vector<double>& old_phis, const std::vector<double>& new_thetas, const std::vector<double>& new_phis, const long Nlat, const long Nlon, const std::vector<double>& sampling_rates, const double max_error, const long max_Legendre_terms, const double opt_epsilon, const long max_iterations, double min_diffusivity, double max_diffusivity, const long Nbootstraps);
+RcppExport SEXP _castor_fit_SBM_from_sampled_transitions_CPP(SEXP radiusSEXP, SEXP time_stepsSEXP, SEXP old_thetasSEXP, SEXP old_phisSEXP, SEXP new_thetasSEXP, SEXP new_phisSEXP, SEXP NlatSEXP, SEXP NlonSEXP, SEXP sampling_ratesSEXP, SEXP max_errorSEXP, SEXP max_Legendre_termsSEXP, SEXP opt_epsilonSEXP, SEXP max_iterationsSEXP, SEXP min_diffusivitySEXP, SEXP max_diffusivitySEXP, SEXP NbootstrapsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_steps(time_stepsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type old_thetas(old_thetasSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type old_phis(old_phisSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type new_thetas(new_thetasSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type new_phis(new_phisSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nlat(NlatSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nlon(NlonSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type sampling_rates(sampling_ratesSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_error(max_errorSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Legendre_terms(max_Legendre_termsSEXP);
+    Rcpp::traits::input_parameter< const double >::type opt_epsilon(opt_epsilonSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_iterations(max_iterationsSEXP);
+    Rcpp::traits::input_parameter< double >::type min_diffusivity(min_diffusivitySEXP);
+    Rcpp::traits::input_parameter< double >::type max_diffusivity(max_diffusivitySEXP);
+    Rcpp::traits::input_parameter< const long >::type Nbootstraps(NbootstrapsSEXP);
+    rcpp_result_gen = Rcpp::wrap(fit_SBM_from_sampled_transitions_CPP(radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_castor_evaluate_univariate_expression_CPP", (DL_FUNC) &_castor_evaluate_univariate_expression_CPP, 3},
@@ -2040,6 +2258,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_merge_short_edges_CPP", (DL_FUNC) &_castor_merge_short_edges_CPP, 7},
     {"_castor_pick_random_tips_CPP", (DL_FUNC) &_castor_pick_random_tips_CPP, 7},
     {"_castor_assign_clades_to_taxa_CPP", (DL_FUNC) &_castor_assign_clades_to_taxa_CPP, 5},
+    {"_castor_extract_independent_sister_tips_CPP", (DL_FUNC) &_castor_extract_independent_sister_tips_CPP, 4},
     {"_castor_congruify_trees_CPP", (DL_FUNC) &_castor_congruify_trees_CPP, 9},
     {"_castor_match_tree_nodes_CPP", (DL_FUNC) &_castor_match_tree_nodes_CPP, 6},
     {"_castor_get_Robinson_Foulds_distance_CPP", (DL_FUNC) &_castor_get_Robinson_Foulds_distance_CPP, 8},
@@ -2093,6 +2312,17 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_generate_gene_tree_in_species_tree_MSC_CPP", (DL_FUNC) &_castor_generate_gene_tree_in_species_tree_MSC_CPP, 14},
     {"_castor_generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP", (DL_FUNC) &_castor_generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP, 21},
     {"_castor_simulate_deterministic_HBD_MSC_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_MSC_CPP, 9},
+    {"_castor_draw_SBM_geodesic_angle_CPP", (DL_FUNC) &_castor_draw_SBM_geodesic_angle_CPP, 1},
+    {"_castor_simulate_SBM_on_tree_CPP", (DL_FUNC) &_castor_simulate_SBM_on_tree_CPP, 9},
+    {"_castor_simulate_TSBM_on_tree_CPP", (DL_FUNC) &_castor_simulate_TSBM_on_tree_CPP, 11},
+    {"_castor_SBM_LLs_of_transitions_CPP", (DL_FUNC) &_castor_SBM_LLs_of_transitions_CPP, 6},
+    {"_castor_SBM_LLs_of_sampled_transitions_CPP", (DL_FUNC) &_castor_SBM_LLs_of_sampled_transitions_CPP, 12},
+    {"_castor_SBM_get_SBM_PD_functor_CPP", (DL_FUNC) &_castor_SBM_get_SBM_PD_functor_CPP, 2},
+    {"_castor_SBM_get_average_transition_angle_CPP", (DL_FUNC) &_castor_SBM_get_average_transition_angle_CPP, 3},
+    {"_castor_TSBM_LL_of_transitions_CPP", (DL_FUNC) &_castor_TSBM_LL_of_transitions_CPP, 9},
+    {"_castor_TSBM_LL_of_sampled_transitions_CPP", (DL_FUNC) &_castor_TSBM_LL_of_sampled_transitions_CPP, 15},
+    {"_castor_fit_SBM_diffusivity_from_transitions_CPP", (DL_FUNC) &_castor_fit_SBM_diffusivity_from_transitions_CPP, 10},
+    {"_castor_fit_SBM_from_sampled_transitions_CPP", (DL_FUNC) &_castor_fit_SBM_from_sampled_transitions_CPP, 16},
     {NULL, NULL, 0}
 };
 

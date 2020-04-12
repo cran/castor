@@ -229,6 +229,10 @@ assign_clades_to_taxa_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, represen
     .Call(`_castor_assign_clades_to_taxa_CPP`, Ntips, Nnodes, Nedges, tree_edge, representatives)
 }
 
+extract_independent_sister_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
+    .Call(`_castor_extract_independent_sister_tips_CPP`, Ntips, Nnodes, Nedges, tree_edge)
+}
+
 congruify_trees_CPP <- function(RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping) {
     .Call(`_castor_congruify_trees_CPP`, RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping)
 }
@@ -439,5 +443,49 @@ generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP <- function(NStips, NSnodes, N
 
 simulate_deterministic_HBD_MSC_CPP <- function(oldest_age, age_grid, PSRs, CTs, rho0, sLTT0, gLTT0, splines_degree, relative_dt) {
     .Call(`_castor_simulate_deterministic_HBD_MSC_CPP`, oldest_age, age_grid, PSRs, CTs, rho0, sLTT0, gLTT0, splines_degree, relative_dt)
+}
+
+draw_SBM_geodesic_angle_CPP <- function(tD) {
+    .Call(`_castor_draw_SBM_geodesic_angle_CPP`, tD)
+}
+
+simulate_SBM_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, diffusivity, root_theta, root_phi) {
+    .Call(`_castor_simulate_SBM_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, diffusivity, root_theta, root_phi)
+}
+
+simulate_TSBM_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi) {
+    .Call(`_castor_simulate_TSBM_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi)
+}
+
+SBM_LLs_of_transitions_CPP <- function(radius, time_steps, distances, diffusivities, max_error, max_Legendre_terms) {
+    .Call(`_castor_SBM_LLs_of_transitions_CPP`, radius, time_steps, distances, diffusivities, max_error, max_Legendre_terms)
+}
+
+SBM_LLs_of_sampled_transitions_CPP <- function(radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, diffusivities, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms) {
+    .Call(`_castor_SBM_LLs_of_sampled_transitions_CPP`, radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, diffusivities, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms)
+}
+
+SBM_get_SBM_PD_functor_CPP <- function(max_error, max_Legendre_terms) {
+    .Call(`_castor_SBM_get_SBM_PD_functor_CPP`, max_error, max_Legendre_terms)
+}
+
+SBM_get_average_transition_angle_CPP <- function(tD, max_error, max_Legendre_terms) {
+    .Call(`_castor_SBM_get_average_transition_angle_CPP`, tD, max_error, max_Legendre_terms)
+}
+
+TSBM_LL_of_transitions_CPP <- function(radius, MRCA_times, child_times1, child_times2, distances, time_grid, diffusivities, splines_degree, SBM_PD_functor) {
+    .Call(`_castor_TSBM_LL_of_transitions_CPP`, radius, MRCA_times, child_times1, child_times2, distances, time_grid, diffusivities, splines_degree, SBM_PD_functor)
+}
+
+TSBM_LL_of_sampled_transitions_CPP <- function(radius, MRCA_times, child_times1, child_times2, old_thetas, old_phis, new_thetas, new_phis, time_grid, diffusivities, splines_degree, Nlat, Nlon, sampling_rates, SBM_PD_functor) {
+    .Call(`_castor_TSBM_LL_of_sampled_transitions_CPP`, radius, MRCA_times, child_times1, child_times2, old_thetas, old_phis, new_thetas, new_phis, time_grid, diffusivities, splines_degree, Nlat, Nlon, sampling_rates, SBM_PD_functor)
+}
+
+fit_SBM_diffusivity_from_transitions_CPP <- function(radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps) {
+    .Call(`_castor_fit_SBM_diffusivity_from_transitions_CPP`, radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps)
+}
+
+fit_SBM_from_sampled_transitions_CPP <- function(radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps) {
+    .Call(`_castor_fit_SBM_from_sampled_transitions_CPP`, radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps)
 }
 

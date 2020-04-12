@@ -92,7 +92,7 @@ fit_hbd_pdr_parametric = function(	tree,
 		return(list(success=FALSE, error=sprintf("Length of param_scale[] (%d) differs from number of model parameters (%d)",length(param_scale),NP)))
 	}
 	if(is.null(max_model_runtime)) max_model_runtime = 0;
-	if(any(is.nan(param_guess) | is.na(param_guess))) return(list(success=FALSE, error=sprintf("Some guessed parameter values are NA or NaN; you must specify a valied guess for each model parameter")));
+	if(any(is.nan(param_guess) | is.na(param_guess))) return(list(success=FALSE, error=sprintf("Some guessed parameter values are NA or NaN; you must specify a valid guess for each model parameter")));
 	param_values[is.nan(param_values)] = NA # standardize representation of non-fixed params
 	param_scale[is.nan(param_scale)] = NA	# standardize representation of unknown param scales
 	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
@@ -254,14 +254,6 @@ fit_hbd_pdr_parametric = function(	tree,
 				trial_Nstart_attempts	= sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts),
 				trial_Niterations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations),
 				trial_Nevaluations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)));
-}
-
-
-
-completement = function(N, indices){
-	pool = rep(TRUE,N);
-	pool[indices] = FALSE;
-	return(which(pool));
 }
 
 

@@ -111,7 +111,7 @@ The name of the objective that was maximized during fitting. Currently, only max
 Numeric vector of size NP (number of model parameters), listing all fitted or fixed model parameters in their standard order (see details above). If \code{param_names} was provided, elements in \code{fitted_params} will be named.
 }
 \item{param_guess}{
-Numeric vector of size NP, listing guessed or fixed values for all model parameters in their standard order. If \code{param_names} was provided, elements in \code{param_guess} will be named.
+Numeric vector of size NP, listing guessed or fixed values for all model parameters in their standard order.
 }
 \item{loglikelihood}{
 The log-likelihood of the fitted model for the given timetree.

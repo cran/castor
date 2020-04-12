@@ -1,0 +1,149 @@
+\name{fit_sbm_const}
+\alias{fit_sbm_const}
+\title{
+Fit a Spherical Brownian Motion model on a tree.
+}
+\description{
+Given one or more rooted phylogenetic trees and geographic coordinates (latitudes & longitudes) for the tips of each tree, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012). Estimation is done via maximum-likelihood and using independent contrasts between sister lineages.
+}
+\usage{
+fit_sbm_const(trees, 
+        tip_latitudes, 
+        tip_longitudes, 
+        radius,
+        planar_approximation    = FALSE,
+        only_basal_tip_pairs    = FALSE,
+        min_MRCA_time           = 0,
+        min_diffusivity         = NULL,
+        max_diffusivity         = NULL,
+        Nbootstraps             = 0, 
+        focal_diffusivities     = NULL)
+}
+\arguments{
+\item{trees}{
+Either a single rooted tree or a list of rooted trees, of class "phylo". The root of each tree is assumed to be the unique node with no incoming edge. Edge lengths are assumed to represent time intervals or a similarly interpretable phylogenetic distance.
+}
+\item{tip_latitudes}{
+Numeric vector of length Ntips, or a list of vectors, listing latitudes of tips in decimal degrees (from -90 to 90). If \code{trees} is a list of trees, then \code{tip_latitudes} should be a list of vectors of the same length as \code{trees}, listing tip latitudes for each of the input trees.
+}
+\item{tip_longitudes}{
+Numeric vector of length Ntips, or a list of vectors, listing longitudes of tips in decimal degrees (from -180 to 180). If \code{trees} is a list of trees, then \code{tip_longitudes} should be a list of vectors of the same length as \code{trees}, listing tip longitudes for each of the input trees.
+}
+\item{radius}{
+Strictly positive numeric, specifying the radius of the sphere. For Earth, the mean radius is 6371 km.
+}
+\item{planar_approximation}{
+Logical, specifying whether to estimate the diffusivity based on a planar approximation of the SBM model, i.e. by assuming that geographic distances between tips are as if tips are distributed on a 2D cartesian plane. This approximation is only accurate if geographical distances between tips are small compared to the sphere's radius.
+}
+\item{only_basal_tip_pairs}{
+Logical, specifying whether to only compare immediate sister tips, i.e., tips connected through a single parental node.
+}
+\item{min_MRCA_time}{
+Numeric, specifying the minimum allowed time (distance from root) of the most recent common ancestor (MRCA) of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set \code{min_MRCA_time<=0} to disable this filter.
+}
+\item{min_diffusivity}{
+Non-negative numeric, specifying the minimum possible diffusivity. If NULL, this is automatically chosen.
+}
+\item{max_diffusivity}{
+Non-negative numeric, specifying the maximum possible diffusivity. If NULL, this is automatically chosen.
+}
+\item{Nbootstraps}{
+Non-negative integer, specifying an optional number of parametric bootstraps to performs for estimating standard errors and confidence intervals.
+}
+\item{focal_diffusivities}{
+Optional numeric vector, listing diffusivities of particular interest and for which the log-likelihoods should be returned. This may be used e.g. for diagnostic purposes, e.g. to see how "sharp" the likelihood peak is at the maximum-likelihood estimate.
+}
+}
+
+
+\details{
+For short expected transition distances this function uses the approximation formula by Ghosh et al. (2012). For longer expected transition distances the function uses a truncated approximation of the series representation of SBM transition densities (Perrin 1928).
+
+This function can use multiple trees to fit the diffusivity under the assumption that each tree is an independent realization of the same SBM process, i.e. all lineages in all trees dispersed with the same diffusivity.
+
+If \code{edge.length} is missing from one of the input trees, each edge in the tree is assumed to have length 1. The tree may include multifurcations as well as monofurcations, however multifurcations are internally expanded into bifurcations by adding dummy nodes.
+}
+
+
+\value{
+A list with the following elements:
+\item{success}{
+Logical, indicating whether the fitting was successful. If \code{FALSE}, then an additional return variable, \code{error}, will contain a description of the error; in that case all other return variables may be undefined.
+}
+\item{diffusivity}{
+Numeric, the estimated diffusivity, in units distance^2/time. Distance units are the same as used for the \code{radius}, and time units are the same as the tree's edge lengths. For example, if the \code{radius} was specified in km and edge lengths are in Myr, then the estimated diffusivity will be in km^2/Myr.
+}
+\item{loglikelihood}{
+Numeric, the log-likelihood of the data at the estimated diffusivity.
+}
+\item{Ncontrasts}{
+Integer, number of independent contrasts (i.e., tip pairs) used to estimat the diffusivity. This is the number of independent data points used.
+}
+\item{phylogenetic_distances}{
+Numeric vector of length \code{Ncontrasts}, listing the phylogenetic distances of the independent contrasts used in the fitting.
+}
+\item{geodesic_distances}{
+Numeric vector of length \code{Ncontrasts}, listing the geographical distances of the independent contrasts used in the fitting.
+}
+\item{focal_loglikelihoods}{
+Numeric vector of the same length as \code{focal_diffusivities}, listing the log-likelihoods for the diffusivities provided in \code{focal_diffusivities}.
+}
+\item{standard_errors}{
+Numeric, estimated standard error of the estimated diffusivity, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI50lower}{
+Numeric, lower bound of the 50\% confidence interval for the estimated diffusivity (25-75\% percentile), based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI50upper}{
+Numeric, upper bound of the 50\% confidence interval for the estimated diffusivity, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI95lower}{
+Numeric, lower bound of the 95\% confidence interval for the estimated diffusivity (2.5-97.5\% percentile), based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI95upper}{
+Numeric, upper bound of the 95\% confidence interval for the estimated diffusivity, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{consistency}{
+Numeric between 0 and 1, estimated consistency of the data with the fitted model. If \eqn{L} denotes the loglikelihood of new data generated by the fitted model (under the same model) and \eqn{M} denotes the expectation of \eqn{L}, then \code{consistency} is the probability that \eqn{|L-M|} will be greater or equal to \eqn{|X-M|}, where \eqn{X} is the loglikelihood of the original data under the fitted model.
+Only returned if \code{Nbootstraps>0}. A low consistency (e.g., <0.05) indicates that the fitted model is a poor description of the data. See Lindholm et al. (2019) for background.
+}
+}
+
+\author{Stilianos Louca}
+
+\references{
+F. Perrin (1928). Etude mathematique du mouvement Brownien de rotation. 45:1-51.
+
+D. R. Brillinger (2012). A particle migrating randomly on a sphere. in Selected Works of David Brillinger. Springer.
+
+A. Ghosh, J. Samuel, S. Sinha (2012). A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003.
+
+A. Lindholm, D. Zachariah, P. Stoica, T. B. Schoen (2019). Data consistency approach to model validation. IEEE Access. 7:59788-59796.
+}
+
+\seealso{
+\code{\link{simulate_sbm}},
+\code{\link{fit_sbm_parametric}},
+\code{\link{fit_sbm_linear}}
+}
+
+\examples{
+\dontrun{
+# generate a random tree
+tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=500)$tree
+
+# simulate SBM on the tree
+D = 1e4
+simulation = simulate_sbm(tree, radius=6371, diffusivity=D)
+
+# fit SBM on the tree
+fit = fit_sbm_const(tree,simulation$tip_latitudes,simulation$tip_longitudes,radius=6371)
+cat(sprintf('True D=\%g, fitted D=\%g\\n',D,fit$diffusivity))
+}
+}
+% Add one or more standard keywords, see file 'KEYWORDS' in the
+% R documentation directory.
+\keyword{SBM model}
+\keyword{random}
+\keyword{fitting}
+\keyword{simulation}

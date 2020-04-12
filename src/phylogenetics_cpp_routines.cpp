@@ -124,6 +124,13 @@ typedef enum {
 } EdgeLengthUnit;
 
 
+typedef enum {
+	SBMTransitionDensityAngular,
+	SBMTransitionDensityAxial,
+	SBMTransitionDensitySurface
+} SBMTransitionDensity;
+
+
 
 // ****************************************************** //
 // BASIC AUXILIARY FUNCTIONS
@@ -1046,10 +1053,21 @@ double modulo(double numerator, double denominator){
 
 //Calculates equivalence class of value modulo L=(intervalMax - intervalMin)
 //Returns equivalence class using representants from within the interval [intervalMin, intervalMax]
+//Otherwise said: Wrap a number x onto a periodic interval [intervalMin,intervalMax]
 //Use for example as moduloInterval(angle, 0, 2*PI) or moduloInterval(angle, -PI, +PI)
 inline double moduloInterval(double value, double intervalMin, double intervalMax){
 	return modulo(value - intervalMin, intervalMax - intervalMin) + intervalMin;
 }
+
+// wrap a number x onto a periodic interval [left,right]
+// inline double wrap_to_interval(double x, double left, double right){
+// 	if(x>=left){
+// 		return left + fmod(x-left,(right-left));
+// 	}else{
+// 		return right - fmod(right-x,(right-left));
+// 	}
+// }
+
 
 
 
@@ -2300,7 +2318,6 @@ public:
 		E.X = X;
 		quadratic_approximation_of_piecewise_exp_polynomial(X, degree, coeff, E.coeff);
 	}
-
 };
 
 
@@ -2312,8 +2329,46 @@ public:
 
 
 
+// integrate a scalar function over a finite 1D interval using the trapezoid rule, with adaptively refined x-steps
+template<class FUNCTOR>
+double integrate1D(	const FUNCTOR &f, 			// (INPUT) functor to be integrated. Must be a function f:[xmin,xmax]->R
+					const double xmin,			// (INPUT) left end of the x-interval over which to integrate
+					const double xmax,			// (INPUT) right end of the x-interval over which to integrate
+					const double default_dx,	// (INPUT) default x-step. Note that locally x-steps may be refined to achieve a y-change smaller than max_dy
+					const double min_dx,		// (INPUT) minimum allowed x-step, i.e. refinements are not allowed to lead to a dx smaller than min_dx
+					const double max_dy,		// (INPUT) max allowed y-change during a single x-step. This constraint is weaker than min_dx, i.e. min_dx will be obeyed even if max_dy is violated. Set this to INFTY_D to disable.
+					const double max_rel_dy){	// (INPUT) max allowed relative y-change during a single x-step. This constraint is weaker than min_dx, i.e. min_dx will be obeyed even if max_dy is violated. Set this to INFTY_D to disable.
+	if(xmin==xmax) return 0;
+	double S  = 0;
+	double x  = xmin;
+	double dx = default_dx;
+	double y  = f(x);
+	double x2, y2;
+	while(x<xmax){
+		x2 = min(xmax, x+dx);
+		dx = x2-x;
+		y2 = f(x2);
+		while(((abs(y2-y)>max_dy) || (abs(y2-y)>max_rel_dy*0.5*(abs(y)+abs(y2)))) && (dx*0.9>min_dx)){
+			// refine this x-step
+			dx = max(dx/2, min_dx);
+			x2 = min(xmax,x + dx);
+			dx = x2-x;
+			y2 = f(x2);
+		}
+		// accept current x-step (either because we reached min_dx or because we satisfied max_dy)
+		S += dx*0.5*(y+y2);
+		x  = x2;
+		y  = y2;
+		if(dx<default_dx){
+			dx = min(dx*2, default_dx); // carefully increase dx step again
+		}
+	}
+	return S;
+}
+
+
 // integrate a piecewise linear time series between two time points
-// this function ignores NAN values
+// this function can skip over NAN values
 template<class TIME_ARRAY>
 double integrate1D(const TIME_ARRAY &times, const std::vector<double> &values, const long start, const long end, const bool ignore_inf){
 	double S = 0;
@@ -4339,6 +4394,13 @@ void multiply_matrix_with_vector(	const long			NR,
 		Y.resize(NR);
 		Y[0] = A[0]*X[0] + A[1]*X[1];
 		Y[1] = A[2]*X[0] + A[3]*X[1];
+	}else if((NR==3) && (NC==3)){
+		// 3 x 3 matrix, treat as special case for computational efficiency
+		// this is useful for example in spherical diffusion models, where a matrix is multiplied with a vector numerous times
+		Y.resize(NR);
+		Y[0] = A[0]*X[0] + A[1]*X[1] + A[2]*X[2];
+		Y[1] = A[3]*X[0] + A[4]*X[1] + A[5]*X[2];
+		Y[2] = A[6]*X[0] + A[7]*X[1] + A[8]*X[2];
 	}else{
 		Y.assign(NR,0);
 		for(long r=0; r<NR; ++r){
@@ -4364,6 +4426,13 @@ inline void multiply_matrix_with_vector(const long					NR,
 		Y.resize(NR);
 		Y[0] = A[0]*X[0] + A[1]*X[1];
 		Y[1] = A[2]*X[0] + A[3]*X[1];
+	}else if((NR==3) && (NC==3)){
+		// 3 x 3 matrix, treat as special case for computational efficiency
+		// this is useful for example in spherical diffusion models, where a matrix is multiplied with a vector numerous times
+		Y.resize(NR);
+		Y[0] = A[0]*X[0] + A[1]*X[1] + A[2]*X[2];
+		Y[1] = A[3]*X[0] + A[4]*X[1] + A[5]*X[2];
+		Y[2] = A[6]*X[0] + A[7]*X[1] + A[8]*X[2];
 	}else{
 		Y.assign(NR,0);
 		long r, c;
@@ -4482,6 +4551,18 @@ void multiply_matrix_with_diagonal_matrix(	const long			NR,		// (INPUT) number o
 
 
 
+template<class ARRAY_TYPE>
+void transpose_matrix(	const long			NR,		// (INPUT) number of rows in A
+						const long			NC,		// (INPUT) number of columns in A.
+						const ARRAY_TYPE	&A,		// (INPUT) 2D matrix of size NR x NC, in row-major format
+						ARRAY_TYPE			&At){	// (OUTPUT) 2D matrix of size NC x NR, in row-major format, containing the transpose of A
+	At.resize(NR*NC);
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			At[c*NR+r] = A[r*NC+c];
+		}
+	}
+}
 
 
 // calculate the appropriate base-2 scaling power for the scaling-and-squaring in matrix exponentiation
@@ -6300,8 +6381,37 @@ double get_largest_singular_value(	const long 		NR,		// (INPUT) the number of ro
 }
 
 
+// construct SO(3) rotation matrix about the axis (ux,uy,uz) (which must be a unit vector in R^3)
+// the convention is that if the axis vector u points towards the observer and angle>0, then the rotation proceeds counter-clockwise
+void get_3D_rotation_matrix(const double ux, 	// (INPUT)
+							const double uy, 	// (INPUT)
+							const double uz, 	// (INPUT)
+							const double angle, // (INPUT) rotation angle in radians
+							dvector &matrix){	// (OUTPUT) 2D matrix of size 3 x 3, in row-major format
+	matrix.resize(3*3);
+	const double C = cos(angle);
+	const double S = sin(angle);
+	
+	matrix[0*3+0] = C + ux*ux*(1-C);
+	matrix[0*3+1] = ux*uy*(1-C) - uz*S;
+	matrix[0*3+2] = ux*uz*(1-C) + uy*S;
+	
+	matrix[1*3+0] = uy*ux*(1-C) + uz*S;
+	matrix[1*3+1] = C + uy*uy*(1-C);
+	matrix[1*3+2] = uy*uz*(1-C) - ux*S;
+	
+	matrix[2*3+0] = uz*ux*(1-C) - uy*S;
+	matrix[2*3+1] = uz*uy*(1-C) + ux*S;
+	matrix[2*3+2] = C + uz*uz*(1-C);
+}
 
 
+// construct rotation matrix that takes north pole to the requested (latitude=theta, longitude=phi) (measured in radians)
+inline void get_3D_rotation_matrix_from_north_pole(	const double 	theta,	// (INPUT) latitude, from -pi/2 to pi/2
+													const double 	phi,	// (INPUT) longitude, from -pi to pi
+													dvector 		&rotation_matrix){	// (OUTPUT) 2D matrix of size 3 x 3, in row-major format
+	get_3D_rotation_matrix(sin(phi),-cos(phi),0,theta-0.5*M_PI,rotation_matrix);
+}
 
 #pragma mark -
 #pragma mark Time series analysis
@@ -7310,12 +7420,12 @@ public:
 	// In the case of an irregular grid (preInterpolateOnRegularGrid=false), later value retrieval is fastest if sequentially requested points are close to each other, because the search starts from the last requested point
 	//   Hence, for example, if an ODE solver requests values at non-decreasing points, then value retrieval will be of time-complexity O(N/R) where N is the number of stored reference points and R is the total number of requested points
 	LinearInterpolationFunctor(	const std::vector<double> 		&referencePoints, // domain grid points, in ascending order
-							const std::vector<VALUE_TYPE> 	&referenceValues,
-							bool							periodic,	// if true, time series are extended periodically if needed (e.g. if the reference domain is too small). Otherwise they are extended with zeros.
-							const VALUE_TYPE				&outlier_value_left,
-							const VALUE_TYPE				&outlier_value_right,
-							bool							preInterpolateOnRegularGrid, // if true, then the function is internally pre-interpolated on a regular domain grid. In that case, value retrieval later on will be more efficient.
-							double							regularGridStep);	// regular reference-grid step to use, if preInterpolateOnRegularGrid==true. If <=0, then the regular grid step is chosen as the mean step in the (irregular) input grid.
+								const std::vector<VALUE_TYPE> 	&referenceValues,
+								bool							periodic,	// if true, time series are extended periodically if needed (e.g. if the reference domain is too small). Otherwise they are extended with zeros.
+								const VALUE_TYPE				&outlier_value_left,
+								const VALUE_TYPE				&outlier_value_right,
+								bool							preInterpolateOnRegularGrid, // if true, then the function is internally pre-interpolated on a regular domain grid. In that case, value retrieval later on will be more efficient.
+								double							regularGridStep);	// regular reference-grid step to use, if preInterpolateOnRegularGrid==true. If <=0, then the regular grid step is chosen as the mean step in the (irregular) input grid.
 	
 	//define piecewise linear function on a regular grid
 	//referenceValues[i] should correspond to domain_min + i * intervalWidth(domain)/(referenceCount-1)
@@ -7323,12 +7433,12 @@ public:
 	//if coordinate is periodic, the last reference point is identified with the first one (its reference value is taken to be (referenceValues[0]+referenceValues[last])/2)
 	//since the domain grid is assumed to be regular, interpolations defined this way are much for efficient
 	LinearInterpolationFunctor(	long 				referenceCount, 
-							const double		domain_min, 
-							const double		domain_max, 
-							VALUE_TYPE 			referenceValues[],
-							bool				periodic,
-							const VALUE_TYPE	&outlier_value_left,
-							const VALUE_TYPE	&outlier_value_right);
+								const double		domain_min, 
+								const double		domain_max, 
+								VALUE_TYPE 			referenceValues[],
+								bool				periodic,
+								const VALUE_TYPE	&outlier_value_left,
+								const VALUE_TYPE	&outlier_value_right);
 							
 	VALUE_TYPE operator()(double x) const;
 	void getValue(double x, VALUE_TYPE &y) const; // equivalent to operator(), but avoiding copy operators
@@ -7349,6 +7459,32 @@ public:
 	inline VALUE_TYPE getLastReferenceValue() const{ return referenceValues.back(); }
 	inline const VALUE_TYPE* getFirstReferenceValuePointer() const{ return &referenceValues[0]; }
 	inline const VALUE_TYPE* getLastReferenceValuePointer() const{ return &referenceValues[referenceValues.size()-1]; }
+	
+	// obtain a copy of this functor in the form of an Rcpp::List
+	Rcpp::List get_copy_as_RcppList() const{
+		return Rcpp::List::create(	Rcpp::Named("referencePoints")		= referencePoints,
+									Rcpp::Named("referenceValues") 		= referenceValues,
+									Rcpp::Named("domain_min") 			= domain_min,
+									Rcpp::Named("domain_max") 			= domain_max,
+									Rcpp::Named("domainStep") 			= domainStep,
+									Rcpp::Named("lengthScale") 			= lengthScale,
+									Rcpp::Named("periodic") 			= periodic,
+									Rcpp::Named("outlier_value_left") 	= outlier_value_left,
+									Rcpp::Named("outlier_value_right") 	= outlier_value_right);
+	}
+
+	// instantiate this functor from an Rcpp::List
+	void set_to_RcppList(const Rcpp::List &L){
+		referencePoints		= Rcpp::as<std::vector<double> >(L["referencePoints"]);
+		referenceValues 	= Rcpp::as<std::vector<VALUE_TYPE> >(L["referenceValues"]);
+		domain_min 			= Rcpp::as<double>(L["domain_min"]);
+		domain_max 			= Rcpp::as<double>(L["domain_max"]);
+		domainStep 			= Rcpp::as<double>(L["domainStep"]);
+		lengthScale 		= Rcpp::as<double>(L["lengthScale"]);
+		periodic 			= Rcpp::as<bool>(L["periodic"]);
+		outlier_value_left	= Rcpp::as<VALUE_TYPE>(L["outlier_value_left"]);
+		outlier_value_right = Rcpp::as<VALUE_TYPE>(L["outlier_value_right"]);
+	}
 };
 
 
@@ -8960,7 +9096,6 @@ double solve_via_bisection(	const FUNCTOR	&f,
 
 	long iterations = 0;
 	while(iterations<max_iterations){
-		//c   = 0.5*(a+b); // standard bisection choice, not very efficient
 		c  = (std::isnan(c) ? Xstart : 0.5*(a+b));
 		//c  = (std::isnan(c) ? Xstart : (a + (V-fa) * (b-a)/(fb-fa))); // guess next c based on linear interpolation between (a,fa) and (b,fb)
 		fc = f(c);
@@ -8984,16 +9119,21 @@ double solve_via_bisection(	const FUNCTOR	&f,
 // given some continuous scalar univariate function f:x->y, maximize f(x) within some interval [xmin:xmax] using the golden ratio interval elimination method
 // This method is able to find optima in the interior as well as on the boundary of the provided interval
 // Background on the method: https://en.wikipedia.org/wiki/Golden-section_search
+// The search finishes if one of the stopping criteria is fulfilled:
+//	  abs_xepsilon
+//	  rel_xepsilon
+//	  max_iterations
 template<class FUNCTOR>
 double optimize_via_golden_ratio(	const FUNCTOR	&f,
-									const double	Xmin,				// (INPUT) the left boundary of the interval within which to search. Assumes that sign(f(xmin)-V) != sign(f(xmax)-V)
-									const double	Xmax,				// (INPUT) the right boundary of the interval within which to search. Assumes that sign(Y(xmin)-V) != sign(Y(xmax)-V)
+									const double	Xmin,				// (INPUT) the left boundary of the interval within which to search
+									const double	Xmax,				// (INPUT) the right boundary of the interval within which to search
 									const bool		minimize,			// (INPUT) whether the function f shall be minimized or maximized
-									const double	xepsilon,			// (INPUT) absolute error tolerance on an x-scale. If the x-step is within this threshold, the search is halted
+									const double	abs_xepsilon,		// (INPUT) absolute error tolerance on an x-scale. If the x-step is within this threshold, the search is halted
+									const double	rel_xepsilon,		// (INPUT) relative error tolerance on an x-scale. If the x-step is within this threshold (relative to the typical scale of the current bracet), the search is halted
 									const long		max_iterations){	// (INPUT) maximum number of iterations allowed, i.e. prior to halting the search
 	double a = min(Xmin,Xmax), b = max(Xmin,Xmax);
 	double h = b-a;
-    if(h <= xepsilon) return 0.5*(a+b); // initial bracket is already below tolerance
+    if((h <= abs_xepsilon) || (h <= rel_xepsilon*0.5*(abs(a)+abs(b)))) return 0.5*(a+b); // initial bracket is already below tolerance
 
 	// prepare Golden ratio constants
 	const double invphi  = 0.5*(sqrt(5) - 1); // 1/phi
@@ -9003,6 +9143,7 @@ double optimize_via_golden_ratio(	const FUNCTOR	&f,
     double d  = a + invphi * h;
     double fc = f(c);
     double fd = f(d);
+	if(std::isnan(fd) || std::isnan(fc)) return NAN_D;
 
 	long iterations=0;
 	while(iterations<max_iterations){
@@ -9013,6 +9154,7 @@ double optimize_via_golden_ratio(	const FUNCTOR	&f,
 			h 	= invphi * h;
 			c 	= a + invphi2 * h;
 			fc 	= f(c);
+			if(std::isnan(fc)) return NAN_D;
 		}else{
 			a 	= c;
 			c 	= d;
@@ -9020,8 +9162,9 @@ double optimize_via_golden_ratio(	const FUNCTOR	&f,
 			h 	= invphi * h;
 			d 	= a + invphi * h;
 			fd 	= f(d);
+			if(std::isnan(fd)) return NAN_D;
 		}
-	    if(h <= xepsilon){
+	    if((h <= abs_xepsilon) || (h <= rel_xepsilon*0.5*(abs(b)+abs(c)))){
 	    	return (((minimize && (fc<fd)) || ((!minimize) && (fc>fd))) ? 0.5*(a+d) : 0.5*(c+b));
 	    }
 		++iterations;
@@ -10651,8 +10794,9 @@ void get_node2edge_mappings(const long			Ntips,
 
 
 
-// returns a list of all nodes (and optionally tips) of a tree, such that each node appears prior to its children, and such that nodes closer to the root (in terms of branching counts) appear first
-// also returns a list mapping nodes to their outgoing (children) edges (e.g. as listed in tree_edge)
+// Returns a list of all nodes (and optionally tips) of a tree, such that each node appears prior to its children, and such that nodes closer to the root (in terms of branching counts) appear first
+// Also returns a list mapping nodes to their outgoing (children) edges (e.g. as listed in tree_edge)
+// Nodes and tips are explored in a breadth-first-search order, from root to tips.
 // the tree can be multifurcating, and can also include nodes with a single child
 // root must specify the root index in the tree (typically root = Ntips)
 // Returned values:
@@ -11281,6 +11425,34 @@ Rcpp::List get_min_max_tip_distance_from_root_CPP(	const long 			Ntips,
 
 
 
+// calculate distance from root, for each clade (tips+nodes)
+// distance from root = cumulative branch length from root to the clade
+template<class ARRAY_TYPE_INT, class ARRAY_TYPE_D>
+void get_distances_from_root(	const long 				Ntips,
+								const long 				Nnodes,
+								const long 				Nedges,
+								const ARRAY_TYPE_INT 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+								const ARRAY_TYPE_D		&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+								const tree_traversal	&traversal,		// (INPUT) tree traversal data structure (root-->tips), including tips
+								dvector					&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
+	const long Nclades = Ntips + Nnodes;
+	const bool got_edge_lengths = (edge_length.size()>0);				
+	const long root = traversal.queue[0];
+	if(!traversal.includes_tips) Rcout << "ERROR: In get_distances_from_root(): traversal structure must include tips. This is likely a bug" << endl;
+
+	distances.resize(Nclades);
+	distances[root] = 0;
+	for(long q=0, clade; q<traversal.queue.size(); ++q){
+		clade = traversal.queue[q];
+		if(clade<Ntips) continue;
+		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
+			edge  = traversal.edge_mapping[e];
+			distances[tree_edge[2*edge+1]] = distances[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
+		}
+	}
+
+}
+
 
 
 // calculate distance from root, for each clade (tips+nodes)
@@ -11292,48 +11464,15 @@ void get_distances_from_root(	const long 				Ntips,
 								const ARRAY_TYPE_INT 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
 								const ARRAY_TYPE_D		&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 								std::vector<double>		&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
-	const long Nclades = Ntips + Nnodes;
-	long parent, clade;
-										
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
 
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
-	// get tree traversal route (root --> tips)											
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true,
-										false,
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										false,
-										"");
-	
-	// determine incoming edge per clade
-	std::vector<long> incoming_edge_per_clade(Nclades,-1);
-	for(long edge=0; edge<Nedges; ++edge){
-		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
-	}
-										
-	// calculate distance from root for each clade
-	// (traverse root --> tips)
-	distances.resize(Nclades);
-	distances[root] = 0;
-	for(long q=0; q<traversal_queue.size(); ++q){
-		clade = traversal_queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
-		distances[clade] = (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]) + distances[parent];
-	}
+	// find root
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+
+	// get tree traversal (root-->tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+
+	// calculate distances from root
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, distances);
 }
 
 
@@ -15050,6 +15189,191 @@ Rcpp::List assign_clades_to_taxa_CPP(	const long				Ntips,
 	return Rcpp::List::create(Rcpp::Named("clade2taxon") = clade2taxon);
 }
 
+
+
+
+
+// pick one tip descending from a clade
+// if multiple tips descend from a clade, then which tip is returned may be arbitrary
+// returns false on failure
+bool aux_get_one_descending_tip(const long				Ntips,			// (INPUT) number of tips in the tree
+								const long 				Nnodes,			// (INPUT) number of internal nodes in the tree
+								const long				Nedges,			// (INPUT) number of edges in the tree
+								const lvector			&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+								const tree_traversal	&traversal, 	// (INPUT) tree traversal struct, for traversing tree root-->tips
+								const lvector			&tips_per_clade,// (INPUT) 1D array of size Nclades, listing the number of available tips per clade for picking. tips_per_clade[c] may be less than the actual number of descending tips, e.g. if some tips are deemed "non-available". tips_per_clade[] must be self-consistent, i.e. tips_per_clade[c] must be the sum of tips_per_clade[cc] across all child-clades cc of c.
+								const long				start_clade,	// (INPUT) start clade, i.e. from which to pick a descending tip. If the clade is a tip, it is returned itself (if it is "available").
+								long					&tip){			// (OUTPUT) the returned descending tip.
+	long clade = start_clade;
+	bool moved;
+	while(clade>=Ntips){
+		moved = false;
+		for(long e=traversal.node2first_edge[clade-Ntips], edge, child; e<=traversal.node2last_edge[clade-Ntips]; ++e){
+			edge  = traversal.edge_mapping[e];
+			child = tree_edge[2*edge + 1];
+			if(tips_per_clade[child]>0){
+				// found a child with available tips, so move down there
+				clade = child;
+				moved = true;
+				break;
+			}
+		}
+		if(!moved) return false; // reached a dead-end without finding a tip
+	}
+	if(tips_per_clade[clade]==1){
+		tip = clade;
+		return true;
+	}else{
+		return false;
+	}
+}
+
+
+// pick two tips descending from a node
+// if more than 2 tips descend from a node, then which tips are returned may be arbitrary
+// Returns false on error (e.g. if the node does not have >=2 descending tips)
+bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of tips in the tree
+									const long 				Nnodes,			// (INPUT) number of internal nodes in the tree
+									const long				Nedges,			// (INPUT) number of edges in the tree
+									const lvector			&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+									const tree_traversal	&traversal, 	// (INPUT) tree traversal struct, for traversing tree root-->tips
+									const lvector			&tips_per_clade,// (INPUT) 1D array of size Nclades, listing the number of available tips per clade for picking. tips_per_clade[c] may be less than the actual number of descending tips, e.g. if some tips are deemed "non-available". tips_per_clade[] must be self-consistent, i.e. tips_per_clade[c] must be the sum of tips_per_clade[cc] across all child-clades cc of c.
+									const long				start_clade,	// (INPUT) start clade, i.e. from which to pick the descending tips
+									long					&tip1,			// (OUTPUT) the 1st descending tip
+									long					&tip2){			// (OUTPUT) the 2nd descending tip
+	long clade = start_clade;
+	long node, tip;
+	tip1 = -1;
+	tip2 = -1;
+	// move root-->tips until we find a bifurcation (or multifurcation), then pick one tip from each of the first two descending lineages
+	while(clade>=Ntips){
+		node = clade - Ntips;
+		for(long e=traversal.node2first_edge[node], child; e<=traversal.node2last_edge[node]; ++e){
+			child = tree_edge[2*traversal.edge_mapping[e]+1];
+			if(tips_per_clade[child]>=2){
+				// this child has at least two available tips
+				if(tip1<0){
+					// move down that path to get both tips
+					clade = child;
+					break;
+				}else{
+					// only need one more tip, so just get it from this child
+					if(!aux_get_one_descending_tip(Ntips, Nnodes, Nedges, tree_edge, traversal, tips_per_clade, child, tip)) return false; // something went wrong
+					tip2 = tip;
+					return true;
+				}
+			}else if(tips_per_clade[child]==1){
+				// this node has exactly one available tip, so get it
+				if(!aux_get_one_descending_tip(Ntips, Nnodes, Nedges, tree_edge, traversal, tips_per_clade, child, tip)) return false; // something went wrong
+				if(tip1<0){
+					tip1 = tip;
+				}else if(tip2<0){
+					tip2 = tip;
+					return true;
+				}
+			}
+		}
+	}
+	// at this point we have reached a single tip
+	if(tip1<0){
+		// we need at least 2 tips, so we have failed
+		return false;
+	}else if(tips_per_clade[clade]>=0){
+		// we only need one more tip, and this one is available
+		tip2 = clade;
+		return true;
+	}else{
+		// we needed one more tip, but this one is not available, so we have failed
+		return false;
+	}
+}
+
+// Split tree into pairs of sister-tips, such that the paths within distinct pairs do not overlap
+// The algorithm proceeds by repeatedly picking nodes with 2 descending tips until no such node is left (at which point the algorithm stops)
+// If the input tree only contains monofurcations and bifurcations (recommended), it is guaranteed that at most one unpaired tip will be left (i.e., if Ntips was odd)
+// [[Rcpp::export]]
+Rcpp::List extract_independent_sister_tips_CPP(	const long				Ntips,
+												const long 				Nnodes,
+												const long				Nedges,
+												const std::vector<long>	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+	const long Nclades = Ntips + Nnodes;
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (root --> tips), including tips			
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+		
+	// count number of tips descending from each node
+	lvector tips_per_clade(Nclades,0);
+	for(long tip=0; tip<Ntips; ++tip) tips_per_clade[tip] = 1;
+	for(long q=traversal.queue.size()-1, clade, parent; q>=0; --q){
+		clade = traversal.queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		tips_per_clade[parent] += tips_per_clade[clade];
+	}
+	
+	// create list of nodes with 2 tips
+	lvector dnodes; // list of nodes with exactly 2 descending and not yet paired tips
+	dnodes.reserve(Nnodes);
+	lvector node2dnode_index(Nnodes,-1); // node2dnode_index[n] will be the location of the n-th node in the dnodes[] array
+	for(long node=0; node<Nnodes; ++node){
+		if(tips_per_clade[node+Ntips]==2){
+			node2dnode_index[node] = dnodes.size();
+			dnodes.push_back(node);
+		}
+	}
+	
+	// iterate through the list of dnodes to extract sister-species pairs
+	std::vector<long> tip_pairs; // 2D array of size NP x 2, in row-major format, listing the tip pairs	
+	tip_pairs.reserve(ceil(Ntips/2));
+	long tip1, tip2, dn, node, clade;
+	while(!dnodes.empty()){
+		dn    = dnodes.size()-1;
+		node  = dnodes[dn];
+		clade = node+Ntips;
+		// find tips descending from this node
+		if(!aux_get_two_descending_tips(Ntips, Nnodes, Nedges, tree_edge, traversal, tips_per_clade, clade, tip1, tip2)) Rcout << "ERROR: Something went wrong. Maybe a bug?" << endl;
+		tip_pairs.push_back(tip1);
+		tip_pairs.push_back(tip2);
+		// update the (unpaired) tip counts of all ancestral nodes starting at tip1 and tip2 (traverse tips --> root)
+		// also remove or add nodes from the dnodes[] list as appropriate
+		clade = clade2parent[tip1];
+		while(clade>=0){
+			node = clade-Ntips;
+			tips_per_clade[clade] -= 1;
+			if((node2dnode_index[node]>=0) && (tips_per_clade[clade]!=2)){
+				// remove from dnodes list
+				remove_item_from_mapped_list(dnodes, node2dnode_index, node);
+			}else if((node2dnode_index[node]<0) && (tips_per_clade[clade]==2)){
+				// add to dnodes list
+				node2dnode_index[node] = dnodes.size();
+				dnodes.push_back(node);
+			}
+			clade = clade2parent[clade];
+		}
+		clade = clade2parent[tip2];
+		while(clade>=0){
+			node = clade-Ntips;
+			tips_per_clade[clade] -= 1;
+			if((node2dnode_index[node]>=0) && (tips_per_clade[clade]!=2)){
+				// remove from dnodes list
+				remove_item_from_mapped_list(dnodes, node2dnode_index, node);
+			}else if((node2dnode_index[node]<0) && (tips_per_clade[clade]==2)){
+				// add to dnodes list
+				node2dnode_index[node] = dnodes.size();
+				dnodes.push_back(node);
+			}
+			clade = clade2parent[clade];
+		}
+	}
+	return Rcpp::List::create(Rcpp::Named("tip_pairs") = tip_pairs);
+}
 
 
 
@@ -18922,7 +19246,7 @@ Rcpp::List ASR_binomial_CPP(const long					Ntips,			// (INPUT) number of tips in
 		if(clade2reveal_count[clade]>=min_revealed){
 			// estimate P0 for this clade
 			LL.only_tips = clade2tips[clade];
-			clade2P0[clade] = optimize_via_golden_ratio(LL, 0, 1.0, false, 1e-6, 10000);
+			clade2P0[clade] = optimize_via_golden_ratio(LL, 0, 1.0, false, 1e-8, 1e-6, 10000);
 			if(std::isnan(clade2P0[clade])){
 				clade2P0[clade] = -1; // root finding failed. Perhaps not enough information for ML estimate (e.g., too few revealed tips).
 				clade2FisherStandardError[clade] = -1;	
@@ -24828,3 +25152,1238 @@ Rcpp::List simulate_deterministic_HBD_MSC_CPP(	const double				oldest_age,			// 
 }
 
 
+
+
+
+
+
+
+#pragma mark -
+#pragma mark Spherical Brownian motion
+#pragma mark 
+
+
+// evaluate the legendre polynomial P_n(x), where n\in\N_0 and x\in\R
+// using the recursive relation:
+//	P_n(x) = (1/n) * ((2*n-1)*x*P_{n-1}(x) - (n-1)*P_{n-2}(x))
+double legendre_polynomial(const long n, const double x){
+	if(n==0) return 1;
+	if(n==1) return x;
+
+	double Pn2 = 1; // P_{n-2}
+	double Pn1 = x; // P_{n-1}
+	double Pn;
+	for(long k=2; k<=n; ++k){
+		Pn  = (1.0/k) * ((2*k-1.0)*x*Pn1 - (k-1)*Pn2);
+		Pn2 = Pn1;
+		Pn1 = Pn;
+	}
+	return Pn;
+}
+
+
+// calculate geodesic angle (aka. central angle) between two geographical locations (assuming the Earth is a sphere)
+// based on the Vincenty formula with equal major and minor axis
+// geographic coordinates should be given in radians (theta:latitude, phi:longitude)
+double geodesic_angle(	const double theta1,
+						const double phi1, 
+						const double theta2, 
+						const double phi2){
+	const double delta = abs(phi1-phi2);
+	return abs(atan2(sqrt(SQ(cos(theta2)*sin(delta)) + SQ(cos(theta1)*sin(theta2)-sin(theta1)*cos(theta2)*cos(delta))), (sin(theta1)*sin(theta2)+cos(theta1)*cos(theta2)*cos(delta))));
+}
+
+
+
+
+/* OLD CODE. CORRECT, BUT NUMERICALLY NOT VERY ROBUST
+// calculate a polynomial representation for the cumulative distribution function (CDF) 
+// of the geodesic angle omega traversed by spherical Brownian motion within a specific time interval
+// This function is based on the following representation of the CDF:
+//		CDF(omega) = G(cos(omega))
+// where G is defined as an infinite series:
+//		G(x) := \sum_{n=1}^\infty exp(-(n-1)*n*tD) * [P_{n-2}(x) - P_n(x)]
+// The function thus returns the polynomial coefficients of the approximation:
+//		G(x) \approx \sum_{n=1}^Nterms exp(-(n-1)*n*tD) * [P_{n-2}(x) - P_n(x)]
+// The CDF is defined from 0 to pi, i.e. CDF(0)=0 and CDF(pi)=1.
+void get_SBM_CDF_angle_as_polynomial(	const double	radius,		// (INPUT) radius of the sphere
+										const double 	D,			// (INPUT) non-negative number, diffusivity of Brownian motion, D=sigma^2/2, measured in squared distance units per time
+										const double 	time,		// (INPUT) non-negative number, time step for which to calculate distribution of the geodesic angle
+										const double	max_error,	// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series. This is a rough proxy for the total truncation error. Typical values are 0.001 - 0.00001
+										const long		max_terms,	// (INPUT) positive integer, max number of terms to include from the series. This cutoff is stronger than max_error, i.e. if reached the series is truncated regardless of the error.
+										const bool		normalize,	// (INPUT) if true, the returned approximation for G is uniformly rescaled such that G(cos(pi)) = 1, i.e. G(cos(.)) is a valid CDF
+										long			&Gdegree,	// (OUTPUT) polynomial degree of the returned approximation for G
+										dvector			&Gcoeff){	// (OUTPUT) 1D array of length degree+1, listing coefficients of the returned polynomial
+	const double tD = time*D/SQ(radius);
+	const long N = (((max_error==0) || (tD<=0)) ? max(1l,max_terms) : min(max_terms,long(1+sqrt(max(0.0,1-4*log(max_error)/tD))))); // number of terms to include in the series. Choose N such that exp(-N*(N+1)*tD)<max_error
+	Gdegree = N; // the highest degree of included Legendre polynomial is N
+	Gcoeff.assign(Gdegree+1,0.0);
+	
+	dvector Lcoeff_n2(Gdegree+1,0.0), Lcoeff_n1(Gdegree+1,0.0), Lcoeff_n(Gdegree+1,0.0); // coefficients of Legendre polynomials P_{n-2}, P_{n-1}, P_n
+	Lcoeff_n2[0] = 1; // define the start P_{n-2} = P_0
+	Lcoeff_n1[1] = 1; // define the start P_{n-1} = P_1
+	
+	// define first term in the series, 0.5 * (1-x)
+	Gcoeff[0] =  0.5;
+	Gcoeff[1] = -0.5;
+	
+	// add (polynomial coefficients of) terms 2,..,N
+	double E;
+	for(long n=2, p; n<=N; ++n){
+		E = 0.5*exp(-(n-1.0)*n*tD);
+		for(p=0; p<=n; ++p){
+			Lcoeff_n[p]  = (1.0/n) * ((2*n-1.0)*(p>0 ? Lcoeff_n1[p-1] : 0.0) - (n-1)*Lcoeff_n2[p]); // calculate coefficients of n-th Legendre polynomial using Bonnet’s recursion formula
+			Gcoeff[p] 	+= E * (Lcoeff_n2[p] - Lcoeff_n[p]); // add contribution of n-th term to G
+		}
+		for(p=0; p<=n; ++p){
+			Lcoeff_n2[p] = Lcoeff_n1[p];
+			Lcoeff_n1[p] = Lcoeff_n[p];
+		}
+	}
+	
+	if(normalize){
+		const double Gend = polynomial_value(Gdegree, &Gcoeff[0], -1);
+		for(long p=0; p<=Gdegree; ++p){
+			Gcoeff[p] /= Gend;
+		}
+	}
+}
+*/
+
+
+
+// construct a functor representation for the cumulative distribution function (CDF) 
+// of the geodesic angle omega traversed by spherical Brownian motion after a specific time step
+// This function is based on the following representation of the CDF:
+//		CDF(omega) = (1/2) * \sum_{n=1}^\infty exp(-(n-1)*n*tD) * [P_{n-2}(cos(omega)) - P_n(cos(omega))]
+// A truncated version of the series with N terms is used as approximation, except for very short times (tD<<1) where the planar Brownian motion is used as approximation
+// The CDF is defined from 0 to pi, i.e. CDF(0)=0 and CDF(pi)=1.
+class Spherical_Brownian_Motion_CDF{
+private:
+	long N_Legendre_terms; // number of terms to include in the truncated series
+	double tD;
+	double normalization_factor;
+	double approx_max_tD; // maximum tD value for which to use the approximation by Ghosh et al (2012). Note that tD := time * diffusivity/SQ(radius)
+public:
+	Spherical_Brownian_Motion_CDF(): N_Legendre_terms(0l), tD(0.0), normalization_factor(1.0) {}
+
+	Spherical_Brownian_Motion_CDF(	const double 	tD_,		// (INPUT) non-negative number, diffusivity of Brownian motion (measured in squared radii per time) multiplied by the time step, i.e. tD := time * D/SQ(radius) 
+									const double	max_error,	// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series. This is a rough proxy for the total truncation error. Typical values are 0.001 - 0.00001
+									const long		max_Legendre_terms){		// (INPUT) positive integer, max number of terms to include from the series. This cutoff is stronger than max_error, i.e. if reached the series is truncated regardless of the error.
+		tD = tD_;
+		N_Legendre_terms  = (((max_error<=0) || (tD<=0)) ? max(1l,max_Legendre_terms) : min(max_Legendre_terms,long(1+sqrt(max(0.0,1-4*log(max_error)/tD))))); // number of terms to include in the series. Choose N such that exp(-N*(N+1)*tD)<max_error
+		approx_max_tD = 0.1; // use approximate CDF formula [Ghosh et al. 2012] for tD below this threshold
+		
+		// adjust normalization factor such that CDF(pi)=1
+		normalization_factor = 1.0;
+		normalization_factor = 1.0/this->operator()(M_PI);
+	}
+	
+	// calculate CDF at a specific geodesic angle omega
+	double operator()(const double omega) const{
+		if(tD==0){
+			return 1.0;
+		}else if(tD<1e-10){
+			// planar approximation when tD is very small [Ghosh et al. 2012. Europhysics Letters. 98:30003]
+			return normalization_factor * (1-exp(-SQ(omega)/(4*tD)));
+		}else if(tD<approx_max_tD){
+			// use approximation formula modified from [Ghosh et al. 2012], further approximated via a Taylor expansion to 7-th order
+			// The original approximation formula by Ghost et al. is: PD(omega) = (N/(2tD)) * sqrt(omega*sin(omega)) * exp(-SQ(omega)/(4tD))
+			// However its integral (to get the CDF) is hard to compute, hence we use a Taylor-series expansion of the sqrt(omega*sin(omega)) part around omega=0. 
+			// A Taylor expansion works well because we only use this approximation for small tD, i.e. where the exponential term exp(-SQ(omega)/4tD) decays rapidly.
+			// We have: sqrt(omega*sin(omega)) \approx omega - omega^3/12 + omega^5/1440 - omega^7/24192 -67omega^9/29030400 + O(omega^11)
+			// The CDF formula used below is simply the integration of PD(omega) using the above Taylor expansion in the appropriate place.
+			//return normalization_factor * (1/(2*tD)) * (tD/60480) * (-384*(-315+tD*(105+tD*(-7+5*tD))) +  exp(-SQ(omega)/(4*tD)) * (384*(-315+tD*(105+tD*(-7+5*tD))) + 96*(105+tD*(-7+5*tD))*SQ(omega)+12*(-7+5*tD)*SQ(SQ(omega))+5*pow(omega,6)));
+			const double alpha = SQ(omega)/(4*tD);
+			return normalization_factor * (1/(2*tD)) * (tD/907200) * (-384*(-4725 + tD*(1575+tD*(-105+tD*(75+67*tD)))) + 15*exp(-alpha) * (384*(-315+tD*(105 + tD*(-7+5*tD))) + 96*(105 + tD*(-7+5*tD))*SQ(omega) + 12*(-7+5*tD)*SQ(SQ(omega)) + 5*pow(omega,6)) + 1072*SQ(SQ(tD))*exp(-alpha)*(24+24*alpha+12*SQ(alpha)+4*Qube(alpha)+SQ(SQ(alpha))));
+		}else{
+			// tD is sufficiently large, so use (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+			const double x = cos(omega);
+			double Pn2 = 1; // P_{n-2}
+			double Pn1 = x; // P_{n-1}
+			double Pn;
+			double CDF = 0.5*(1-x); // first term in the series
+			for(long n=2; n<=N_Legendre_terms; ++n){
+				Pn   = (1.0/n) * ((2*n-1.0)*x*Pn1 - (n-1)*Pn2); // calculate value of n-th Legendre polynomial using Bonnet’s recursion formula
+				CDF += 0.5*exp(-(n-1.0)*n*tD)*(Pn2-Pn); // add contribution of n-th term to CDF
+				Pn2  = Pn1;
+				Pn1  = Pn;
+			}
+			CDF *= normalization_factor;
+			return CDF;
+		}
+	}	
+};
+
+
+
+// [[Rcpp::export]]
+double draw_SBM_geodesic_angle_CPP(const double	tD){	// (INPUT) diffusion coefficient of the Brownian motion, in squared radii per time, multiplied by the time step, i.e. t*D/SQ(radius). D is defined such that locally (planar approximation) the diffusion process resembles classical Brownian motion with diffusivity D.
+	// construct the cumulative distribution function of the geodesic angle traversed
+	const double max_error=1e-8;
+	const long max_Legendre_terms=100;
+	Spherical_Brownian_Motion_CDF CDF(tD, max_error, max_Legendre_terms);
+	
+	// draw random geodesic angle
+	double u 				= R::runif(0.0,1.0);
+	const double xepsilon 	= 1e-5 * sqrt(2*tD);
+	const double yepsilon 	= 1e-5;
+	return solve_via_bisection(CDF, 0.0, M_PI, M_PI/2, u, xepsilon, yepsilon, 1000);
+}
+
+
+
+
+// convert a 3D vector in cartesian coordinates (x,y,z) to latitude (theta) and longitude (phi)
+// if the point is not located on the surface of a unit sphere, it is first normalized to length 1, which essentially means it is first projected onto the unit sphere
+inline void cartesian3D_to_lat_lon(	const dvector 	&cartesian,	// (INPUT) vector of size 3, listing cartesian coordinates of a point on the Earth's surface
+									double			&theta,		// (OUTPUT) latitude in radians, from -pi/2 to pi/2
+									double			&phi){		// (OUTPUT) longitude in radians, from -pi to pi
+	const double r = sqrt(SQ(cartesian[0]) + SQ(cartesian[1]) + SQ(cartesian[2]));
+	theta 	= asin(cartesian[2]/r);
+	phi 	= (abs(theta)==M_PI/2 ? 0.0 : (cartesian[1]>=0 ? acos((cartesian[0]/r)/cos(theta)) : -acos((cartesian[0]/r)/cos(theta))));	
+
+}
+
+
+// draw a single transition of the spherical Brownian motion, (old_theta,old_phi) -> (new_theta,new_phi)
+// The diffusivity D is defined such that locally (planar approximation) the diffusion process resembles classical Brownian motion with diffusivity D.
+void draw_SBM_transition(	const double	tD,					// (INPUT) diffusion coefficient of the Brownian motion, in squared radii per time, multiplied by the time step, i.e. t*D/SQ(radius). In the case of time-variable diffusivity, tD is replaced by the integral \int_0^t D(s) ds.
+							const double	old_theta,			// (INPUT) latitude, from -pi/2 to pi/2
+							const double	old_phi,			// (INPUT) longitude, from -pi to pi
+							dvector			&scratch_Gcoeff,	// (SCRATCH) scratch space for storing polynomial coefficients. Will be resized as needed
+							double			&new_theta,			// (OUTPUT) new latitude
+							double			&new_phi,			// (OUTPUT) new longitude
+							double			&omega){			// (OUTPUT) transition central-angle
+	if(tD==0){
+		new_theta 	= old_theta;
+		new_phi 	= old_phi;
+		return;
+	}
+	
+	// draw random geodesic angle
+	omega = draw_SBM_geodesic_angle_CPP(tD);
+	
+	// draw random direction of transition (e.g., longitude if the old point is assumed to be at the North pole)
+	const double alpha = R::runif(0,2*M_PI);
+
+	// convert geodesic angle omega and direction alpha to new coordinates on a unit sphere
+	// if the old point is considered to be on the North pole, then the new point will be omega radians Southwards and have longitude alpha radians
+	dvector new_relative_point(3);
+	new_relative_point[0] = sin(omega)*cos(alpha);
+	new_relative_point[1] = sin(omega)*sin(alpha);
+	new_relative_point[2] = cos(omega);
+	
+	// at this point we have the geodesic angle and direction of the new point relative to the old point, i.e. as if the old point was the north pole
+	// next we need to convert this new point to the true coordinate system, i.e. where the old point is not the north pole
+	
+	// construct rotation matrix that takes north pole to (old_theta, old_phi)
+	dvector rotation_matrix; // rotation matrix is 3x3 matrix in row-major format
+	get_3D_rotation_matrix_from_north_pole(old_theta,old_phi,rotation_matrix);
+				
+	// rotate new point into the true coordinate system, i.e. where the old point is not on the north pole
+	dvector new_point;
+	multiply_matrix_with_vector(3,3,rotation_matrix,new_relative_point,new_point);
+	
+	// extract latitude & longitude for this new point (which is located on the unit sphere)
+	cartesian3D_to_lat_lon(new_point, new_theta, new_phi);
+}
+
+
+// Given a rooted phylogenetic tree, with edge lengths corresponding to time intervals (or similar), simulate a spherical Brownian motion process along the edges in forward time (from root to tips)
+// This function only supports (and is optimized for) time-independent diffusivity
+// The tree may include multifurcations and monofurcations
+void simulate_SBM_on_tree(	const long 					Ntips,			// (INPUT)
+							const long 					Nnodes,			// (INPUT)
+							const long 					Nedges,			// (INPUT)
+							const std::vector<long>		&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+							const std::vector<double>	&edge_length,	// (INPUT) 1D array of size Nedges
+							const double				radius,			// (INPUT) radius of the sphere
+							const double				diffusivity,	// (INPUT) diffusivity, in distance units^2 per time
+							const double				root_theta,		// (INPUT) latitude of the root in radians, from -pi/2 to pi/2
+							const double				root_phi,		// (INPUT) longitude of the root in radians, from -pi to pi
+							dvector						&clade_theta,	// (OUTPUT) 1D array of size Nclades, listing the simulated thetas (latitudes in radians)
+							dvector						&clade_phi){	// (OUTPUT) 1D array of size Nclades, listing the simulated thetas (latitudes in radians)
+	const long Nclades = Ntips + Nnodes;
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
+
+	// get tree traversal (root-->tips), not including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+	
+	// simulate spherical Brownian motion, moving from root to tips
+	clade_theta.resize(Nclades);
+	clade_phi.resize(Nclades);
+	clade_theta[root] = root_theta;
+	clade_phi[root] = root_phi;
+	dvector scratch_Gcoeff;
+	double dt, omega;
+	for(long q=0, parent, child, e, edge; q<traversal.queue.size(); ++q){
+		parent = traversal.queue[q];
+		for(e=traversal.node2first_edge[parent-Ntips]; e<=traversal.node2last_edge[parent-Ntips]; ++e){
+			edge  = traversal.edge_mapping[e];
+			child = tree_edge[2*edge+1];
+			dt	  = (edge_length.empty() ? 1.0 : max(0.0,edge_length[edge]));
+			draw_SBM_transition(dt * diffusivity/SQ(radius),
+								clade_theta[parent],
+								clade_phi[parent],
+								scratch_Gcoeff,
+								clade_theta[child],
+								clade_phi[child],
+								omega);
+		}
+		if((q%1000)==0) Rcpp::checkUserInterrupt();
+	}
+}
+
+
+// Given a rooted phylogenetic tree, with edge lengths corresponding to time intervals (or similar), simulate a spherical Brownian motion process along the edges in forward time (from root to tips)
+// This function supports time-dependent diffusivities
+// The tree may include multifurcations and monofurcations
+template<class DFUNCTOR>
+void simulate_SBM_on_tree(	const long 					Ntips,			// (INPUT)
+							const long 					Nnodes,			// (INPUT)
+							const long 					Nedges,			// (INPUT)
+							const std::vector<long>		&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+							const std::vector<double>	&edge_length,	// (INPUT) 1D array of size Nedges
+							const double				radius,			// (INPUT) radius of the sphere
+							const DFUNCTOR				&diffusivity_integral,	// (INPUT) functor returning the time-integrated diffusivity at any requested t, i.e. the antiderivative of D over time, in distance units^2
+							const double				root_theta,		// (INPUT) latitude of the root in radians, from -pi/2 to pi/2
+							const double				root_phi,		// (INPUT) longitude of the root in radians, from -pi to pi
+							dvector						&clade_theta,	// (OUTPUT) 1D array of size Nclades, listing the simulated thetas (latitudes in radians)
+							dvector						&clade_phi){	// (OUTPUT) 1D array of size Nclades, listing the simulated thetas (latitudes in radians)
+	const long Nclades = Ntips + Nnodes;
+	
+	// find the root
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+
+	// get tree traversal (root-->tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	
+	// calculate the time of each clade, i.e. its distance from the root
+	dvector clade_times;
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, clade_times);
+	
+	// simulate spherical Brownian motion, moving from root to tips
+	clade_theta.resize(Nclades);
+	clade_phi.resize(Nclades);
+	clade_theta[root] = root_theta;
+	clade_phi[root] = root_phi;
+	dvector scratch_Gcoeff;
+	double tD, omega;
+	for(long q=0, parent, child, e, edge; q<traversal.queue.size(); ++q){
+		parent = traversal.queue[q];
+		if(parent<Ntips) continue;
+		for(e=traversal.node2first_edge[parent-Ntips]; e<=traversal.node2last_edge[parent-Ntips]; ++e){
+			edge  	= traversal.edge_mapping[e];
+			child 	= tree_edge[2*edge+1];
+			tD		= (diffusivity_integral(clade_times[child])-diffusivity_integral(clade_times[parent]))/SQ(radius);
+			draw_SBM_transition(tD,
+								clade_theta[parent],
+								clade_phi[parent],
+								scratch_Gcoeff,
+								clade_theta[child],
+								clade_phi[child],
+								omega);
+		}
+		if((q%1000)==0) Rcpp::checkUserInterrupt();
+	}
+}
+
+
+
+
+// Dimulate a spherical Brownian motion process with constant diffusivity along a phylogenetic tree
+// This is basically a wrapper for the function simulate_SBM_on_tree()
+// [[Rcpp::export]]
+Rcpp::List simulate_SBM_on_tree_CPP(	const long 					Ntips,			// (INPUT)
+										const long 					Nnodes,			// (INPUT)
+										const long 					Nedges,			// (INPUT)
+										const std::vector<long>		&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+										const std::vector<double>	&edge_length,	// (INPUT) 1D array of size Nedges
+										const double				radius,			// (INPUT) radius of the sphere
+										const double				diffusivity,	// (INPUT) diffusivity, in distance units^2 per time
+										const double				root_theta,		// (INPUT) latitude of the root in radians, from -pi/2 to pi/2
+										const double				root_phi){		// (INPUT) longitude of the root in radians, from -pi to pi
+	dvector clade_theta, clade_phi;
+	simulate_SBM_on_tree(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							edge_length,
+							radius,
+							diffusivity,
+							root_theta,
+							root_phi,
+							clade_theta,
+							clade_phi);
+	return Rcpp::List::create(	Rcpp::Named("clade_theta")	= clade_theta,
+								Rcpp::Named("clade_phi") 	= clade_phi);
+}
+
+
+// Dimulate a spherical Brownian motion process with time-dependent diffusivity along a phylogenetic tree
+// This is basically a wrapper for the function simulate_SBM_on_tree()
+// [[Rcpp::export]]
+Rcpp::List simulate_TSBM_on_tree_CPP(	const long 					Ntips,			// (INPUT)
+										const long 					Nnodes,			// (INPUT)
+										const long 					Nedges,			// (INPUT)
+										const std::vector<long>		&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+										const std::vector<double>	&edge_length,	// (INPUT) 1D array of size Nedges
+										const double				radius,			// (INPUT) radius of the sphere
+										const std::vector<double>	&time_grid,		// (INPUT) time grid listing discrete time points in ascending order (time is counted as distance from the root).
+										const std::vector<double>	&diffusivities,	// (INPUT) vector of the same length as time_grid, listing the corresponding diffusivities, in distance units^2 per time
+										const long					splines_degree,	// (INPUT) splines degree assumed for the diffusivities
+										const double				root_theta,		// (INPUT) latitude of the root in radians, from -pi/2 to pi/2
+										const double				root_phi){		// (INPUT) longitude of the root in radians, from -pi to pi
+	// calculate polynomial representation of diffusivity
+	PiecewisePolynomial<double> diffusivity_functor;
+	diffusivity_functor.set_to_spline(time_grid, diffusivities, splines_degree, ExtrapolationTypeConst, ExtrapolationTypeConst, diffusivities[0], diffusivities.back());
+	
+	// calculate antiderivative of diffusivity
+	PiecewisePolynomial<double> diffusivity_integral;
+	diffusivity_functor.get_antiderivative(0, diffusivity_integral);
+
+	dvector clade_theta, clade_phi;
+	simulate_SBM_on_tree(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							edge_length,
+							radius,
+							diffusivity_integral,
+							root_theta,
+							root_phi,
+							clade_theta,
+							clade_phi);
+	return Rcpp::List::create(	Rcpp::Named("clade_theta")	= clade_theta,
+								Rcpp::Named("clade_phi") 	= clade_phi);
+}
+
+
+
+// functor for returning a scalar function defined over a sphere, in terms of latitude & longitude
+// note that latitude (theta) and longitude (phi) are measured in radians, with theta in [-pi/2,pi/2) and theta in [-pi,pi)
+// the current implementation is based on nearest-grid-point interpolation; future versions may use bilinear interpolation
+class SphereFunctor{
+	long Ntheta, Nphi; // number of latitudes and longitudes on the grid
+	
+	// 2D array, in row-major format (lat:rows, lon:columns), specifying the function's value at any given grid point. 
+	// The grid is assumed to cover the range [-pi/2,pi/2] x [-pi,pi]
+	// Hence, grid_values[r*Nlon + c] is the value of the function at latitude -pi/2+r*lat_step and longitude -pi+r*lon_step.
+	dvector grid_values;
+
+public:
+	// default constructor
+	SphereFunctor(){ Ntheta = 0; Nphi = 0; };
+	
+	// Constructor
+	SphereFunctor(	const long 	Ntheta_,
+					const long	Nphi_,
+					const dvector &grid_values_){
+		Ntheta 		= Ntheta_;
+		Nphi		= Nphi_;
+		grid_values = grid_values_;		
+	}
+	
+	// evaluate the function at the requested latitude theta and longitude phi, both provided in radians
+	inline bool operator()(double theta, double phi) const{
+		if(grid_values.empty()) return NAN_D;
+		phi = moduloInterval(phi,-M_PI,M_PI); // wrap phi onto [-pi,pi]
+		const long r = max(0l, min(long(Ntheta-1), long(round(Ntheta * (theta+M_PI/2)/M_PI))));
+		const long c = max(0l, min(long(Nphi-1), long(round(Nphi * (phi+M_PI)/(2*M_PI)))));
+		return grid_values[r*Nphi + c];
+	}
+};
+
+
+// Calculate the probability density of the SBM transition angle omega, for a given timestep and diffusivity
+// Uses the (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+double SBM_angular_LPD_series(	const double 	tD,				// (INPUT) non-negative number, diffusivity of Brownian motion (measured in squared radii per time) multiplied by the time step. In the case of time-dependent diffusivity, this is \int_0^t D(s) ds
+								const double	omega,			// (INPUT) the geodesic agle (angular displacement) at which to evaluate the probability density
+								const double	max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+								const long		max_Legendre_terms){// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+	const long N  = (((max_error<=0) || (tD<=0)) ? max(1l,max_Legendre_terms) : min(max_Legendre_terms,long(1+sqrt(max(0.0,1-4*log(max_error)/tD))))); // number of terms to include in the series. Choose N such that exp(-N*(N+1)*tD)<max_error
+	const double x = cos(omega);
+	double Pn2 = 1; // P_{n-2}
+	double Pn1 = x; // P_{n-1}
+	double Pn;
+	double PD = 1 + 3*x*exp(-2*tD); // first 2 terms in the series, i.e. for n=0 and n=1
+	for(long n=2; n<N; ++n){
+		Pn   = (1.0/n) * ((2*n-1.0)*x*Pn1 - (n-1)*Pn2); // calculate value of n-th Legendre polynomial using Bonnet’s recursion formula
+		PD  += (2*n+1.0) * exp(-(n+1.0)*n*tD) * Pn; // add contribution of n-th Legendre polynomial to PD
+		Pn2  = Pn1;
+		Pn1  = Pn;
+	}
+	PD *= sin(omega)/2;
+	return log(PD);
+}
+
+
+
+// Functor for calculating the probability density of observing a specific geodesic distance after a specific time step
+class Spherical_Brownian_Motion_PD{
+private:
+	double max_error;
+	long max_Legendre_terms; // positive integer, max number of terms to include from the series when calculating transition densities. Typical values are 10-100.
+	double approx_max_tD; // maximum tD value for which to use the approximation by Ghosh et al (2012). Note that tD := time * diffusivity/SQ(radius)
+	
+	// log-transformed normalization factor nu for PD approximation formula PD(omega|tD) = nu(tD)/(2tD) * sqrt(sin(omega)*omega) * exp(-omega^2/(4tD))
+	// where tD := time * diffusivity / radius^2
+	// such that \int_0^pi PD(omega|tD) = 1, hence nu(tD):= 2tD/\int_0^pi \sqrt(sin(omega)*omega)*exp(-omega^2/(4tD)) domega
+	// [Ghosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+	// Here we define log(nu) as a function of log(tD) instead of tD, because its variation is more uniform in log-tD rather than tD.
+	LinearInterpolationFunctor<double> logtD_to_log_approx_normalization;
+		
+	// calculate 2tD/\int_0^pi \sqrt(sin(omega)*omega)*exp(-omega^2/(4tD)) domega 
+	double get_approx_normalization(double tD){
+		const double I = integrate1D(	[&] (const double omega) { return sqrt(sin(omega)*omega)*exp(-SQ(omega)/(4*tD)); }, 
+										0, 		// xmin
+										M_PI, 	// xmax
+										0.001, 	// default_dx
+										1e-10, 	// min_dx
+										1e-3, 	// max_dy
+										1e-3); 	// max_rel_dy
+		return 2*tD/I;
+	}
+	
+	
+public:
+	// default constructor, does not actually initialize the object for proper use
+	Spherical_Brownian_Motion_PD(){ }
+	
+	// Constructor. See the class's private member variables for an explanation of each input argument.
+	Spherical_Brownian_Motion_PD(	const double	max_error_,
+									const long		max_Legendre_terms_){
+		max_error 			= max_error_;
+		max_Legendre_terms 	= max_Legendre_terms_;
+		approx_max_tD		= 0.1; // use approximate probability density formula for tD below this threshold
+		
+		// precalculate normalization for approximate PD for various values of tD
+		// the log-transformed normalization factor is then stored as a linear interpolator on a uniform grid (in log-tD space)
+		// [Ghosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+		// [Bouckaert and Cartwright 2016, Phylogeography by diffusion on a sphere: whole world phylogeography. PeerJ. 4:e2406]
+		const long Ngrid = 100;
+		dvector grid_lognu(Ngrid);
+		const double grid_logtD_min = log(1e-6);
+		const double grid_logtD_max = log(2*approx_max_tD);
+		double logtD;
+		for(long g=0; g<Ngrid; ++g){
+			logtD = grid_logtD_min + g * (grid_logtD_max-grid_logtD_min)/(Ngrid-1.0);
+			grid_lognu[g] = log(get_approx_normalization(exp(logtD)));
+		}
+		// construct linear interpolator functor (on a regular grid in log-tD space) for mapping log(tD) --> log(nu(tD))
+		logtD_to_log_approx_normalization = LinearInterpolationFunctor<double>(Ngrid, grid_logtD_min, grid_logtD_max, &grid_lognu[0], false, 1.0, NAN_D);
+	}
+	
+	
+	// calculate logarithm of probability density of angular distance omega
+	double angular_LPD(	const double 	tD,				// (INPUT) non-negative number, diffusivity of Brownian motion (measured in squared radii per time) multiplied by the time step. In the case of time-dependent diffusivity, this is \int_0^t D(s) ds
+						const double	omega) const{	// (INPUT) the geodesic agle (angular displacement) at which to evaluate the probability density
+		if(tD<=0){
+			return (omega==0 ? INFTY_D : -INFTY_D);
+		}else if(omega==0){
+			return -INFTY_D;
+		}else if(omega==M_PI){
+			return -INFTY_D;
+		}else if(tD<1e-10){
+			// planar approximation when tD is very small [Ghosh et al. 2012. Europhysics Letters. 98:30003]
+			return log(omega/(2*tD)) - SQ(omega)/(4*tD);
+		}else if(tD<approx_max_tD){
+			// use approximation by [Gosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+			return logtD_to_log_approx_normalization(log(tD)) - log(2*tD) + log(sqrt(sin(omega)*omega)) - SQ(omega)/(4*tD);
+		}else{
+			// tD is sufficiently large, so use (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+			return SBM_angular_LPD_series(tD, omega, max_error, max_Legendre_terms);
+		}
+	}
+	
+	// calculate logarithm of probability density of axial distance x:=cos(omega)
+	// Note that this is the transition density on the sphere surface w.r.t. the Lebesque-induced measure, multiplied by 2pi
+	double axial_LPD(	const double 	tD,			// (INPUT) non-negative number, diffusivity of Brownian motion (measured in squared radii per time) multiplied by the time step. In the case of time-dependent diffusivity, this is \int_0^t D(s) ds
+						const double	x) const{	// (INPUT) "axial distance", i.e. cosine of the geodesic agle (cosine of angular displacement, x:=cos(omega)) at which to evaluate the probability density
+		const long N  = (((max_error<=0) || (tD<=0)) ? max(1l,max_Legendre_terms) : min(max_Legendre_terms,long(1+sqrt(max(0.0,1-4*log(max_error)/tD))))); // number of terms to include in the series. Choose N such that exp(-N*(N+1)*tD)<max_error
+		const double omega=acos(x);
+
+		if(tD<=0){
+			return (x==1 ? INFTY_D : -INFTY_D);
+		}else if(omega==M_PI){
+			// use (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+			double PD = 0;
+			for(long n=0, s=1; n<N; ++n){
+				PD += 0.5*(2*n+1)*s*exp(-n*(n+1)*tD);
+				s = -s; // s alternates between -1 and +1
+			}
+			return log(PD);
+		}else if(tD<1e-10){
+			// planar approximation when tD is very small [Ghosh et al. 2012. Europhysics Letters. 98:30003]
+			if(omega==0){
+				return log(1/(2*tD));
+			}else{
+				return log(omega/(2*tD*sin(omega))) - SQ(omega)/(4*tD);
+			}
+		}else if(tD<approx_max_tD){
+			// use approximation by [Gosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+			if(omega<1e-10){
+				return logtD_to_log_approx_normalization(log(tD)) - log(2*tD) - SQ(omega)/(4*tD);
+			}else{
+				return logtD_to_log_approx_normalization(log(tD)) - log(2*tD) + log(sqrt(omega/sin(omega))) - SQ(omega)/(4*tD);
+			}
+		}else{
+			// tD is sufficiently large, so use (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+			double Pn2 = 1; // P_{n-2}
+			double Pn1 = x; // P_{n-1}
+			double Pn;
+			double PD = 1 + 3*x*exp(-2*tD); // first 2 terms in the series, i.e. for n=0 and n=1
+			for(long n=2; n<N; ++n){
+				Pn   = (1.0/n) * ((2*n-1.0)*x*Pn1 - (n-1)*Pn2); // calculate value of n-th Legendre polynomial using Bonnet’s recursion formula
+				PD  += (2*n+1.0) * exp(-(n+1.0)*n*tD) * Pn; // add contribution of n-th Legendre polynomial to PD
+				Pn2  = Pn1;
+				Pn1  = Pn;
+			}
+			PD *= 1.0/2;
+			return log(PD);
+		}
+	}
+	
+	// calculate logarithm of the 2D surface probability density of a transition (old_theta,old_phi)-->(new_theta,new_phi) occuring and being observed, conditional upon being observed
+	// The transition density is with respect to the Lebesque-induced measure on the sphere surface: sin(theta) dtheta dphi
+	// The probability of observing a specific lineage, located at a specific location, is specified by the functor sampling_rate()
+	double transition_LPD(	const double 			tD,				// (INPUT) non-negative number, diffusivity of Brownian motion (measured in squared radii per time) multiplied by the time step. In the case of time-dependent diffusivity, this is \int_0^t D(s) ds
+							const double			old_theta,		// (INPUT) old latitude, in radians from -pi/2 to pi/2
+							const double			old_phi,		// (INPUT) old longitude, in radians from -pi to pi
+							const double			new_theta,		// (INPUT) new latitude, in radians from -pi/2 to pi/2
+							const double			new_phi,		// (INPUT) new longitude, in radians from -pi to pi
+							const SphereFunctor		&sampling_rate) const{	// (INPUT) functor specifying the probability of sampling a lineage at any given geographic location (lat & lon)
+		const double sampling_rate_at_new_point = sampling_rate(new_theta, new_phi);
+		if(sampling_rate_at_new_point==0) return -INFTY_D; // the conditional density of (new_theta,new_phi) is 0 if an organism at (new_theta,new_phi) has zero probability of being sampled
+
+		// construct rotation matrix that takes north pole to (old_theta, old_phi)
+		dvector rotation_matrix; // rotation matrix is 3x3 matrix in row-major format
+		get_3D_rotation_matrix_from_north_pole(old_theta,old_phi,rotation_matrix);
+		
+		// get transition density 
+		const double transition_omega = geodesic_angle(old_theta, old_phi, new_theta, new_phi);
+		const double unconditional_log_density = log(sampling_rate_at_new_point) + axial_LPD(tD, cos(transition_omega)) - log(2*M_PI); // probability density of transitioning to (new_theta,new_phi) w.r.t. the Lebesque-induced measure on the sphere surface
+		
+		// construct functor for cumulative density function of central angle omega
+		Spherical_Brownian_Motion_CDF omega_CDF(tD,	max_error, max_Legendre_terms);
+		
+		// calculate total probability of being sampled
+		// i.e. integrate transition density over the globe multiplied by the sampling rate
+		const long Ndirections 	= 50;
+		const long Ndistances 	= 50;
+		const double domega 	= M_PI/Ndistances; // discretization step of central angular distances
+		const double dalpha 	= 2*M_PI/Ndirections; // discretization step of directions
+		double sampling_probability	= 0;
+		double theta, phi, omega, angular_dP, sin_omega, cos_omega;
+		// precalculate cos & sin of alphas, for efficiency
+		dvector sin_alphas(Ndirections), cos_alphas(Ndirections);
+		for(long a=0; a<Ndirections; ++a){
+			sin_alphas[a] = sin(a * dalpha);
+			cos_alphas[a] = cos(a * dalpha);
+		}
+		dvector relative_point(3), point;
+		for(long r=0; r<Ndistances; ++r){
+			omega 		= r * domega;
+			angular_dP 	= omega_CDF(omega+domega)-omega_CDF(omega);
+			sin_omega 	= sin(omega);
+			cos_omega 	= cos(omega);
+			for(long a=0; a<Ndirections; ++a){
+				// convert geodesic angle omega and direction alpha to new coordinates on a unit sphere
+				// if old_point is considered to be on the North pole, then the new point will be omega radians Southwards and have longitude alpha radians
+				relative_point[0] = sin_omega*cos_alphas[a];
+				relative_point[1] = sin_omega*sin_alphas[a];
+				relative_point[2] = cos_omega;
+				// apply rotation to get actual point location, i.e. where the old_point is not on the North pole
+				multiply_matrix_with_vector(3,3,rotation_matrix,relative_point,point);
+				// convert to lat & lon
+				cartesian3D_to_lat_lon(point, theta, phi);
+				// count the probability density at this point towards the integral
+				// to avoid needing a fine omega-grid, especially when the PD decays very rapidly with omega, we use the CDF w.r.t. omega to calculate the contribution from any [omega,omega+domega] x [alpha,alpha+dalpha] cell under the assumption that the sampling rate is constant within that cell 
+				sampling_probability += sampling_rate(theta, phi) * (angular_dP/(2*M_PI)) * dalpha;
+			}
+		}
+		Rcpp::checkUserInterrupt();
+		//Rcout << "    tD=" << tD << ", old lat=" << 180*old_theta/M_PI << ", old lon=" << 180*old_phi/M_PI << ", omega=" << transition_omega*180/M_PI << ", uncond-LPD=" << unconditional_log_density << ", sampling_prob=" << sampling_probability << endl; // debug
+		
+		// calculate conditional log-probability-density, P(transition & sampled)/P(sampled)
+		const double conditional_log_density = unconditional_log_density - log(sampling_probability);
+		return conditional_log_density;
+	}
+	
+	Rcpp::List get_copy_as_RcppList() const{
+		return Rcpp::List::create(	Rcpp::Named("max_error")						= max_error,
+									Rcpp::Named("max_Legendre_terms") 				= max_Legendre_terms,
+									Rcpp::Named("approx_max_tD") 					= approx_max_tD,
+									Rcpp::Named("logtD_to_log_approx_normalization")= logtD_to_log_approx_normalization.get_copy_as_RcppList());
+	}
+
+	void set_to_RcppList(const Rcpp::List &L){
+		max_error			= Rcpp::as<double>(L["max_error"]);
+		max_Legendre_terms	= Rcpp::as<long>(L["max_Legendre_terms"]);
+		approx_max_tD		= Rcpp::as<double>(L["approx_max_tD"]);
+		logtD_to_log_approx_normalization.set_to_RcppList(L["logtD_to_log_approx_normalization"]);
+	}
+
+};
+
+
+
+
+// Functor for calculating the loglikelihood of observing certain geodesic distances 
+// traversed during certain time intervals, assuming a spherical Brownian motion
+// This functor is defined as a function of the diffusivity, and hence can be used to fit the diffusivity via maximum-likelihood
+class Spherical_Brownian_Motion_LL{
+private:
+	dvector time_steps; // 1D numeric array of length NC, listing time steps for which we have geodesic angles available
+	std::vector<char> include_transitions; // 1D numeric array of length NC, specifying for each transition whether it should be considered or not
+	
+	// transition distances. Only relevant if with_sampling_rate==false.
+	dvector distances; // 1D numeric array of length NC, listing realized (observed) geodesic distances corresponding to the time_steps[] provided.
+
+	// transitions explicitly specified in terms of old and new coordinates. Only relevant if with_sampling_rate==true.
+	dvector old_thetas;	// 1D numeric array of length NC, listing old latitudes of transitions, in radians
+	dvector old_phis;	// 1D numeric array of length NC, listing old longitudes of transitions, in radians
+	dvector new_thetas;	// 1D numeric array of length NC, listing new latitudes of transitions, in radians
+	dvector new_phis;	// 1D numeric array of length NC, listing new longitudes of transitions, in radians
+		
+	double 	radius;
+	bool 	log_diffusivity; // if true, then the log-transformed diffusivity will be used as functor query instead of the actual diffusivity
+	
+	// type of probability density to use for LL
+	// if SBMTransitionDensityAngular, the 1-dimensional density for the transition angle omega is used
+	// if SBMTransitionDensityAxial, the 1-dimensional density for x=cos(omega) will be used
+	// if SBMTransitionDensitySurface, the full 2-dimensional density with respect to the induced Lebesque measure is used. This type allows the sampling rate to be taken into account when calculating the LL. Requires that with_sampling_rate=true and that a sampling_rate has been specified.
+	SBMTransitionDensity density_type; // if false, the LL is constructed using the probability densities of axial distances (x:=cos(omega)) instead of angular distances (omega). This allows also considering geographical distances of zero.
+	
+	// functor for calculating probability densities of transitions
+	Spherical_Brownian_Motion_PD SBM_PD;
+	
+	SphereFunctor sampling_rate; // functor specifying the sampling rate at each geographic location
+	bool	with_sampling_rate; // if true, the location-dependent sampling rate will be taken into account (if specified during construction)
+	
+public:
+
+	// Constructor. See the class's private member variables for an explanation of each input argument.
+	Spherical_Brownian_Motion_LL(	const double				radius_,
+									const dvector 				&time_steps_,	// 1D numeric array of length NC
+									const dvector 				&distances_,	// 1D numeric array of length NC
+									const double				max_error,
+									const long					max_Legendre_terms,
+									const bool					log_diffusivity_,	// specify whether diffusivity will be passed in log-transformed format instead of raw
+									const SBMTransitionDensity	density_type_){
+		radius 				= radius_;
+		time_steps			= time_steps_;
+		distances 			= distances_;
+		log_diffusivity		= log_diffusivity_;
+		density_type	 	= density_type_;
+		with_sampling_rate	= false;
+		SBM_PD				= Spherical_Brownian_Motion_PD(max_error, max_Legendre_terms);
+		include_transitions.assign(time_steps.size(),1);
+	}
+	
+	// Constructor, accounting for a geographically biased sampling rate
+	Spherical_Brownian_Motion_LL(	const double			radius_,
+									const dvector 			&time_steps_,	// 1D numeric array of length NC
+									const dvector 			&old_thetas_,	// 1D numeric array of length NC, listing old latitudes within [-pi/2,pi/2]
+									const dvector 			&old_phis_,		// 1D numeric array of length NC, listing old longitudes within [-pi,pi]
+									const dvector 			&new_thetas_,	// 1D numeric array of length NC, listing new latitudes within [-pi/2,pi/2]
+									const dvector 			&new_phis_,		// 1D numeric array of length NC, listing new longitudes within [-pi,pi]
+									const SphereFunctor	&sampling_rate_,// functor specifying the sampling rate at any given geographic location
+									const double			max_error,
+									const long				max_Legendre_terms,
+									const bool				log_diffusivity_){	// specify whether diffusivity will be passed in log-transformed format instead of raw
+		radius 				= radius_;
+		time_steps			= time_steps_;
+		old_thetas			= old_thetas_;
+		old_phis			= old_phis_;
+		new_thetas			= new_thetas_;
+		new_phis			= new_phis_;
+		log_diffusivity		= log_diffusivity_;
+		density_type	 	= SBMTransitionDensitySurface;
+		sampling_rate		= sampling_rate_;
+		with_sampling_rate	= true;
+		SBM_PD				= Spherical_Brownian_Motion_PD(max_error, max_Legendre_terms);
+		include_transitions.assign(time_steps.size(),1);
+	}
+	
+	// specify a new set of distances, while keeping everything else the same
+	// hence, the new distances_[] should have the same size as the internal existing distances[]
+	void change_distances(const dvector &distances_){
+		distances = distances_;
+	}
+
+	// specify a new set of new-coordinates, while keeping everything else the same
+	// hence, the new new_thetas_[] and new_phis_[] should have the same size as the internal existing new_thetas_[] and new_phis_[]
+	void change_new_coordinates(const dvector &new_thetas_, const dvector &new_phis_){
+		new_thetas = new_thetas_;
+		new_phis   = new_phis_;
+	}
+	
+	// OLD CODE
+// 	void change_include_transitions(const std::vector<char> &include_transitions_){
+// 		include_transitions = include_transitions_;
+// 	}
+
+	// evaluate log-likelihood for the requested diffusivity, based on the internaly stored SBM transitions
+	double operator()(double diffusivity) const{
+		double LL = 0;
+		double LPD, tD;
+		if(log_diffusivity) diffusivity = exp(diffusivity); // undo log-transformation of diffusivity
+		for(long p=0; p<time_steps.size(); ++p){
+			if(!include_transitions[p]) continue;
+			tD = time_steps[p]*diffusivity/SQ(radius);
+			if(density_type==SBMTransitionDensityAngular){
+				if((time_steps[p]<=0) || (distances[p]<=0)) continue; // don't consider zero time steps and/or zero geographical distances, since they turn LL into NaN
+				LPD = SBM_PD.angular_LPD(tD, distances[p]/radius);
+			}else if(density_type==SBMTransitionDensityAxial){
+				if(time_steps[p]<=0) continue; // don't consider zero time steps, since they turn LL into NaN
+				LPD = SBM_PD.axial_LPD(tD, cos(distances[p]/radius));
+			}else{
+				if(time_steps[p]<=0) continue; // don't consider zero time steps, since they turn LL into NaN
+				if(with_sampling_rate){
+					// take into account location-dependent sampling rate
+					LPD = SBM_PD.transition_LPD(tD,	old_thetas[p], old_phis[p], new_thetas[p], new_phis[p], sampling_rate);
+					//Rcout << "  --> tD=" << tD << ", (" << old_thetas[p]*180/M_PI << ", " << old_phis[p]*180/M_PI << ") --> (" << new_thetas[p]*180/M_PI << ", " << new_phis[p]*180/M_PI << "): cond-LPD=" << LPD << endl; // debug
+					
+				}else{
+					// assume equal sampling rate everywhere
+					LPD = (1/(2*M_PI)) * SBM_PD.axial_LPD(time_steps[p]*diffusivity/SQ(radius), cos(distances[p]/radius));
+				}
+			}
+			if(std::isnan(LPD) || (LPD==-INFTY_D)) return -INFTY_D;
+			LL += LPD;
+		}
+		// abort if the user has interrupted the calling R program
+		Rcpp::checkUserInterrupt();
+		return LL;
+	}	
+};
+
+
+// given a set of geodesic transitions according to a constant-rate SBM model, calcuate the log-likelihoods for various candidate diffusivities
+// [[Rcpp::export]]
+Rcpp::List SBM_LLs_of_transitions_CPP(	const double				radius,			// (INPUT) radius of the sphere
+										const std::vector<double> 	&time_steps,	// (INPUT) 1D numeric array of length NC, listing time steps for which we have geodesic angles available
+										const std::vector<double> 	&distances,		// (INPUT) 1D numeric array of length NC, listing realized (observed) geodesic distances corresponding to the times[] provided. These distances must be between 0 and pi*radius.
+										const std::vector<double>	&diffusivities,	// (INPUT) 1D numeric array listing diffusivities for which to calculate the log-likelihoods
+										const double				max_error,		// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+										const long					max_Legendre_terms){	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+	// define loglikelihood functor
+	Spherical_Brownian_Motion_LL LL(radius, time_steps, distances, max_error, max_Legendre_terms, false, SBMTransitionDensityAxial);
+
+	// calculate log-likelihoods for the various diffusivities
+	dvector LLs(diffusivities.size());
+	for(long d=0; d<diffusivities.size(); ++d){
+		LLs[d] = LL(diffusivities[d]);
+	}
+	return Rcpp::List::create(	Rcpp::Named("loglikelihoods") = LLs);
+}
+
+
+// given a set of geodesic transitions according to a constant-rate SBM model with location-dependent sampling rate, calculate the log-likelihoods for various candidate diffusivities
+// [[Rcpp::export]]
+Rcpp::List SBM_LLs_of_sampled_transitions_CPP(	const double				radius,				// (INPUT) radius of the sphere
+												const std::vector<double> 	&time_steps,		// (INPUT) 1D numeric array of length NC, listing time steps for which we have geodesic angles available
+												const std::vector<double> 	&old_thetas,		// (INPUT) 1D numeric array of length NC, listing latitudes of old points in radians
+												const std::vector<double> 	&old_phis,			// (INPUT) 1D numeric array of length NC, listing longitudes of old points in radians
+												const std::vector<double> 	&new_thetas,		// (INPUT) 1D numeric array of length NC, listing latitudes of new points in radians
+												const std::vector<double> 	&new_phis,			// (INPUT) 1D numeric array of length NC, listing longitudes of new points in radians
+												const std::vector<double>	&diffusivities,		// (INPUT) 1D numeric array listing diffusivities for which to calculate the log-likelihoods
+												const long					Nlat,				// (INPUT) number of latitude grid points, for specifying the sampling rate
+												const long					Nlon,				// (INPUT) number of longitude grid points, for specifying the sampling rate
+												const std::vector<double>	&sampling_rates,	// (INPUT) 2D numeric array of size Nlat x Nlon, in row-major format, listing sampling rates at various latitudes (from -90 to 90) and longitudes (from -180 to 180), on a regular grid.
+												const double				max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+												const long					max_Legendre_terms){	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+	// construct sampling rate functor
+	SphereFunctor sampling_rate(Nlat, Nlon, sampling_rates);
+
+	// define loglikelihood functor
+	Spherical_Brownian_Motion_LL LL(radius, 
+									time_steps, 
+									old_thetas, 
+									old_phis, 
+									new_thetas, 
+									new_phis, 
+									sampling_rate, 
+									max_error, 
+									max_Legendre_terms, 
+									false);
+
+	// calculate log-likelihoods for the various diffusivities
+	dvector LLs(diffusivities.size());
+	for(long d=0; d<diffusivities.size(); ++d){
+		LLs[d] = LL(diffusivities[d]);
+	}
+	return Rcpp::List::create(	Rcpp::Named("loglikelihoods") = LLs);
+}
+
+
+
+// create an Spherical_Brownian_Motion_PD object (for calculating SBM transition probability densities) and return it to R as an Rcpp::List
+// [[Rcpp::export]]
+Rcpp::List SBM_get_SBM_PD_functor_CPP(	const double	max_error,		// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+										const long		max_Legendre_terms){	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+	Spherical_Brownian_Motion_PD SBM_PD(max_error, max_Legendre_terms);
+	return SBM_PD.get_copy_as_RcppList();
+}
+
+
+// calculate the mean transition angle omega of spherical Brownian motion, for a given time step and diffusivity
+// [[Rcpp::export]]
+double SBM_get_average_transition_angle_CPP(const double	tD,					// (INPUT) product of timestep * diffusivity / radius^2
+											const double	max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+											const long		max_Legendre_terms){// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+	if(tD<=0){
+		return 0;
+	}else if(tD<0.1){
+		// use approximation by [Gosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+		double A = integrate1D(	[&] (const double omega) { return omega*sqrt(sin(omega)*omega)*exp(-SQ(omega)/(4*tD)); }, 
+								0, 		// xmin
+								M_PI, 	// xmax
+								0.001, 	// default_dx
+								1e-10, 	// min_dx
+								1e-3, 	// max_dy
+								1e-3); 	// max_rel_dy
+		double B = integrate1D(	[&] (const double omega) { return sqrt(sin(omega)*omega)*exp(-SQ(omega)/(4*tD)); }, 
+								0, 		// xmin
+								M_PI, 	// xmax
+								0.001, 	// default_dx
+								1e-10, 	// min_dx
+								1e-3, 	// max_dy
+								1e-3); 	// max_rel_dy
+		return A/B;
+	}else{
+		// tD is sufficiently large, so use (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+		return integrate1D(	[&] (const double omega) { return omega*exp(SBM_angular_LPD_series(tD, omega, max_error, max_Legendre_terms)); }, 
+							0, 		// xmin
+							M_PI, 	// xmax
+							0.001, 	// default_dx
+							1e-10, 	// min_dx
+							1e-3, 	// max_dy
+							1e-3); 	// max_rel_dy
+	}		
+}
+
+
+// Calculate the likelihood of observing specific independent contrasts under a given SBM model with time-dependent diffusivity
+// [[Rcpp::export]]
+Rcpp::List TSBM_LL_of_transitions_CPP(	const double				radius,			// (INPUT) radius of the sphere
+										const std::vector<double> 	&MRCA_times,	// (INPUT) 1D numeric array of length NC, listing the times (distance from root) of the MRCA of each independent contrast (tip pair)
+										const std::vector<double>	&child_times1,	// (INPUT) 1D numeric array of size NC, listing the times (distance from root) of the first child per independent contrast
+										const std::vector<double>	&child_times2,	// (INPUT) 1D numeric array of size NC, listing the times (distance from root) of the first child per independent contrast
+										const std::vector<double> 	&distances,		// (INPUT) 1D numeric array of length NC, listing geodesic distances per independent contrast. These distances must be between 0 and pi*radius.
+										const std::vector<double>	&time_grid,		// (INPUT) 1D numeric array of size NT listing times (distance from root) in ascending order on which diffusivities are defined
+										const std::vector<double>	&diffusivities,	// (INPUT) 1D numeric array of size NT listing diffusivities at the times in time_grid[]
+										const long					splines_degree,	// (INPUT) one of 0,1,2,3 specifying the splines degree assumed for the diffusivity
+										const Rcpp::List			&SBM_PD_functor){// (INPUT) pre-calculated generic SBM probability density functor, i.e. as returned by the Rcpp function SBM_get_SBM_PD_functor_CPP. Note that this object only needs to be calculated once, and does not depend on the radius or the diffusivity.
+	const long NC = MRCA_times.size();
+	
+	// calculate polynomial representation of diffusivity as function of time
+	PiecewisePolynomial<double> diffusivity_functor;
+	diffusivity_functor.set_to_spline(time_grid, diffusivities, splines_degree, ExtrapolationTypeConst, ExtrapolationTypeConst, diffusivities[0], diffusivities.back());
+	
+	// calculate antiderivative of diffusivity over time
+	PiecewisePolynomial<double> diffusivity_integral;
+	diffusivity_functor.get_antiderivative(0, diffusivity_integral);
+
+	// define probability density functor for single transitions
+	Spherical_Brownian_Motion_PD SBM_PD;
+	SBM_PD.set_to_RcppList(SBM_PD_functor);
+
+	// iterate over independent contrasts and sum up their contributions to the loglikelihood
+	double LL = 0;
+	double LPD, tD;
+	for(long p=0; p<NC; ++p){
+		if(child_times1[p]+child_times2[p]-2*MRCA_times[p]<=0) continue; // don't consider zero time steps, since they turn LL into NaN
+		tD = (diffusivity_integral(child_times1[p])+diffusivity_integral(child_times2[p])-2*diffusivity_integral(MRCA_times[p]))/SQ(radius);
+		LPD = SBM_PD.axial_LPD(tD, cos(distances[p]/radius));
+		if(std::isnan(LPD) || (LPD==-INFTY_D)){
+			LL = -INFTY_D;
+			break;
+		}
+		LL += LPD;
+	}
+
+	return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("loglikelihood") = LL);
+}
+
+
+
+// Calculate the likelihood of observing specific independent contrasts under a given SBM model with time-dependent diffusivity
+// Correcting for location-dependent sampling rates
+// [[Rcpp::export]]
+Rcpp::List TSBM_LL_of_sampled_transitions_CPP(	const double				radius,			// (INPUT) radius of the sphere
+												const std::vector<double> 	&MRCA_times,	// (INPUT) 1D numeric array of length NC, listing the times (distance from root) of the MRCA of each independent contrast (tip pair)
+												const std::vector<double>	&child_times1,	// (INPUT) 1D numeric array of size NC, listing the times (distance from root) of the first child per independent contrast
+												const std::vector<double>	&child_times2,	// (INPUT) 1D numeric array of size NC, listing the times (distance from root) of the first child per independent contrast
+												const std::vector<double> 	&old_thetas,		// (INPUT) 1D numeric array of length NC, listing latitudes of old points in radians
+												const std::vector<double> 	&old_phis,			// (INPUT) 1D numeric array of length NC, listing longitudes of old points in radians
+												const std::vector<double> 	&new_thetas,		// (INPUT) 1D numeric array of length NC, listing latitudes of new points in radians
+												const std::vector<double> 	&new_phis,			// (INPUT) 1D numeric array of length NC, listing longitudes of new points in radians
+												const std::vector<double>	&time_grid,			// (INPUT) 1D numeric array of size NT listing times (distance from root) in ascending order on which diffusivities are defined
+												const std::vector<double>	&diffusivities,		// (INPUT) 1D numeric array of size NT listing diffusivities at the times in time_grid[]
+												const long					splines_degree,		// (INPUT) one of 0,1,2,3 specifying the splines degree assumed for the diffusivity
+												const long					Nlat,				// (INPUT) number of latitude grid points, for specifying the sampling rate
+												const long					Nlon,				// (INPUT) number of longitude grid points, for specifying the sampling rate
+												const std::vector<double>	&sampling_rates,	// (INPUT) 2D numeric array of size Nlat x Nlon, in row-major format, listing sampling rates at various latitudes (from -90 to 90) and longitudes (from -180 to 180), on a regular grid.
+												const Rcpp::List			&SBM_PD_functor){	// (INPUT) pre-calculated generic SBM probability density functor, i.e. as returned by the Rcpp function SBM_get_SBM_PD_functor_CPP. Note that this object only needs to be calculated once, and does not depend on the radius or the diffusivity.
+	const long NC = MRCA_times.size();
+	
+	// construct sampling rate functor
+	SphereFunctor sampling_rate(Nlat, Nlon, sampling_rates);
+
+	// calculate polynomial representation of diffusivity as function of time
+	PiecewisePolynomial<double> diffusivity_functor;
+	diffusivity_functor.set_to_spline(time_grid, diffusivities, splines_degree, ExtrapolationTypeConst, ExtrapolationTypeConst, diffusivities[0], diffusivities.back());
+	
+	// calculate antiderivative of diffusivity over time
+	PiecewisePolynomial<double> diffusivity_integral;
+	diffusivity_functor.get_antiderivative(0, diffusivity_integral);
+
+	// define probability density functor for single transitions
+	Spherical_Brownian_Motion_PD SBM_PD;
+	SBM_PD.set_to_RcppList(SBM_PD_functor);
+
+	// iterate over independent contrasts and sum up their contributions to the loglikelihood
+	double LL = 0;
+	double LPD, tD;
+	for(long p=0; p<NC; ++p){
+		if(child_times1[p]+child_times2[p]-2*MRCA_times[p]<=0) continue; // don't consider zero time steps, since they turn LL into NaN
+		tD = (diffusivity_integral(child_times1[p])+diffusivity_integral(child_times2[p])-2*diffusivity_integral(MRCA_times[p]))/SQ(radius);
+		//LPD = SBM_PD.axial_LPD(tD, cos(distances[p]/radius));
+		LPD = SBM_PD.transition_LPD(tD, old_thetas[p],	old_phis[p], new_thetas[p], new_phis[p], sampling_rate);
+		if(std::isnan(LPD) || (LPD==-INFTY_D)){
+			LL = -INFTY_D;
+			break;
+		}
+		LL += LPD;
+	}
+
+	return Rcpp::List::create(Rcpp::Named("success") = true, Rcpp::Named("loglikelihood") = LL);
+}
+
+
+// quickly get a rough estimate for the SBM diffusivity using the planar approximation
+double SBM_planar_diffusivity_estimate(	const dvector	&time_steps,		// (INPUT) 1D array of size NP, listing time steps
+										const dvector	&distances,			// (INPUT) 1D array of size NP, listing transition distances. Used to get a first guess for the diffusivity.
+										const std::vector<char> &include_transition){ // (INPUT) either a vector of size NP, or empty (include all transitions)
+	const long Ndim = 2;
+	double diffusivity = 0;
+	long Nvalids = 0;
+	for(long p=0; p<time_steps.size(); ++p){
+		if(time_steps[p]<=0) continue; // don't consider zero time steps
+		if((!include_transition.empty()) && (!include_transition[p])) continue;
+		++Nvalids;
+		diffusivity += SQ(distances[p])/time_steps[p];
+	}
+	diffusivity *= 0.5 * (1.0/(Ndim*Nvalids));
+	return diffusivity;
+}
+
+
+// fit diffusivity of spherical Brownian motion model
+// This function requires that the loglikelihood functor has already been construted (which is constly), thus allowing for efficient reusal of the functor, e.g. for bootstrapping
+double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (INPUT) log-likelihood functor, already initialized to the provided times and transitions, mapping log(diffusivity) to log(likelihood)
+								const double						opt_epsilon,		// (INPUT) maximum error tolerance in the fitted diffusivity (on a log scale) when maximizing the log-likelihood
+								const long							max_iterations,		// (INPUT) maximum number of iterations during the optimization of the log-likelihood
+								double								guess_diffusivity,	// (INPUT) initial guess for the diffusivity
+								double								min_diffusivity,	// (INPUT) optional lower bound for the diffusivity. May be NAN_D.
+								double								max_diffusivity){	// (INPUT) optional max_diffusivity bound for the diffusivity. May be NAN_D.
+	// figure out a lower & upper bound if needed
+	if(isnan(min_diffusivity) || isnan(max_diffusivity)){
+		// use planar approximation to get a quick first guess for the diffusivity
+		const double guess_LL = LL(log(guess_diffusivity));
+		if(abs(guess_LL)==INFTY_D) return NAN_D; // something went wrong
+	
+		// find a reasonable min_diffusivity bound for the diffusivity if needed
+		if(isnan(min_diffusivity)){
+			min_diffusivity = guess_diffusivity;
+			double LL1=guess_LL, LL2;
+			// keep decreasing min_diffusivity until LL starts decreasing
+			for(long i=0; i<20; ++i){
+				min_diffusivity /= 2;
+				LL2 = LL(log(min_diffusivity));
+				if(LL2<LL1) break;
+				LL1 = LL2;
+			}
+		}else{
+			min_diffusivity = max(min_diffusivity, guess_diffusivity*1e-10);
+		}
+
+		// find a reasonable max_diffusivity bound for the diffusivity if needed
+		if(isnan(max_diffusivity)){
+			max_diffusivity = guess_diffusivity;
+			double LL1=guess_LL, LL2;
+			// keep increasing max_diffusivity until LL starts decreasing
+			for(long i=0; i<20; ++i){
+				max_diffusivity *= 2;
+				LL2 = LL(log(max_diffusivity));
+				if(LL2<LL1) break;
+				LL1 = LL2;
+			}
+		}else{
+			max_diffusivity = min(max_diffusivity, guess_diffusivity*1e10);
+		}
+	}
+
+	// use Golden ratio method to maximize the log-likelihood of observing the distances[] traversed during the time steps times[]
+	const double fit_diffusivity = exp(optimize_via_golden_ratio(LL, log(min_diffusivity), log(max_diffusivity), false, opt_epsilon, 0.0, max_iterations));
+	return fit_diffusivity;
+}
+
+
+
+// Fit the diffusivity parameter of a spherical Brownian motion process based on observed geodesic distances traversed during certain time intervals
+// The provided time-distance pairs (times[] and distances[]) are assumed to each be independent realizations of the stochastic process
+// Fitting is done via maximum-likelihood. The returned diffusivity is defined in squared distance units per time.
+// [[Rcpp::export]]
+Rcpp::List fit_SBM_diffusivity_from_transitions_CPP(const double				radius,				// (INPUT) radius of the sphere
+													const std::vector<double> 	&time_steps,		// (INPUT) 1D numeric array of length NC, listing time steps for which we have geodesic angles available
+													const std::vector<double> 	&distances,			// (INPUT) 1D numeric array of length NC, listing realized (observed) geodesic distances corresponding to the time_steps[] provided. These distances must be between 0 and pi*radius.
+													const double				max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+													const long					max_Legendre_terms,	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+													const double				opt_epsilon,		// (INPUT) maximum error tolerance in the fitted diffusivity (on a log scale) when maximizing the log-likelihood
+													const long					max_iterations,		// (INPUT) maximum number of iterations during the optimization of the log-likelihood
+													double						min_diffusivity,	// (INPUT) optional lower bound for the diffusivity. May be NAN_D.
+													double						max_diffusivity,	// (INPUT) optional upper bound for the diffusivity. May be NAN_D.
+													const long					Nbootstraps){		// (INPUT) number of boostraps, e.g. for estimaitng standard errors. Set to 0 for no boostrapping.	
+	const long NC = time_steps.size();
+
+	// define loglikelihood functor, mapping log(diffusivity) --> log(likelihood)
+	Spherical_Brownian_Motion_LL LL(radius, time_steps, distances, max_error, max_Legendre_terms, true, SBMTransitionDensityAxial);
+	Rcpp::checkUserInterrupt();	
+	
+	// use Golden ratio method to maximize the log-likelihood of observing the distances[] traversed during the time steps time_steps[]
+	double guess_diffusivity 		= SBM_planar_diffusivity_estimate(time_steps, distances, vector<char>());
+	const double fit_diffusivity 	= aux_fit_SBM_diffusivity(LL, opt_epsilon, max_iterations, guess_diffusivity, min_diffusivity, max_diffusivity);
+	const double fit_LL 			= LL(log(fit_diffusivity));
+	if(std::isnan(fit_diffusivity)){
+		return Rcpp::List::create(	Rcpp::Named("success")	= false,
+									Rcpp::Named("error")	= "Fitted diffusivity is NaN");
+	}
+	
+	// perform boostrapping if needed
+	dvector bootstrap_fit_diffusivities(Nbootstraps), bootstrap_fit_LLs(Nbootstraps), bootstrap_LLs(Nbootstraps);
+	if(Nbootstraps>0){
+		dvector bootstrap_distances(NC);
+		for(long b=0; b<Nbootstraps; ++b){
+			// simulate random geodesic distances based on fitted diffusivity
+			for(long p=0; p<NC; ++p){
+				bootstrap_distances[p] = radius * draw_SBM_geodesic_angle_CPP(time_steps[p]*fit_diffusivity/SQ(radius));
+			}
+			// fit diffusivity again using simulated data
+			LL.change_distances(bootstrap_distances);
+			guess_diffusivity 				= SBM_planar_diffusivity_estimate(time_steps, bootstrap_distances, vector<char>());
+			bootstrap_fit_diffusivities[b] 	= aux_fit_SBM_diffusivity(LL, opt_epsilon, max_iterations, guess_diffusivity, min_diffusivity, max_diffusivity);
+			bootstrap_fit_LLs[b]			= LL(log(bootstrap_fit_diffusivities[b]));
+			bootstrap_LLs[b]				= LL(log(fit_diffusivity));
+			Rcpp::checkUserInterrupt();	
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("success") 						= true,
+								Rcpp::Named("fit_diffusivity") 				= fit_diffusivity,
+								Rcpp::Named("fit_loglikelihood")			= fit_LL,
+								Rcpp::Named("bootstrap_fit_diffusivities")	= bootstrap_fit_diffusivities,
+								Rcpp::Named("bootstrap_fit_loglikelihoods")	= bootstrap_fit_LLs,// loglikelihoods of data generated by the fitted model during bootstraps, under the respective models fitted for the generated data
+								Rcpp::Named("bootstrap_loglikelihoods")		= bootstrap_LLs); // loglikelihoods of data generated by the fitted model during bootstraps, under the original fitted model
+}
+
+
+
+// Fit the diffusivity parameter of a spherical Brownian motion process based on observed geographical transitions over certain time intervals
+// The provided transitions (old_theta,old_phi)->(new_theta,new_phi) are assumed to each be independent realizations of the stochastic process
+// This function accommodates biased geographical sampling, i.e. when sampling rates differ between geographical locations
+// Fitting is done via maximum-likelihood. The returned diffusivity is defined in squared distance units per time.
+// [[Rcpp::export]]
+Rcpp::List fit_SBM_from_sampled_transitions_CPP(const double				radius,				// (INPUT) radius of the sphere
+												const std::vector<double> 	&time_steps,		// (INPUT) 1D numeric array of length NC, listing time steps for which we have geodesic angles available
+												const std::vector<double> 	&old_thetas,		// (INPUT) 1D numeric array of length NC, listing latitudes of old points in radians
+												const std::vector<double> 	&old_phis,			// (INPUT) 1D numeric array of length NC, listing longitudes of old points in radians
+												const std::vector<double> 	&new_thetas,		// (INPUT) 1D numeric array of length NC, listing latitudes of new points in radians
+												const std::vector<double> 	&new_phis,			// (INPUT) 1D numeric array of length NC, listing longitudes of new points in radians
+												const long					Nlat,				// (INPUT) number of latitude grid points, for specifying the sampling rate
+												const long					Nlon,				// (INPUT) number of longitude grid points, for specifying the sampling rate
+												const std::vector<double>	&sampling_rates,	// (INPUT) 2D numeric array of size Nlat x Nlon, in row-major format, listing sampling rates at various latitudes (from -90 to 90) and longitudes (from -180 to 180), on a regular grid.
+												const double				max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
+												const long					max_Legendre_terms,	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+												const double				opt_epsilon,		// (INPUT) maximum error tolerance in the fitted diffusivity (on a log scale) when maximizing the log-likelihood
+												const long					max_iterations,		// (INPUT) maximum number of iterations during the optimization of the log-likelihood
+												double						min_diffusivity,	// (INPUT) optional lower bound for the diffusivity. May be NAN_D.
+												double						max_diffusivity,	// (INPUT) optional upper bound for the diffusivity. May be NAN_D.
+												const long					Nbootstraps){		// (INPUT) number of boostraps, e.g. for estimaitng standard errors. Set to <=0 for no boostrapping.	
+	const long NC = time_steps.size();
+	
+	// construct sampling rate functor
+	SphereFunctor sampling_rate(Nlat, Nlon, sampling_rates);
+	
+	// calculate angular transition distances
+	dvector distances(NC);
+	for(long c=0; c<NC; ++c){
+		distances[c] = radius * geodesic_angle(old_thetas[c], old_phis[c], new_thetas[c], new_phis[c]);
+	}
+
+	// define loglikelihood functor, mapping log(diffusivity) --> log(likelihood)
+	Spherical_Brownian_Motion_LL LL(radius, 
+									time_steps, 
+									old_thetas, 
+									old_phis, 
+									new_thetas, 
+									new_phis, 
+									sampling_rate, 
+									max_error, 
+									max_Legendre_terms, 
+									true);
+	Rcpp::checkUserInterrupt();	
+	
+	// use Golden ratio method to maximize the log-likelihood of observing the transitions during the given time_steps[]
+	double guess_diffusivity 		= SBM_planar_diffusivity_estimate(time_steps, distances, vector<char>());
+	const double fit_diffusivity 	= aux_fit_SBM_diffusivity(LL, opt_epsilon, max_iterations, guess_diffusivity, min_diffusivity, max_diffusivity);
+	const double fit_LL 			= LL(log(fit_diffusivity));
+	if(std::isnan(fit_diffusivity)){
+		return Rcpp::List::create(	Rcpp::Named("success")	= false,
+									Rcpp::Named("error")	= "Fitted diffusivity is NaN");
+	}
+	
+	/* OLD CODE. WRONG. NEED TO GENERATE SAME NUMBER OF TRANSITIONS
+	// perform boostrapping if needed
+	dvector bootstrap_diffusivities(Nbootstraps);
+	if(Nbootstraps>0){
+		dvector scratch_Gcoeff;
+		dvector bootstrap_thetas(NC), bootstrap_phis(NC), bootstrap_distances(NC);
+		std::vector<char> bootstrap_include(NC);
+		for(long b=0; b<Nbootstraps; ++b){
+			// simulate random transitions on sphere based on fitted diffusivity
+			for(long c=0; c<NC; ++c){
+				draw_SBM_transition(time_steps[c]*fit_diffusivity/SQ(radius),
+									old_thetas[c],
+									old_phis[c],
+									scratch_Gcoeff,
+									bootstrap_thetas[c],
+									bootstrap_phis[c],
+									bootstrap_distances[c]);
+				bootstrap_distances[c] *= radius;
+				// decide whether this tip should be "sampled" or not
+				bootstrap_include[c] = (R::runif(0.0,1.0)<sampling_rate(bootstrap_thetas[c],bootstrap_phis[c]));
+			}
+			// fit diffusivity again using simulated data
+			LL.change_new_coordinates(bootstrap_thetas, bootstrap_phis);
+			LL.change_include_transitions(bootstrap_include);
+			guess_diffusivity = SBM_planar_diffusivity_estimate(time_steps, bootstrap_distances, bootstrap_include);
+			bootstrap_diffusivities[b] = aux_fit_SBM_diffusivity(LL, opt_epsilon, max_iterations, guess_diffusivity, min_diffusivity, max_diffusivity);
+			Rcpp::checkUserInterrupt();	
+		}
+	}
+	*/
+	
+	return Rcpp::List::create(	Rcpp::Named("success") 				= true,
+								Rcpp::Named("fit_diffusivity")		= fit_diffusivity,
+								Rcpp::Named("fit_loglikelihood")	= fit_LL);	
+}

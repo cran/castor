@@ -648,6 +648,55 @@ get_random_params = function(defaults, lower_bounds, upper_bounds, scales, order
 }
 
 
+# function for reformatting/sanitizing generic fit parameters provided by the user
+# used by various fitting routines
+prepare_generic_fit_params = function(	param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
+										param_guess			= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
+										param_min			= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
+										param_max			= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
+										param_scale			= NULL){	# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
+	NP = length(param_values)
+	param_names = names(param_values);
+	if(is.null(param_guess)){
+		if(any(is.finite(param_values))){
+			return(list(success=FALSE, error=sprintf("Missing guessed parameter values")))
+		}else{
+			param_guess = rep(NA, times=NP);
+		}
+	}
+	if(length(param_guess)!=NP){
+		return(list(success=FALSE, error=sprintf("Number of guessed parameters (%d) differs from number of model parameters (%d)",length(param_guess),NP)))
+	}else if(!is.null(param_names)){
+		names(param_guess) = param_names;
+	}
+	if((!is.null(param_names)) && (length(param_names)!=NP)){
+		return(list(success=FALSE, error=sprintf("Number of parameter names (%d) differs from number of model parameters (%d)",length(param_names),NP)))
+	}
+	if(is.null(param_min)){
+		param_min = rep(-Inf,times=NP);
+	}else if(length(param_min)==1){
+		param_min = rep(param_min,times=NP);
+	}else if(length(param_min)!=NP){
+		return(list(success=FALSE, error=sprintf("Length of param_min[] (%d) differs from number of model parameters (%d)",length(param_min),NP)))
+	}
+	if(is.null(param_max)){
+		param_max = rep(+Inf,times=NP);
+	}else if(length(param_max)==1){
+		param_max = rep(param_max,times=NP);
+	}else if(length(param_max)!=NP){
+		return(list(success=FALSE, error=sprintf("Length of param_max[] (%d) differs from number of model parameters (%d)",length(param_max),NP)))
+	}
+	if(is.null(param_scale)){
+		param_scale = rep(NA,times=NP);
+	}else if(length(param_scale)==1){
+		param_scale = rep(param_scale,times=NP);
+	}else if(length(param_scale)!=NP){
+		return(list(success=FALSE, error=sprintf("Length of param_scale[] (%d) differs from number of model parameters (%d)",length(param_scale),NP)))
+	}
+	return(list(success=TRUE, param_values=param_values, param_guess=param_guess, param_min=param_min, param_max=param_max, param_scale))
+}
+
+
 # given an undirected graph (nodes,edges), find its maximal connected subgraphs
 # any two nodes may be connected by zero, one or multiple edges
 # edges[] should be a 2D array of size Nedges x 2, listing source & target nodes of the graph
@@ -688,4 +737,39 @@ evaluate_univariate_expression = function(expression, Xname="x", X){
 		return(list(success=FALSE, error="Unknown data format X: Expecting either a vector or a matrix"))
 	}
 }
+
+
+extract_independent_sister_tips = function(tree){
+	results = extract_independent_sister_tips_CPP(	Ntips		= length(tree$tip.label),
+													Nnodes		= tree$Nnode,
+													Nedges		= nrow(tree$edge),
+													tree_edge	= as.vector(t(tree$edge))-1);
+	tip_pairs = matrix(as.integer(results$tip_pairs),ncol=2,byrow=TRUE) + 1L;
+	return(tip_pairs);
+}
+
+
+# calculate geodesic angle (aka. central angle) between two geographical locations (assuming the Earth is a sphere)
+# based on the Vincenty formula with equal major and minor axis
+# geographic coordinates should be given in decimal degrees
+geodesic_angle = function(latitude1, longitude1, latitude2, longitude2){
+	theta1	= pi*latitude1/180;
+	theta2	= pi*latitude2/180;
+	phi1 	= pi*longitude1/180.0;
+	phi2 	= pi*longitude2/180.0;
+	delta	= abs(phi1-phi2);
+	angle 	= abs(atan2(sqrt((cos(theta2)*sin(delta))^2 + (cos(theta1)*sin(theta2)-sin(theta1)*cos(theta2)*cos(delta))^2), (sin(theta1)*sin(theta2)+cos(theta1)*cos(theta2)*cos(delta))));
+	return(angle);
+}
+
+# calculate expectation of sin^2(omega) across multiple independent contrasts with non-equal time steps, where omega is the central transition angle, for the spherical Brownian Motion
+get_expected_SBM_sinsquare = function(time_steps, diffusivity, radius){
+	return((2/3)*(1-mean(exp(-6*(diffusivity/(radius^2))*time_steps))))
+}
+
+get_expected_SBM_transition_angle = function(time_step, diffusivity, radius){
+	tD = time_step * diffusivity/radius^2;
+	return(SBM_get_average_transition_angle_CPP(tD = tD, max_error = 1e-7, max_Legendre_terms = 200))
+}
+
 
