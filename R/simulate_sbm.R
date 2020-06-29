@@ -10,7 +10,7 @@ simulate_sbm = function(	tree,
 	Nnodes  	= tree$Nnode
 	
 	# basic error checking
-	if(class(diffusivity)!="numeric") return(list(success=FALSE, error="Expected numeric vector for diffusivity"))
+	if(!("numeric" %in% class(diffusivity))) return(list(success=FALSE, error="Expected numeric vector for diffusivity"))
 	diffusivity = pmax(diffusivity,0);
 	if(is.null(time_grid) || (length(time_grid)<=1)){
 		if(length(diffusivity)!=1){

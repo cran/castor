@@ -365,7 +365,8 @@ fit = fit_musse(tree,
                 sampling_fractions = rarefaction,
                 reveal_fractions   = reveal_fractions,
                 Ntrials            = 5,
-                Nbootstraps        = 10)
+                Nbootstraps        = 10,
+                max_model_runtime  = 0.1)
 if(!fit$success){
   cat(sprintf("ERROR: Fitting failed"))
 }else{

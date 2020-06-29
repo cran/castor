@@ -421,8 +421,8 @@ get_all_branching_ages = function(tree){
 												Nnodes			= Nnodes,
 												Nedges			= nrow(tree$edge),
 												tree_edge		= as.vector(t(tree$edge))-1);
-	branch_ages = rep(depths,times=Nchildren-1);
-	return(branch_ages);
+	branching_ages = rep(depths,times=Nchildren-1);
+	return(branching_ages);
 }
 
 
@@ -648,17 +648,17 @@ get_random_params = function(defaults, lower_bounds, upper_bounds, scales, order
 }
 
 
-# function for reformatting/sanitizing generic fit parameters provided by the user
+# check validity and sanitize (standardize format) of model parameters for fitting
 # used by various fitting routines
-prepare_generic_fit_params = function(	param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
-										param_guess			= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
-										param_min			= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
-										param_max			= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
-										param_scale			= NULL){	# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
-	NP = length(param_values)
-	param_names = names(param_values);
+sanitize_parameters_for_fitting = function(	param_values,				# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
+											param_guess		= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
+											param_min		= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
+											param_max		= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
+											param_scale		= NULL){	# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
+	NP 			= length(param_values);
+	param_names	= names(param_values);
 	if(is.null(param_guess)){
-		if(any(is.finite(param_values))){
+		if(any(!is.finite(param_values))){
 			return(list(success=FALSE, error=sprintf("Missing guessed parameter values")))
 		}else{
 			param_guess = rep(NA, times=NP);
@@ -693,8 +693,94 @@ prepare_generic_fit_params = function(	param_values,					# numeric vector of siz
 	}else if(length(param_scale)!=NP){
 		return(list(success=FALSE, error=sprintf("Length of param_scale[] (%d) differs from number of model parameters (%d)",length(param_scale),NP)))
 	}
-	return(list(success=TRUE, param_values=param_values, param_guess=param_guess, param_min=param_min, param_max=param_max, param_scale))
+	param_values[is.nan(param_values)] = NA # standardize representation of non-fixed params
+	param_scale[is.nan(param_scale)] = NA	# standardize representation of unknown param scales		
+		
+	# determine which parameters are to be fitted
+	fitted_params	= which(is.na(param_values))
+	fixed_params	= which(!is.na(param_values))
+	NFP				= length(fitted_params);
+	param_guess[fixed_params] = param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
+
+	if(any(!is.finite(param_guess))) return(list(success=FALSE, error=sprintf("Some guessed parameter values are NA or NaN or Inf; you must specify a valid guess for each non-fixed model parameter")));
+	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
+	
+	# determine typical parameter scales, whenever these are not provided
+	for(p in fitted_params){
+		if(is.na(param_scale[p])){
+			if(param_guess[p]!=0){
+				param_scale[p] = abs(param_guess[p]);
+			}else if((is.finite(param_min[p]) && (param_min[p]!=0)) || (is.finite(param_max[p]) && (param_max[p]!=0))){
+				param_scale[p] = mean(abs(c((if(is.finite(param_min[p]) && (param_min[p]!=0)) param_min[p] else NULL), (if(is.finite(param_max[p]) && (param_max[p]!=0)) param_max[p] else NULL))));
+			}else{
+				param_scale[p] = 1;
+			}
+		}
+	}
+	
+	return(list(success			= TRUE,
+				NP				= NP,
+				NFP				= NFP,
+				param_names		= param_names,
+				param_values	= param_values,
+				param_guess		= param_guess,
+				param_min		= param_min,
+				param_max		= param_max,
+				param_scale		= param_scale,
+				fitted_params	= fitted_params,
+				fixed_params	= fixed_params))
 }
+	
+
+
+
+# function for reformatting/sanitizing generic fit parameters provided by the user
+# used by various fitting routines
+# prepare_generic_fit_params = function(	param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
+# 										param_guess			= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
+# 										param_min			= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
+# 										param_max			= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
+# 										param_scale			= NULL){	# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
+# 	NP = length(param_values)
+# 	param_names = names(param_values);
+# 	if(is.null(param_guess)){
+# 		if(any(is.finite(param_values))){
+# 			return(list(success=FALSE, error=sprintf("Missing guessed parameter values")))
+# 		}else{
+# 			param_guess = rep(NA, times=NP);
+# 		}
+# 	}
+# 	if(length(param_guess)!=NP){
+# 		return(list(success=FALSE, error=sprintf("Number of guessed parameters (%d) differs from number of model parameters (%d)",length(param_guess),NP)))
+# 	}else if(!is.null(param_names)){
+# 		names(param_guess) = param_names;
+# 	}
+# 	if((!is.null(param_names)) && (length(param_names)!=NP)){
+# 		return(list(success=FALSE, error=sprintf("Number of parameter names (%d) differs from number of model parameters (%d)",length(param_names),NP)))
+# 	}
+# 	if(is.null(param_min)){
+# 		param_min = rep(-Inf,times=NP);
+# 	}else if(length(param_min)==1){
+# 		param_min = rep(param_min,times=NP);
+# 	}else if(length(param_min)!=NP){
+# 		return(list(success=FALSE, error=sprintf("Length of param_min[] (%d) differs from number of model parameters (%d)",length(param_min),NP)))
+# 	}
+# 	if(is.null(param_max)){
+# 		param_max = rep(+Inf,times=NP);
+# 	}else if(length(param_max)==1){
+# 		param_max = rep(param_max,times=NP);
+# 	}else if(length(param_max)!=NP){
+# 		return(list(success=FALSE, error=sprintf("Length of param_max[] (%d) differs from number of model parameters (%d)",length(param_max),NP)))
+# 	}
+# 	if(is.null(param_scale)){
+# 		param_scale = rep(NA,times=NP);
+# 	}else if(length(param_scale)==1){
+# 		param_scale = rep(param_scale,times=NP);
+# 	}else if(length(param_scale)!=NP){
+# 		return(list(success=FALSE, error=sprintf("Length of param_scale[] (%d) differs from number of model parameters (%d)",length(param_scale),NP)))
+# 	}
+# 	return(list(success=TRUE, param_values=param_values, param_guess=param_guess, param_min=param_min, param_max=param_max, param_scale))
+# }
 
 
 # given an undirected graph (nodes,edges), find its maximal connected subgraphs
@@ -749,7 +835,7 @@ extract_independent_sister_tips = function(tree){
 }
 
 
-# calculate geodesic angle (aka. central angle) between two geographical locations (assuming the Earth is a sphere)
+# calculate geodesic angle (aka. central angle, in radians) between two geographical locations (assuming the Earth is a sphere)
 # based on the Vincenty formula with equal major and minor axis
 # geographic coordinates should be given in decimal degrees
 geodesic_angle = function(latitude1, longitude1, latitude2, longitude2){
@@ -762,6 +848,20 @@ geodesic_angle = function(latitude1, longitude1, latitude2, longitude2){
 	return(angle);
 }
 
+# calculate geodesic angles (in radians) between pairs of coordinates
+# this function returns a 1D vector of size equal to the size of the input lists latitudes1[], latitudes2[] etc
+geodesic_angles = function(latitudes1, longitudes1, latitudes2, longitudes2){
+	return(geodesic_angles_CPP(latitudes1, longitudes1, latitudes2, longitudes2));
+}
+
+# calculate all geodesic angles (in radians) between two sets of coordinates
+# This function returns a 2D matrix of size N1 x N2
+all_pairwise_geodesic_angles = function(latitudes1, longitudes1, latitudes2, longitudes2){
+	angles = get_all_pairwise_geodesic_angles_CPP(latitudes1, longitudes1, latitudes2, longitudes2);
+	return(matrix(angles, ncol=length(latitudes2), byrow=TRUE));
+}
+
+
 # calculate expectation of sin^2(omega) across multiple independent contrasts with non-equal time steps, where omega is the central transition angle, for the spherical Brownian Motion
 get_expected_SBM_sinsquare = function(time_steps, diffusivity, radius){
 	return((2/3)*(1-mean(exp(-6*(diffusivity/(radius^2))*time_steps))))
@@ -771,5 +871,180 @@ get_expected_SBM_transition_angle = function(time_step, diffusivity, radius){
 	tD = time_step * diffusivity/radius^2;
 	return(SBM_get_average_transition_angle_CPP(tD = tD, max_error = 1e-7, max_Legendre_terms = 200))
 }
+
+
+# autocorrelation function ACF(t) of Spherical Brownian Motion with constant diffusivity D
+# ACF(t) := E <n(t),n(0)> = E cos(omega(t))
+# where n(t) is the unit vector pointing to the particle's random location on the unit phere at time t, and <,> is the scalar product, and omega is the transition angle.
+get_SBM_ACF = function(times, diffusivity, radius){
+	return(exp(-2*(diffusivity/radius^2)*times))
+}
+
+
+
+# given some rooted timetree, extract information about various sampling and branching events, as defined by the homogenous birth-death-sampling model with continuous sampling and concentrated sampling efforts
+# monofurcating nodes are interpreted as sampled nodes, i.e. sampled lineages with additional subsequently sampled descendants
+# bifurcating and multifurcating nodes are interpreted as branching events, with multifurcations counted multiple times (i.e., as if they are first split into bifurcations)
+extract_HBDS_events_from_tree = function(	tree,
+											root_age = NULL, # optional numeric, the age of the root. Can be used to define a time offset, e.g. if the last tip was not actually sampled at the present. If NULL, this will be calculated from the treem and it will be assumed that the last tip was sampled at the present
+											CSA_ages = numeric(0), # 1D vector listing ages of concentrated sampling efforts, in ascending order
+											age_epsilon = 0){
+	Ntips  	= length(tree$tip.label)
+	Nnodes 	= tree$Nnode
+	NCSA		= length(CSA_ages)
+	if((NCSA>=2) && (CSA_ages[1]>tail(CSA_ages,1))) return(list(success=FALSE, error="CSA_ages must be in ascending order"))
+	
+	# determine branching ages & tip ages & sampled node ages
+	if(is.null(root_age)) root_age = get_tree_span(tree)$max_distance
+	node2Nchildren = get_child_count_per_node_CPP(	Ntips		= Ntips,
+													Nnodes		= Nnodes,
+													Nedges		= nrow(tree$edge),
+													tree_edge	= as.vector(t(tree$edge))-1);
+	clade_heights = get_distances_from_root_CPP(Ntips		= Ntips,
+												Nnodes		= Nnodes,
+												Nedges		= nrow(tree$edge),
+												tree_edge	= as.vector(t(tree$edge))-1,
+												edge_length	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length))
+	sampled_nodes		= which(node2Nchildren==1)
+	sampled_node_ages 	= pmax(0, root_age - clade_heights[Ntips + sampled_nodes])
+	tip_ages 			= pmax(0, root_age - clade_heights[1:Ntips])
+	branchings			= which(node2Nchildren>=2) # determine which nodes are branchings
+	branching_ages		= pmax(0, root_age - clade_heights[Ntips + branchings])
+	branching_ages		= rep(branching_ages,times=node2Nchildren[branchings]-1) # count multifurcations multiple times
+	
+	if(length(CSA_ages)>0){
+		# determine which tips were sampled during concentrated sampling efforts versus due to Poissonian sampling
+		sorted2original = order(tip_ages)
+		CSAbinning		= place_sorted_values_into_bins_CPP(items=tip_ages[sorted2original], bin_mins=CSA_ages-age_epsilon, bin_maxs=CSA_ages+age_epsilon)
+		tip2CSA 		= 1L + CSAbinning$item2bin
+		Ptip_ages		= tip_ages[sorted2original[which(CSAbinning$item2bin<0)]]
+		CSA2tips		= lapply(1:NCSA, FUN=function(ce) sorted2original[1L + CSAbinning$bin2items[[ce]]]);
+		CSA_tip_counts 	= sapply(1:NCSA, FUN=function(ce) length(CSA2tips[[ce]]))
+
+		# determine which sampled nodes were sampled during concentrated sampling efforts versus due to Poissonian sampling
+		sorted2original = order(sampled_node_ages)
+		CSAbinning 		= place_sorted_values_into_bins_CPP(items=sampled_node_ages[sorted2original], bin_mins=CSA_ages-age_epsilon, bin_maxs=CSA_ages+age_epsilon)
+		Pnode_ages		= sampled_node_ages[sorted2original[which(CSAbinning$item2bin<0)]]
+		CSA2nodes		= lapply(1:NCSA, FUN=function(ce) sampled_nodes[sorted2original[1L + CSAbinning$bin2items[[ce]]]]);
+		CSA_node_counts = sapply(1:NCSA, FUN=function(ce) length(CSA2nodes[[ce]]))
+	}else{
+		CSA2tips 		= integer(0)
+		CSA_tip_counts 	= integer(0)
+		CSA2nodes 		= integer(0)
+		CSA_node_counts = integer(0)
+		Ptip_ages 		= sort(tip_ages)
+		Pnode_ages 		= sort(sampled_node_ages)
+	}
+	
+	return(list(concentrated_tips 			= CSA2tips,
+				concentrated_tip_counts 	= CSA_tip_counts,
+				concentrated_nodes 			= CSA2nodes,
+				concentrated_node_counts 	= CSA_node_counts,
+				Ptip_ages					= Ptip_ages, 	# ages of Poissonian tip ages, i.e. of Poissonian terminal sampling events, in ascending order
+				Pnode_ages					= Pnode_ages,	# ages of Poissonian node ages, i.e. of Poissonian non-terminal sampling events, in ascending order
+				branching_ages				= sort(branching_ages)))
+}
+
+
+
+# Given some HBDS congruence class (in terms of PDR, PSR lambda_psi and CSA_pulled_probs), as well as some desired sampling rate psi (or some desired mu & lambda0), calculate the corresponding model in the congruence class
+# ATTENTION: This function is currently only implemented for HBDS models without retention, i.e. where kappa=0
+# ATTENTION: Not all psi are allowed. In particular, psi(CSA_ages[k]) must be the same for all models in the congruence class whenever CSA_ages[k]>0.
+get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listing discrete ages in ascending order
+								PSR,							# numeric vector of size NG, listing the PSR on the age_grid
+								PDR,							# numeric vector of size NG, listing the PDR on the age_grid
+								lambda_psi,						# numeric vector of size NG, listing lambda*psi on the age_grid
+								psi					= NULL,		# numeric vector of size NG. Either psi or mu must be provided, but not both.
+								mu					= NULL,		# numeric vector of size NG. Either psi or mu must be provided, but not both.
+								lambda0				= NULL,		# numeric, specifying lambda at age 0 (present-day). Only relevant if mu is provided.
+								CSA_ages			= NULL,		# numeric vector of size NCSA, listing the ages of concentrated sampling attempts, in ascending order
+								CSA_pulled_probs 	= NULL,		# numeric vector of size NCSA, listing the pulled probabilities of concentrated sampling attempts, in ascending order
+								CSA_PSRs			= NULL, 	# numeric vector of size NCSA, listing the PSR at the concentrated sampling attempts, in ascending order
+								splines_degree		= 1, 		# integer between 1 and 3. 0-splines are not allowed, because intervally the 1st derivatives are needed.
+								ODE_relative_dt		= 0.001,
+								ODE_relative_dy		= 1e-4){
+	# basic error checking
+	NCE = (if(is.null(CSA_ages)) 0 else length(CSA_ages))
+	if((NCE==0) && (!is.null(CSA_pulled_probs)) && (length(CSA_pulled_probs)>0)) return(list(success=FALSE, error="No CE ages were provided, but CSA_pulled_probs were"))
+	if((NCE>0) && is.null(CSA_pulled_probs)) return(list(success=FALSE, error="Missing CSA_pulled_probs"))
+	if((NCE>0) && (length(CSA_pulled_probs)!=NCE)) return(list(success=FALSE, error=sprintf("Expected %d CSA_pulled_probs, but instead got %d",NCE,length(CSA_pulled_probs))))
+	if((NCE>0) && is.null(CSA_PSRs)) return(list(success=FALSE, error="Missing CSA_PSRs"))
+	if((NCE>0) && (length(CSA_PSRs)!=NCE)) return(list(success=FALSE, error=sprintf("Expected %d CSA_PSRs, but instead got %d",NCE,length(CSA_PSRs))))
+	if(is.null(CSA_ages)){
+		CSA_ages 			= numeric(0)
+		CSA_pulled_probs 	= numeric(0)
+		CSA_PSRs 			= numeric(0)
+	}
+	NG = length(age_grid)
+	if(is.null(PSR)){
+		PSR = rep(0,times=NG)
+	}else if(length(PSR)==1){
+		PSR = rep(PSR,times=NG)
+	}else if(length(PSR)!=NG){
+		return(list(success=FALSE, error=sprintf("Expected %d PSR values, but instead got %d",NG,length(PSR))))
+	}
+	if(is.null(PDR)){
+		PDR = rep(0,times=NG)
+	}else if(length(PDR)==1){
+		PDR = rep(PDR,times=NG)
+	}else if(length(PDR)!=NG){
+		return(list(success=FALSE, error=sprintf("Expected %d PDR values, but instead got %d",NG,length(PDR))))
+	}
+	if(is.null(lambda_psi)){
+		lambda_psi = rep(0,times=NG)
+	}else if(length(psi)==1){
+		lambda_psi = rep(lambda_psi,times=NG)
+	}else if(length(lambda_psi)!=NG){
+		return(list(success=FALSE, error=sprintf("Expected %d lambda_psi values, but instead got %d",NG,length(lambda_psi))))
+	}
+	if(is.null(psi) && is.null(mu)) return(list(success=FALSE, error=sprintf("Expecting either psi or mu",NG)))
+	if((!is.null(psi)) && (!is.null(mu))) return(list(success=FALSE, error=sprintf("Either psi or mu must be provided, but not both",NG)))
+	if(is.null(mu) && (!is.null(lambda0))) return(list(success=FALSE, error=sprintf("lambda0 must not be provided if mu is not provided either; either provide both mu and lambda0, or none",NG)))
+	if(!is.null(psi)){
+		if(length(psi)==1){
+			psi = rep(psi,times=NG)
+		}else if(length(psi)!=NG){
+			return(list(success=FALSE, error=sprintf("Expected %d psi values, but instead got %d",NG,length(psi))))
+		}
+	}
+	if(!is.null(mu)){
+		if(length(mu)==1){
+			mu = rep(mu,times=NG)
+		}else if(length(mu)!=NG){
+			return(list(success=FALSE, error=sprintf("Expected %d mu values, but instead got %d",NG,length(mu))))
+		}
+	}
+	if(!(splines_degree %in% c(1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 1,2,3.",splines_degree)))
+
+	results = get_congruent_HBDS_CPP(	CSA_ages			= CSA_ages,
+										CSA_pulled_probs	= CSA_pulled_probs,
+										CSA_PSRs			= CSA_PSRs,
+										age_grid			= age_grid,
+										PSRs				= PSR,
+										PDRs				= PDR,
+										lambda_psis			= lambda_psi,
+										psis				= (if(is.null(psi)) numeric(0) else psi),
+										mus					= (if(is.null(mu)) numeric(0) else mu),
+										lambda0				= (if(is.null(lambda0)) 0 else lambda0),
+										splines_degree		= splines_degree,
+										ODE_relative_dt		= ODE_relative_dt,
+										ODE_relative_dy		= ODE_relative_dy,
+										runtime_out_seconds	= -1)
+
+	if(!results$success) return(list(success=FALSE, error=results$error))
+	
+	return(list(success			= TRUE,
+				valid			= results$valid,
+				ages			= age_grid,
+				lambda			= results$lambdas,
+				mu				= results$mus,
+				psi				= results$psis,
+				lambda_psi		= results$lambda_psis,
+				Pmissing		= results$Pmissings,
+				CSA_probs		= results$CSA_probs,
+				CSA_Pmissings	= results$CSA_Pmissings,
+				Rnot			= results$Rnots))
+}
+
 
 

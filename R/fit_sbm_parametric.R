@@ -1,16 +1,18 @@
 # Fit a Spherical Brownian Motion (SBM) model with time-dependent diffusivity, by fitting the parameters of a functional form for the diffusivity
 #
 fit_sbm_parametric = function(	tree, 
-								tip_latitudes, 					# numeric vector of size Ntips, listing geographical latitudes of the tips (in decimal degrees)
-								tip_longitudes, 				# numeric vector of size Ntips, listing geographical longitudes of the tips (in decimal degrees)
-								radius,							# numeric, radius to assume for the sphere (e.g. Earth). Use this e.g. if you want to hange the units in which diffusivity is estimated. Earth's mean radius is about 6371e3 m.
-								param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
-								param_guess,					# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
+								tip_latitudes, 						# numeric vector of size Ntips, listing geographical latitudes of the tips (in decimal degrees)
+								tip_longitudes, 					# numeric vector of size Ntips, listing geographical longitudes of the tips (in decimal degrees)
+								radius,								# numeric, radius to assume for the sphere (e.g. Earth). Use this e.g. if you want to hange the units in which diffusivity is estimated. Earth's mean radius is about 6371e3 m.
+								param_values,						# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
+								param_guess,						# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
 								diffusivity,						# function handle, mapping time & model_parameters to the current diffusivity, (time,param_values) --> diffusivity. Must be defined for all times in [0:root_age] and for all parameters within the imposed bounds. Must be vectorized in the time argument, i.e. return a vector the same size as time[].
 								time_grid				= NULL,		# numeric vector of size NG>=1, listing times in ascending order, on which the diffusivity functional should be evaluated. This time grid must be fine enough to capture the possible variation in diffusivity() over time. If NULL or of length 1, then the diffusivity is assumed to be time-independent. This grid should cover the interval [0,root_age]; otherwise the diffusivity will be extrapolated as a constant where needed.
 								planar_approximation	= FALSE,	# logical, specifying whether the estimation formula should be based on a planar approximation of Earth's surface, i.e. geodesic angles are converted to distances and then those are treated as if they were Euclideanon a 2D plane. This approximation substantially increases the speed of computations.
 								only_basal_tip_pairs	= FALSE,	# logical, specifying whether only immediate sister tips should be considered, i.e. tip pairs with at most 2 edges between the two tips
+								only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 								min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
+								max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
 								param_min				= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
 								param_max				= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
 								param_scale				= NULL,		# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
@@ -19,6 +21,7 @@ fit_sbm_parametric = function(	tree,
 								Nthreads				= 1,
 								Nbootstraps				= 0,		# (integer) optional number of parametric-bootstrap samples for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
 								Ntrials_per_bootstrap	= NULL,		# (integer) optional number of fitting trials for each bootstrap sampling. If NULL, this is set equal to Ntrials. A smaller Ntrials_per_bootstrap will reduce computation, at the expense of increasing the estimated confidence intervals (i.e. yielding more conservative estimates of confidence).
+								NQQ						= 0,		# (integer) optional number of simulations to perform for creating Q-Q plots of the theoretically expected distribution of geodistances vs the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting.
 								fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 								SBM_PD_functor			= NULL,		# internally used SBM probability density functor
 								focal_param_values		= NULL,		# optional 2D numeric matrix with NP columns and an arbitrary number of rows, specifying parameter combinations of particular interest for which the loglikelihood should be calculated for. Can be used e.g. to explore the shape of the loglikelihood function.
@@ -28,7 +31,6 @@ fit_sbm_parametric = function(	tree,
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
 	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
 	root_age = get_tree_span(tree)$max_distance
-	NP 					= length(param_values);
 	max_start_attempts 	= max(1,max_start_attempts)
 	Ntrials 			= max(1,Ntrials)
 	Nthreads 			= max(1,Nthreads)
@@ -43,10 +45,9 @@ fit_sbm_parametric = function(	tree,
 		tip_longitudes = unlist(tip_longitudes)
 	}
 	if(is.null(Nbootstraps) || is.na(Nbootstraps) || (Nbootstraps<0)) Nbootstraps = 0;
-
 	
 	# sanitize input params (reformat if needed)
-	sanitized_params = prepare_generic_fit_params(param_values, param_guess = param_guess, param_min = param_min, param_max = param_max, param_scale = param_scale)
+	sanitized_params = sanitize_parameters_for_fitting(param_values, param_guess = param_guess, param_min = param_min, param_max = param_max, param_scale = param_scale)
 	if(!sanitized_params$success) return(list(success=FALSE, error=sanitized_params$error))
 	param_names		= sanitized_params$param_names
 	param_values 	= sanitized_params$param_values
@@ -54,39 +55,17 @@ fit_sbm_parametric = function(	tree,
 	param_min 		= sanitized_params$param_min
 	param_max 		= sanitized_params$param_max
 	param_scale 	= sanitized_params$param_scale
-
-	if(any(is.nan(param_guess) | is.na(param_guess))) return(list(success=FALSE, error=sprintf("Some guessed parameter values are NA or NaN; you must specify a valid guess for each model parameter")));
-	param_values[is.nan(param_values)] = NA # standardize representation of non-fixed params
-	param_scale[is.nan(param_scale)] = NA	# standardize representation of unknown param scales
-	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
+	fitted_params	= sanitized_params$fitted_params
+	fixed_params	= sanitized_params$fixed_params
+	NFP				= sanitized_params$NFP
+	NP				= sanitized_params$NP
 	
 	# check if diffusivity functional is valid at least on the initial guess
 	diffusivity_guess = diffusivity(time_grid,param_guess)
 	if(!all(is.finite(diffusivity_guess))) return(list(success=FALSE, error=sprintf("Diffusivity is not a valid number for guessed parameters, at some times")));
 	if(any(diffusivity_guess<0)) return(list(success=FALSE, error=sprintf("Diffusivity is negative for guessed parameters, at some times")));
 	if(length(diffusivity_guess)!=length(time_grid)) return(list(success=FALSE, error=sprintf("The diffusivity function must return vectors of the same length as the input times")));
-						
-	#################################
-	# PREPARE PARAMETERS TO BE FITTED
-	
-	# determine which parameters are to be fitted
-	fitted_params	= which(is.na(param_values))
-	fixed_params	= which(!is.na(param_values))
-	NFP				= length(fitted_params);
-	param_guess[fixed_params] = param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
-	
-	# determine typical parameter scales
-	for(p in fitted_params){
-		if(is.na(param_scale[p])){
-			if(param_guess[p]!=0){
-				param_scale[p] = abs(param_guess[p]);
-			}else if((is.finite(param_min[p]) && (param_min[p]!=0)) || (is.finite(param_max[p]) && (param_max[p]!=0))){
-				param_scale[p] = mean(abs(c((if(is.finite(param_min[p]) && (param_min[p]!=0)) param_min[p] else NULL), (if(is.finite(param_max[p]) && (param_max[p]!=0)) param_max[p] else NULL))));
-			}else{
-				param_scale[p] = 1;
-			}
-		}
-	}
+
 
 	###########################################
 	# EXTRACT INDEPENDENT CONTRASTS FOR FITTING
@@ -113,25 +92,27 @@ fit_sbm_parametric = function(	tree,
 	clade_times = castor::get_all_distances_to_root(tree)
 	
 	# filter tip pairs if needed
-	if(min_MRCA_time>0){
-		keep_pairs	= which(clade_times[MRCAs]>=min_MRCA_time)
+	if((min_MRCA_time>0) || (max_MRCA_age<Inf)){
+		tree_span 	= max(clade_times)
+		keep_pairs	= which((clade_times[MRCAs]>=min_MRCA_time) & (tree_span-clade_times[MRCAs]<=max_MRCA_age))
 		tip_pairs	= tip_pairs[keep_pairs,,drop=FALSE]
 		MRCAs		= MRCAs[keep_pairs]
 	}
 	if(nrow(tip_pairs)==0) return(list(success=FALSE, error="No valid tip pairs left for extracting independent contrasts"))
 		
 	# calculate phylogenetic divergences and geodesic distances between sister tips
-	phylogenetic_distances 	= get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], check_input=FALSE)
-	geodesic_distances 		= radius * sapply(1:nrow(tip_pairs), FUN=function(p) geodesic_angle(tip_latitudes[tip_pairs[p,1]],tip_longitudes[tip_pairs[p,1]],tip_latitudes[tip_pairs[p,2]],tip_longitudes[tip_pairs[p,2]]))
+	phylodistances 	= get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], check_input=FALSE)
+	geodistances 	= radius * sapply(1:nrow(tip_pairs), FUN=function(p) geodesic_angle(tip_latitudes[tip_pairs[p,1]],tip_longitudes[tip_pairs[p,1]],tip_latitudes[tip_pairs[p,2]],tip_longitudes[tip_pairs[p,2]]))
 
-	# omit tip pairs with zero geodesic distances despite non-zero phylogenetic distance, because formally the likelihood density of encountering that is zero
-	# also omit tip pairs with zero phylogenetic distance
-	valid_pairs 			= which((geodesic_distances>0) & (phylogenetic_distances>0))
-	tip_pairs				= tip_pairs[valid_pairs,,drop=FALSE]
-	MRCAs					= MRCAs[valid_pairs]
-	phylogenetic_distances 	= phylogenetic_distances[valid_pairs]
-	geodesic_distances 		= geodesic_distances[valid_pairs]
-	NC 						= length(phylogenetic_distances)
+	# omit tip pairs with zero phylogenetic distance, because in that case the likelihood density is pathological
+	# also omit tip pairs located at the same geographic location, if requested
+	keep_pair	 	= (phylodistances>0)
+	if(only_distant_tip_pairs) keep_pair = keep_pair & (geodistances>0)
+	tip_pairs		= tip_pairs[keep_pair,,drop=FALSE]
+	MRCAs			= MRCAs[keep_pair]
+	phylodistances 	= phylodistances[keep_pair]
+	geodistances 	= geodistances[keep_pair]
+	NC 				= length(phylodistances)
 	if(NC==0) return(list(success=FALSE, error="No valid tip pairs left for extracting independent contrasts"))
 
 	# determine MRCA and tip times
@@ -168,7 +149,7 @@ fit_sbm_parametric = function(	tree,
 												MRCA_times		= MRCA_times,
 												child_times1	= tip_times1,
 												child_times2	= tip_times2,
-												distances		= geodesic_distances,
+												distances		= geodistances,
 												time_grid		= input_time_grid,
 												diffusivities	= input_diffusivities,
 												splines_degree	= 1,
@@ -264,7 +245,6 @@ fit_sbm_parametric = function(	tree,
 		if(is.null(Ntrials_per_bootstrap)) Ntrials_per_bootstrap = max(1,Ntrials)
 		bootstrap_params = matrix(NA,nrow=Nbootstraps,ncol=NP)
 		bootstrap_LLs	 = rep(NA,times=Nbootstraps)
-		NBsucceeded		 = 0
 		for(b in 1:Nbootstraps){
 			# simulate model with fitted parameters
 			if(verbose) cat(sprintf("%s  Bootstrap #%d..\n",verbose_prefix,b))
@@ -275,7 +255,7 @@ fit_sbm_parametric = function(	tree,
 												splines_degree	= 1,
 												root_latitude	= NULL,
 												root_longitude	= NULL)
-			if(!bootstrap$success) return(list(success=FALSE, error=sprintf("Bootstrapping failed at bootstrap %d: Could not simulate SBM for the fitted model: %s",b,bootstrap$error), param_fitted=fitted_param_values, loglikelihood=loglikelihood, NFP=NFP));
+			if(!bootstrap$success) return(list(success=FALSE, error=sprintf("Bootstrapping failed at bootstrap %d: Could not simulate SBM for the fitted model: %s",b,bootstrap$error), param_fitted=fitted_param_values, loglikelihood=loglikelihood, NFP=NFP, Ncontrasts=NC));
 
 			# fit diffusivity using bootstrap-simulation
 			fit = fit_sbm_parametric(	tree, 
@@ -287,7 +267,9 @@ fit_sbm_parametric = function(	tree,
 										time_grid				= time_grid,
 										planar_approximation	= planar_approximation,
 										only_basal_tip_pairs	= only_basal_tip_pairs,
+										only_distant_tip_pairs	= only_distant_tip_pairs,
 										min_MRCA_time			= min_MRCA_time,
+										max_MRCA_age			= max_MRCA_age,
 										param_guess				= param_guess,
 										param_min				= param_min,
 										param_max				= param_max,
@@ -304,20 +286,35 @@ fit_sbm_parametric = function(	tree,
 			if(!fit$success){
 				if(verbose) cat(sprintf("%s  WARNING: Fitting failed for this bootstrap: %s\n",verbose_prefix,fit$error))
 			}else{
-				bootstrap_params[b,] 	= fit$param_fitted
-				bootstrap_LLs[b]		= fit$focal_loglikelihoods
-				NBsucceeded 			= NBsucceeded + 1
+				bootstrap_params[b,] = fit$param_fitted
+				bootstrap_LLs[b]	 = fit$focal_loglikelihoods
 			}
 		}
 		# calculate standard errors and confidence intervals from distribution of bootstrapped parameters
 		standard_errors = sqrt(pmax(0, colMeans(bootstrap_params^2, na.rm=TRUE) - colMeans(bootstrap_params, na.rm=TRUE)^2))
-		quantiles 	= sapply(1:ncol(bootstrap_params), FUN=function(p) quantile(bootstrap_params[,p], probs=c(0.25, 0.75, 0.025, 0.975), na.rm=TRUE, type=8))
+		quantiles 	= sapply(1:ncol(bootstrap_params), FUN=function(p) quantile(bootstrap_params[,p], probs=c(0.25, 0.75, 0.025, 0.975, 0.5), na.rm=TRUE, type=8))
 		CI50lower 	= quantiles[1,]
 		CI50upper 	= quantiles[2,]
 		CI95lower 	= quantiles[3,]
 		CI95upper 	= quantiles[4,]
+		medians		= quantiles[5,]
 		mean_BLL	= mean(bootstrap_LLs,na.rm=TRUE)
 		consistency = sum(abs(bootstrap_LLs-mean_BLL)>=abs(loglikelihood-mean_BLL),na.rm=TRUE)/sum(!is.nan(bootstrap_LLs))
+	}
+	
+	#####################################
+	# Calculate QQ-plot using simulations
+	
+	if(NQQ>0){
+		if(verbose) cat(sprintf("%sCalculating QQ-plot using %d simulations..\n",verbose_prefix,NQQ))
+		sim_geodistances = numeric(NQQ * NC)
+		for(q in 1:NQQ){
+			sim = castor::simulate_sbm(	tree = tree, radius = radius, diffusivity = diffusivity(time_grid, fitted_param_values), time_grid = time_grid, splines_degree = 1, root_latitude = NULL, root_longitude = NULL)
+			if(!sim$success) return(list(success=FALSE, error=sprintf("Calculation of QQ failed at simulation %d: Could not simulate SBM for the fitted model: %s",q,sim$error), param_fitted=fitted_param_values, loglikelihood=loglikelihood, NFP=NFP, Ncontrasts=NC));
+			sim_geodistances[(q-1)*NC + c(1:NC)] = radius * geodesic_angles(sim$tip_latitudes[tip_pairs[,1]],sim$tip_longitudes[tip_pairs[,1]],sim$tip_latitudes[tip_pairs[,2]],sim$tip_longitudes[tip_pairs[,2]])
+		}
+		probs  = c(1:NC)/NC
+		QQplot = cbind(quantile(geodistances, probs=probs, na.rm=TRUE, type=8), quantile(sim_geodistances, probs=probs, na.rm=TRUE, type=8))
 	}
 	
 	####################################
@@ -329,6 +326,9 @@ fit_sbm_parametric = function(	tree,
 				param_fitted			= fitted_param_values,
 				loglikelihood			= loglikelihood,
 				NFP						= NFP,
+				Ncontrasts				= NC,
+				phylodistances			= phylodistances,
+				geodistances			= geodistances,
 				AIC						= 2*NFP - 2*loglikelihood,
 				BIC						= log(NC)*NFP - 2*loglikelihood,
 				converged				= fits[[best]]$converged,
@@ -341,12 +341,14 @@ fit_sbm_parametric = function(	tree,
 				trial_Nstart_attempts	= sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts),
 				trial_Niterations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations),
 				trial_Nevaluations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations),
-				standard_errors			= (if(Nbootstraps>0) standard_errors else NULL),
-				CI50lower				= (if(Nbootstraps>0) CI50lower else NULL),
-				CI50upper				= (if(Nbootstraps>0) CI50upper else NULL),
-				CI95lower				= (if(Nbootstraps>0) CI95lower else NULL),
-				CI95upper				= (if(Nbootstraps>0) CI95upper else NULL),
-				consistency				= (if(Nbootstraps>0) consistency else NULL)))
+				standard_errors			= (if(Nbootstraps>0) setNames(standard_errors, param_names) else NULL),
+				medians					= (if(Nbootstraps>0) setNames(medians, param_names) else NULL),
+				CI50lower				= (if(Nbootstraps>0) setNames(CI50lower, param_names) else NULL),
+				CI50upper				= (if(Nbootstraps>0) setNames(CI50upper, param_names) else NULL),
+				CI95lower				= (if(Nbootstraps>0) setNames(CI95lower, param_names) else NULL),
+				CI95upper				= (if(Nbootstraps>0) setNames(CI95upper, param_names) else NULL),
+				consistency				= (if(Nbootstraps>0) consistency else NULL),
+				QQplot					= (if(NQQ>0) QQplot else NULL)))
 
 }
 

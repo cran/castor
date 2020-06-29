@@ -62,7 +62,21 @@ Note that the name was chosen for compatibility with other ASR functions.
 
 \examples{
 \dontrun{
-asr_empirical_probabilities(tree, tip_states=c(1,3,2,3), Nstates=3)
+# generate a random tree
+Ntips = 100
+tree  = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
+
+# create a random transition matrix
+Nstates = 3
+Q = get_random_mk_transition_matrix(Nstates, rate_model="ER", max_rate=0.01)
+cat(sprintf("Simulated ER transition rate=\%g\n",Q[1,2]))
+
+# simulate the trait's evolution
+simulation = simulate_mk_model(tree, Q)
+tip_states = simulation$tip_states
+
+# calculate empirical probabilities of tip states
+asr_empirical_probabilities(tree, tip_states=tip_states, Nstates=Nstates)
 }
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the

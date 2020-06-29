@@ -52,6 +52,9 @@ will be equal to:
 \item{new2old_edge}{
 Integer vector of length equal to the number of edges in the trimmed tree, with values in 1,..,Nedges, mapping edge indices of the trimmed tree to edge indices in the original tree. In particular, \code{tree$edge.length[new2old_edge]} will be equal to \code{trimmed_tree$edge.length} (if edge lengths are available).
 }
+\item{new_edges_trimmed}{
+Integer vector, listing edge indices in the trimmed tree that we originally longer edges and have been trimmed. In other words, these are the edges that "crossed" the trimming height.
+}
 }
 
 \author{Stilianos Louca}

@@ -265,7 +265,6 @@ fit_musse = function(	tree,
 	}
 	initial_extinction_probabilities = (1-sampling_fractions[proxy_map]);
 
-	
 	# figure out which parameters are fitted vs fixed
 	# get set of independent parameters (as a condensed vector)
 	# For example, if the birth_rate_model is "ER", only one birth rate is considered an independent model parameter (regardless of whether it is fixed or fitted)
@@ -282,7 +281,11 @@ fit_musse = function(	tree,
 	param_mins = compress_params(lower$transition_matrix, lower$birth_rates, lower$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
 	param_mins[is.na(param_mins) | is.nan(param_mins) | (param_mins<0)] = 0;
 	param_maxs = compress_params(upper$transition_matrix, upper$birth_rates, upper$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
-	param_maxs[is.na(param_maxs) | is.nan(param_maxs)] = Inf;
+	param_maxs[is.na(param_maxs) | is.nan(param_maxs)] = Inf
+	
+	# determine optimization options if not already provided
+	if(is.null(optim_max_iterations) || is.na(optim_max_iterations)) optim_max_iterations = 10000
+	if(is.null(optim_max_evaluations) || is.na(optim_max_evaluations) || is.nan(optim_max_evaluations)) optim_max_evaluations = optim_max_iterations*NFP*10
 
 	# determine start parameters
 	if(is.null(first_guess)) first_guess = list();
@@ -439,7 +442,6 @@ fit_musse = function(	tree,
 	}
 
 	# fit starting with various start-params, keep track of best fit
-	if(is.null(optim_max_evaluations) || is.na(optim_max_evaluations) || is.nan(optim_max_evaluations)) optim_max_evaluations = optim_max_iterations*NFP*10
 	scaled_param_mins = scale_params(param_mins,param_scales,param_mins);
 	scaled_param_maxs = scale_params(param_maxs,param_scales,param_mins);
 	fit_single_trial = function(trial){
@@ -465,7 +467,7 @@ fit_musse = function(	tree,
 								upper 	= scaled_param_maxs[fitted_params],
 								control = list(iter.max = optim_max_iterations, eval.max = optim_max_evaluations, rel.tol = optim_rel_tol))
 			LL 				= -fit$objective;
-			Nevaluations 	= fit$evaluations
+			Nevaluations 	= fit$evaluations[1]
 			Niterations		= fit$iterations
 			converged		= (fit$convergence==0)
 		}else if(optim_algorithm == "subplex"){

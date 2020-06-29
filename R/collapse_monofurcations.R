@@ -10,7 +10,8 @@ collapse_monofurcations = function(tree, force_keep_root=TRUE, as_edge_counts=FA
 															Nedges			= nrow(tree$edge),
 															tree_edge		= as.vector(t(tree$edge)) - 1,
 															edge_length		= (if(is.null(tree$edge.length) || as_edge_counts) numeric() else tree$edge.length),
-															force_keep_root = force_keep_root);
+															force_keep_root = force_keep_root,
+															force_keep_nodes= integer());
 	# reformat results into a valid "phylo" object
 	Nnodes_new	 	= results$Nnodes_new
 	new2old_node	= results$new2old_node + 1; # switch to 1-based indices

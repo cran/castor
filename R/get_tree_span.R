@@ -3,6 +3,8 @@
 get_tree_span = function(tree, as_edge_count=FALSE){
 	Ntips  = length(tree$tip.label)
 	Nnodes = tree$Nnode;
+	if(Nnodes==0) return(list(min_distance = 0, max_distance = 0))
+	
 	results = get_min_max_tip_distance_from_root_CPP(	Ntips			= Ntips,
 														Nnodes			= Nnodes,
 														Nedges			= nrow(tree$edge),

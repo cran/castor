@@ -13,7 +13,7 @@ extract_fasttree_constraints = function(tree){
 												tree_edge	= as.vector(t(tree$edge))-1);	# flatten in row-major format and make indices 0-based
 	Nconstraints = results$Nconstraints
 	constraints	 = matrix(results$constraints, ncol=Nconstraints, byrow=TRUE)
-	constraint2node = rep(0,Nconstraints); constraint2node[results$node2constraint+1] = c(1:Nnodes);
+	constraint2node = rep(0,times=Nconstraints); constraint2node[results$node2constraint+1] = c(1:Nnodes);
 	return(list(Nconstraints	= Nconstraints,
 				constraints 	= constraints,
 				constraint2node	= constraint2node));

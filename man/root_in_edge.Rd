@@ -9,7 +9,7 @@ Given a tree (rooted or unrooted), this function places the new root in the midd
 \usage{
 root_in_edge( tree, 
               root_edge, 
-              new_root_name = "root", 
+              new_root_name = NULL, 
               collapse_monofurcations = TRUE)
 }
 \arguments{
@@ -20,7 +20,7 @@ A tree object of class "phylo". Can be unrooted or rooted.
 Integer, index of the edge into which the new root is to be placed. Must be between 1 and Nedges.
 }
 \item{new_root_name}{
-Character, specifying the node name to use for the new root. Only used if \code{tree$node.label} is not \code{NULL}.
+Character, optional, specifying the node name to use for the new root. Only used if \code{tree$node.label} is not \code{NULL}.
 }
 \item{collapse_monofurcations}{
 Logical, specifying whether monofurcations in the rerooted tree (e.g. stemming from the old root) should be collapsed by connecting incoming edges with outgoing edges.

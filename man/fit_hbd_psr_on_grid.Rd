@@ -136,6 +136,9 @@ Integer, specifying the number of iterations performed during the optimization p
 \item{Nevaluations}{
 Integer, specifying the number of likelihood evaluations performed during the optimization path that yielded the maximum likelihood.
 }
+\item{bootstrap_estimates}{
+If \code{Nbootstraps>0}, this will be a numeric matrix of size \code{Nbootstraps} x Ngrid, listing the fitted PSR at each grid point and for each bootstrap.
+}
 \item{standard_errors}{
 If \code{Nbootstraps>0}, this will be a numeric vector of size NGrid, listing bootstrap-estimated standard errors for the fitted PSR at each grid point.
 }

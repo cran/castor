@@ -30,6 +30,30 @@ fit_hbd_pdr_parametric = function(	tree,
 	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 	if(!(condition %in% c("crown","stem","auto"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown' or 'auto'.",condition)));
 	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
+	max_start_attempts 	= max(1,max_start_attempts)
+	Ntrials 			= max(1,Ntrials)
+	Nthreads 			= max(1,Nthreads)
+	if(any(diff(age_grid)<0)) age_grid = sort(age_grid) # avoid common errors where age_grid is in reverse order
+	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
+	if(is.null(age_grid)) age_grid = 0;
+	if(is.null(max_model_runtime)) max_model_runtime = 0;
+	
+	# check if some of the functionals are actually fixed numbers
+	model_fixed = TRUE
+	if(is.numeric(PDR) && (length(PDR)==1)){
+		# the provided PDR is actually a single number, so convert to a function
+		PDR_value = PDR
+		PDR = function(ages,params){ rep(PDR_value, times=length(ages)) }
+	}else{
+		model_fixed = FALSE
+	}
+	if(is.numeric(rholambda0) && (length(rholambda0)==1)){
+		# the provided rholambda0 is actually a single number, so convert to a function
+		rholambda0_value = rholambda0
+		rholambda0 = function(params){ rholambda0 }
+	}else{
+		model_fixed = FALSE
+	}
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
@@ -45,57 +69,22 @@ fit_hbd_pdr_parametric = function(	tree,
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1);
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
-
-	# more input error checking
-	NP 					= length(param_values);
-	max_start_attempts 	= max(1,max_start_attempts)
-	Ntrials 			= max(1,Ntrials)
-	Nthreads 			= max(1,Nthreads)
-	if((!is.null(age_grid)) && (age_grid[1]>tail(age_grid,1))) age_grid = rev(age_grid); # avoid common errors where age_grid is in reverse order
-	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
-	if(is.null(age_grid)) age_grid = 0;
-	param_names = names(param_values);
-	if(is.null(param_guess)){
-		if(any(is.finite(param_values))){
-			return(list(success=FALSE, error=sprintf("Missing guessed parameter values")))
-		}else{
-			param_guess = rep(NA, times=NP);
-		}
-	}
-	if(length(param_guess)!=NP){
-		return(list(success=FALSE, error=sprintf("Number of guessed parameters (%d) differs from number of model parameters (%d)",length(param_guess),NP)))
-	}else if(!is.null(param_names)){
-		names(param_guess) = param_names;
-	}
-	if((!is.null(param_names)) && (length(param_names)!=NP)){
-		return(list(success=FALSE, error=sprintf("Number of parameter names (%d) differs from number of model parameters (%d)",length(param_names),NP)))
-	}
-	if(is.null(param_min)){
-		param_min = rep(-Inf,times=NP);
-	}else if(length(param_min)==1){
-		param_min = rep(param_min,times=NP);
-	}else if(length(param_min)!=NP){
-		return(list(success=FALSE, error=sprintf("Length of param_min[] (%d) differs from number of model parameters (%d)",length(param_min),NP)))
-	}
-	if(is.null(param_max)){
-		param_max = rep(+Inf,times=NP);
-	}else if(length(param_max)==1){
-		param_max = rep(param_max,times=NP);
-	}else if(length(param_max)!=NP){
-		return(list(success=FALSE, error=sprintf("Length of param_max[] (%d) differs from number of model parameters (%d)",length(param_max),NP)))
-	}
-	if(is.null(param_scale)){
-		param_scale = rep(NA,times=NP);
-	}else if(length(param_scale)==1){
-		param_scale = rep(param_scale,times=NP);
-	}else if(length(param_scale)!=NP){
-		return(list(success=FALSE, error=sprintf("Length of param_scale[] (%d) differs from number of model parameters (%d)",length(param_scale),NP)))
-	}
-	if(is.null(max_model_runtime)) max_model_runtime = 0;
-	if(any(is.nan(param_guess) | is.na(param_guess))) return(list(success=FALSE, error=sprintf("Some guessed parameter values are NA or NaN; you must specify a valid guess for each model parameter")));
-	param_values[is.nan(param_values)] = NA # standardize representation of non-fixed params
-	param_scale[is.nan(param_scale)] = NA	# standardize representation of unknown param scales
-	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
+	
+	# sanitize model parameters
+	sanitized_params = sanitize_parameters_for_fitting(param_values, param_guess = param_guess, param_min = param_min, param_max = param_max, param_scale = param_scale)
+	if(!sanitized_params$success) return(list(success=FALSE, error=sanitized_params$error))
+	NP				= sanitized_params$NP
+	NFP				= sanitized_params$NFP
+	param_names		= sanitized_params$param_names
+	param_values	= sanitized_params$param_values
+	param_guess		= sanitized_params$param_guess
+	param_min		= sanitized_params$param_min
+	param_max		= sanitized_params$param_max
+	param_scale		= sanitized_params$param_scale
+	fitted_params	= sanitized_params$fitted_params
+	fixed_params	= sanitized_params$fixed_params
+	
+	if((NFP>0) && model_fixed) return(list(success=FALSE, error="At least one model parameter is fitted, however all model aspects (lambda, mu, rho, kappa etc) are fixed"))
 	
 	# check if functionals are valid at least on the initial guess
 	PDR_guess = PDR(age_grid+age0,param_guess)
@@ -104,29 +93,6 @@ fit_hbd_pdr_parametric = function(	tree,
 	if(!is.finite(rholambda0_guess)) return(list(success=FALSE, error=sprintf("rholambda0 is not a valid number for guessed parameters")));
 	if(length(PDR_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("PDR function must return vectors of the same length as the input ages")));
 						
-	#################################
-	# PREPARE PARAMETERS TO BE FITTED
-	
-		
-	# determine which parameters are to be fitted
-	fitted_params	= which(is.na(param_values))
-	fixed_params	= which(!is.na(param_values))
-	NFP				= length(fitted_params);
-	param_guess[fixed_params] = param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
-	
-	# determine typical parameter scales
-	for(p in fitted_params){
-		if(is.na(param_scale[p])){
-			if(param_guess[p]!=0){
-				param_scale[p] = abs(param_guess[p]);
-			}else if((is.finite(param_min[p]) && (param_min[p]!=0)) || (is.finite(param_max[p]) && (param_max[p]!=0))){
-				param_scale[p] = mean(abs(c((if(is.finite(param_min[p]) && (param_min[p]!=0)) param_min[p] else NULL), (if(is.finite(param_max[p]) && (param_max[p]!=0)) param_max[p] else NULL))));
-			}else{
-				param_scale[p] = 1;
-			}
-		}
-	}
-	
 
 	################################
 	# FITTING
@@ -223,7 +189,6 @@ fit_hbd_pdr_parametric = function(	tree,
 			fits[[trial]] = fit_single_trial(trial)
 		}
 	}
-	
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
 	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);

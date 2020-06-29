@@ -6,59 +6,65 @@
 # The diffusivity is defined in squared distance units per phylogenetic divergence. 
 # The distance units are the same as used for the radius of the sphere. E.g., if you set radius=1 and phylogenetic edge lengths are measured in Myr, then diffusivity will be defined in squared radii per Myr.
 # The input tree may include monofurcations and multifurcations, but note that multifurcations are internally first split into bifurcations
-fit_sbm_const = function(	trees, 					# either a single tree in phylo format, or a list of trees
-							tip_latitudes, 			# either a 1D vector of size Ntips (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), listing geographical latitudes of the tips (in decimal degrees) of each tree
-							tip_longitudes, 		# either a 1D vector of size Ntips (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), listing geographical longitudes of the tips (in decimal degrees) of each tree
-							radius,					# numeric, radius to assume for the sphere (e.g. Earth). Use this e.g. if you want to hange the units in which diffusivity is estimated. Earth's mean radius is about 6371e3 m.
-							planar_approximation=FALSE,	# logical, specifying whether the estimation formula should be based on a planar approximation of Earth's surface, i.e. geodesic angles are converted to distances and then those are treated as if they were Euclideanon a 2D plane. This approximation substantially increases the speed of computations.
-							only_basal_tip_pairs=FALSE,	# logical, specifying whether only immediate sister tips should be considered, i.e. tip pairs with at most 2 edges between the two tips
-							min_MRCA_time=0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
-							min_diffusivity=NULL,	# numeric, specifying the lower bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
-							max_diffusivity=NULL,	# numeric, specifying the upper bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
-							Nbootstraps=0,			# integer, number of boostraps to perform. If <=0, no boostrapping is performed.	
-							focal_diffusivities=NULL){	# optional integer vector, listing diffusivities D for which to calculate and return the loglikelihoods, e.g. for diagnostic purposes. This does not influence the actual fitting.
+fit_sbm_const = function(	trees, 								# either a single tree in phylo format, or a list of trees
+							tip_latitudes, 						# either a 1D vector of size Ntips (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), listing geographical latitudes of the tips (in decimal degrees) of each tree
+							tip_longitudes, 					# either a 1D vector of size Ntips (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), listing geographical longitudes of the tips (in decimal degrees) of each tree
+							radius,								# numeric, radius to assume for the sphere (e.g. Earth). Use this e.g. if you want to hange the units in which diffusivity is estimated. Earth's mean radius is about 6371e3 m.
+							planar_approximation	= FALSE,	# logical, specifying whether the estimation formula should be based on a planar approximation of Earth's surface, i.e. geodesic angles are converted to distances and then those are treated as if they were Euclideanon a 2D plane. This approximation substantially increases the speed of computations.
+							only_basal_tip_pairs	= FALSE,	# logical, specifying whether only immediate sister tips should be considered, i.e. tip pairs with at most 2 edges between the two tips
+							only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
+							min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
+							max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+							min_diffusivity			= NULL,		# numeric, specifying the lower bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
+							max_diffusivity			= NULL,		# numeric, specifying the upper bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
+							Nbootstraps				= 0,		# integer, number of boostraps to perform. If <=0, no boostrapping is performed.	
+							NQQ						= 0,		# integer, optional number of simulations to perform for creating Q-Q plots of the theoretically expected distribution of geodistances vs the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting.
+							SBM_PD_functor			= NULL,		# optional object, internally used SBM probability density functor
+							focal_diffusivities		= NULL){	# optional integer vector, listing diffusivities D for which to calculate and return the loglikelihoods, e.g. for diagnostic purposes. This does not influence the actual fitting.
 	# basic input checking
-	if(class(trees)=="phylo"){
+	if("phylo" %in% class(trees)){
 		# trees[] is actually a single tree
 		trees = list(trees)
 		Ntrees = 1
-		if(!((class(tip_latitudes)=="list") && (length(tip_latitudes)==1))){
+		if(!(("list" %in% class(tip_latitudes)) && (length(tip_latitudes)==1))){
 			tip_latitudes = list(tip_latitudes)
 		}
-		if(!((class(tip_longitudes)=="list") && (length(tip_longitudes)==1))){
+		if(!(("list" %in% class(tip_longitudes)) && (length(tip_longitudes)==1))){
 			tip_longitudes = list(tip_longitudes)
 		}
-	}else if(class(trees)=="list"){
+	}else if("list" %in% class(trees)){
 		# trees[] is a list of trees
 		Ntrees = length(trees)
-		if(class(tip_latitudes)=="list"){
+		if("list" %in% class(tip_latitudes)){
 			if(length(tip_latitudes)!=Ntrees) return(list(success=FALSE,error=sprintf("Input list of tip_latitudes has length %d, but should be of length %d (number of trees)",length(tip_latitudes),Ntrees)))
-		}else if(class(tip_latitudes)=="numeric"){
+		}else if("numeric" %in% class(tip_latitudes)){
 			if(Ntrees!=1) return(list(success=FALSE,error=sprintf("Input tip_latitudes was given as a single vector, but expected a list of %d vectors (number of trees)",Ntrees)))
 			if(length(tip_latitudes)!=length(trees[[1]]$tip.label)) return(list(success=FALSE,error=sprintf("Input tip_latitudes was given as a single vector of length %d, but expected length %d (number of tips in the input tree)",length(tip_latitudes),length(trees[[1]]$tip.label))))
 			tip_latitudes = list(tip_latitudes)
 		}
-		if(class(tip_longitudes)=="list"){
+		if("list" %in% class(tip_longitudes)){
 			if(length(tip_longitudes)!=Ntrees) return(list(success=FALSE,error=sprintf("Input list of tip_longitudes has length %d, but should be of length %d (number of trees)",length(tip_longitudes),Ntrees)))
-		}else if(class(tip_longitudes)=="numeric"){
+		}else if("numeric" %in% class(tip_longitudes)){
 			if(Ntrees!=1) return(list(success=FALSE,error=sprintf("Input tip_longitudes was given as a single vector, but expected a list of %d vectors (number of trees)",Ntrees)))
 			if(length(tip_longitudes)!=length(trees[[1]]$tip.label)) return(list(success=FALSE,error=sprintf("ERROR: Input tip_longitudes was given as a single vector of length %d, but expected length %d (number of tips in the input tree)",length(tip_longitudes),length(trees[[1]]$tip.label))))
 			tip_longitudes = list(tip_longitudes)
 		}
 	}else{
-		return(list(success=FALSE,error=sprintf("Unknown data format '%s' for input trees[]: Expected a list of phylo trees or a single phylo tree",class(trees))))
+		return(list(success=FALSE,error=sprintf("Unknown data format '%s' for input trees[]: Expected a list of phylo trees or a single phylo tree",class(trees)[1])))
 	}
 	if(is.null(min_diffusivity) || is.na(min_diffusivity)) min_diffusivity = NaN;
 	if(is.null(max_diffusivity) || is.na(max_diffusivity)) max_diffusivity = NaN;
 	if(is.null(Nbootstraps) || is.na(Nbootstraps) || (Nbootstraps<0)) Nbootstraps = 0;
-	if(min_MRCA_time<0) min_MRCA_time = 0;
+	if(min_MRCA_time<0) min_MRCA_time = 0
 
 	# loop through the trees and extract independet contrasts between sister clades
-	phylogenetic_distances 	= numeric()
-	latitudes1				= numeric()
-	longitudes1				= numeric()
-	latitudes2				= numeric()
-	longitudes2				= numeric()
+	phylodistances 		= numeric()
+	latitudes1			= numeric()
+	longitudes1			= numeric()
+	latitudes2			= numeric()
+	longitudes2			= numeric()
+	geodistances		= numeric()
+	tip_pairs_per_tree	= vector(mode="list", Ntrees)
 	for(i in 1:Ntrees){
 		tree = trees[[i]]
 		tip_latitudes_this_tree  = tip_latitudes[[i]]
@@ -67,7 +73,7 @@ fit_sbm_const = function(	trees, 					# either a single tree in phylo format, or
 		# make sure tree does not have multifurcations
 		tree = multifurcations_to_bifurcations(tree)$tree
 		
-		# extract independent pairs of sister tips
+		# extract independent pairs of sister tips (independent contrasts)
 		tip_pairs = extract_independent_sister_tips(tree)
 		if(only_basal_tip_pairs){
 			# calculate number of nodes between tip pairs
@@ -76,68 +82,76 @@ fit_sbm_const = function(	trees, 					# either a single tree in phylo format, or
 			keep_pairs 	= which(edge_counts<=2)
 			tip_pairs 	= tip_pairs[keep_pairs,,drop=FALSE]
 		}
-		if(min_MRCA_time>0){
+		if((min_MRCA_time>0) || (max_MRCA_age<Inf)){
 			MRCAs 			= get_pairwise_mrcas(tree, tip_pairs[,1], tip_pairs[,2], check_input=FALSE)
 			clade_heights	= castor::get_all_distances_to_root(tree)
-			keep_pairs		= which(clade_heights[MRCAs]>=min_MRCA_time)
+			tree_span		= max(clade_heights)
+			keep_pairs		= which((clade_heights[MRCAs]>=min_MRCA_time) & (tree_span-clade_heights[MRCAs]<=max_MRCA_age))
 			tip_pairs 		= tip_pairs[keep_pairs,,drop=FALSE]
 		}
-		if(nrow(tip_pairs)==0) next; # no valid tip pairs found in this tree
 		
-		# calculate phylogenetic divergence between sister tips
-		phylogenetic_distances = c(phylogenetic_distances, get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], check_input=FALSE))
-		
-		latitudes1 	= c(latitudes1, tip_latitudes_this_tree[tip_pairs[,1]])
-		longitudes1	= c(longitudes1, tip_longitudes_this_tree[tip_pairs[,1]])
-		latitudes2 	= c(latitudes2, tip_latitudes_this_tree[tip_pairs[,2]])
-		longitudes2	= c(longitudes2, tip_longitudes_this_tree[tip_pairs[,2]])
-	}
+		# calculate phylodistances and geodistances between sister tips
+		phylodistances_this_tree = get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], check_input=FALSE)
+		geodistances_this_tree	 = radius * geodesic_angles(tip_latitudes_this_tree[tip_pairs[,1]],tip_longitudes_this_tree[tip_pairs[,1]],tip_latitudes_this_tree[tip_pairs[,2]],tip_longitudes_this_tree[tip_pairs[,2]])
 
-	# omit tip pairs with zero phylogenetic distance, because in that case the likelihood density is pathological
-	valid_pairs 			= which(phylogenetic_distances>0)
-	phylogenetic_distances 	= phylogenetic_distances[valid_pairs]
-	latitudes1	 			= latitudes1[valid_pairs]
-	longitudes1	 			= longitudes1[valid_pairs]
-	latitudes2	 			= latitudes2[valid_pairs]
-	longitudes2	 			= longitudes2[valid_pairs]
-	NC 						= length(phylogenetic_distances)
+		# omit tip pairs with zero phylogenetic distance, because in that case the likelihood density is pathological
+		# also omit tip pairs located at the same geographic location, if requested
+		keep_pair = (phylodistances_this_tree>0)
+		if(only_distant_tip_pairs) keep_pair = keep_pair & (geodistances_this_tree>0)
+		tip_pairs					= tip_pairs[keep_pair,,drop=FALSE]
+		phylodistances_this_tree 	= phylodistances_this_tree[keep_pair]
+		geodistances_this_tree		= geodistances_this_tree[keep_pair]
+		tip_pairs_per_tree[[i]]		= tip_pairs
+		
+		if(nrow(tip_pairs)==0) next; # no valid tip pairs found in this tree
+
+		phylodistances 	= c(phylodistances, phylodistances_this_tree)
+		geodistances	= c(geodistances, geodistances_this_tree)
+		latitudes1 		= c(latitudes1, tip_latitudes_this_tree[tip_pairs[,1]])
+		longitudes1		= c(longitudes1, tip_longitudes_this_tree[tip_pairs[,1]])
+		latitudes2 		= c(latitudes2, tip_latitudes_this_tree[tip_pairs[,2]])
+		longitudes2		= c(longitudes2, tip_longitudes_this_tree[tip_pairs[,2]])
+	}
+	NC = length(phylodistances)
 	if(NC==0) return(list(success=FALSE, error="No valid tip pairs left for extracting independent contrasts"))
-	
-	# calculate geodesic distance for each tip pair
-	geodesic_distances = radius * sapply(1:NC, FUN=function(p) geodesic_angle(latitudes1[p],longitudes1[p],latitudes2[p],longitudes2[p]))
+	if(all(geodistances==0)) return(list(success=FALSE, error="The geodesic distances of all independent contrasts are zero"))
 		
 	bootstrap_diffusivities = NULL
 	if(planar_approximation){
 		# ignore spherical structure and simply translate geodesic_angles to geodesic distances, then fit Brownian motion on a plane with isotropic diffusivity matrix
 		Ndim 			= 2 # dimensionality of the Brownian motion
-		diffusivity		= 0.5 * (1/(Ndim*NC)) * sum(geodesic_distances^2 / phylogenetic_distances);
-		loglikelihood 	= -0.5*NC*Ndim*log(2*pi) - 0.5*Ndim*NC*log(2*diffusivity) - 0.5*Ndim*sum(log(phylogenetic_distances)) - (1/(4*diffusivity)) * sum(geodesic_distances^2 / phylogenetic_distances);
-		if(is.nan(diffusivity)) return(list(success=FALSE, error="Fitted diffusivity is NaN"))
-		if(is.nan(loglikelihood)) return(list(success=FALSE, error="Loglikelihood of fitted diffusivity is NaN"))
+		diffusivity		= 0.5 * (1/(Ndim*NC)) * sum(geodistances^2 / phylodistances);
+		loglikelihood 	= -0.5*NC*Ndim*log(2*pi) - 0.5*Ndim*NC*log(2*diffusivity) - 0.5*Ndim*sum(log(phylodistances)) - (1/(4*diffusivity)) * sum(geodistances^2 / phylodistances);
+		if(is.nan(diffusivity)) return(list(success=FALSE, error="Fitted diffusivity is NaN", Ncontrasts = NC))
+		if(is.nan(loglikelihood)) return(list(success=FALSE, error="Loglikelihood of fitted diffusivity is NaN", Ncontrasts = NC))
 		if(Nbootstraps>0){
 			bootstrap_fit_diffusivities  = vector(mode="numeric", Nbootstraps)
 			bootstrap_fit_loglikelihoods = vector(mode="numeric", Nbootstraps)
 			bootstrap_loglikelihoods 	 = vector(mode="numeric", Nbootstraps)
 			for(b in 1:Nbootstraps){
-				bootstrap_distances 			= radius * sapply(1:NC, FUN=function(p) draw_SBM_geodesic_angle_CPP(phylogenetic_distances[p]*diffusivity/(radius^2)))
-				bootstrap_fit_diffusivities[b]	= 0.5 * (1/(Ndim*NC)) * sum(bootstrap_distances^2 / phylogenetic_distances);
-				bootstrap_fit_loglikelihoods[b]	= -0.5*NC*Ndim*log(2*pi) - 0.5*Ndim*NC*log(2*bootstrap_fit_diffusivities[b]) - 0.5*Ndim*sum(log(phylogenetic_distances)) - (1/(4*bootstrap_fit_diffusivities[b])) * sum(bootstrap_distances^2 / phylogenetic_distances);
-				bootstrap_loglikelihoods[b]		= -0.5*NC*Ndim*log(2*pi) - 0.5*Ndim*NC*log(2*diffusivity) - 0.5*Ndim*sum(log(phylogenetic_distances)) - (1/(4*diffusivity)) * sum(bootstrap_distances^2 / phylogenetic_distances);
+				bootstrap_distances 			= sapply(1:NC, FUN=function(p) sqrt(sum(stats::rnorm(n=2,mean=0,sd=sqrt(2*diffusivity*phylodistances[p]))^2))) # generate random distances according to 2-dimensional planar BM with the fitted diffusivity
+				bootstrap_fit_diffusivities[b]	= 0.5 * (1/(Ndim*NC)) * sum(bootstrap_distances^2 / phylodistances);
+				bootstrap_fit_loglikelihoods[b]	= -0.5*NC*Ndim*log(2*pi) - 0.5*Ndim*NC*log(2*bootstrap_fit_diffusivities[b]) - 0.5*Ndim*sum(log(phylodistances)) - (1/(4*bootstrap_fit_diffusivities[b])) * sum(bootstrap_distances^2 / phylodistances);
+				bootstrap_loglikelihoods[b]		= -0.5*NC*Ndim*log(2*pi) - 0.5*Ndim*NC*log(2*diffusivity) - 0.5*Ndim*sum(log(phylodistances)) - (1/(4*diffusivity)) * sum(bootstrap_distances^2 / phylodistances);
 			}
 		}
 	}else{
+		# pre-calculate SBM probability density functor for efficiency
+		if(is.null(SBM_PD_functor)) SBM_PD_functor = SBM_get_SBM_PD_functor_CPP(max_error = 1e-7, max_Legendre_terms = 200)
+	
 		# maximum-likelihood estimation based on full spherical Brownian motion model
 		fit = fit_SBM_diffusivity_from_transitions_CPP(	radius 				= radius,
-														time_steps			= phylogenetic_distances,
-														distances 			= geodesic_distances,
+														time_steps			= phylodistances,
+														distances 			= geodistances,
 														max_error			= 1e-7,
 														max_Legendre_terms	= 200,
 														opt_epsilon			= 1e-10,
 														max_iterations 		= 10000,
 														min_diffusivity		= min_diffusivity,
 														max_diffusivity		= max_diffusivity,
-														Nbootstraps			= Nbootstraps);
-		if(!fit$success) return(list(success=FALSE, error=fit$error))
+														Nbootstraps			= Nbootstraps,
+														SBM_PD_functor		= SBM_PD_functor);
+		if(!fit$success) return(list(success=FALSE, error=fit$error, Ncontrasts = NC))
 		diffusivity 					= fit$fit_diffusivity
 		loglikelihood					= fit$fit_loglikelihood
 		bootstrap_fit_diffusivities		= fit$bootstrap_fit_diffusivities
@@ -147,8 +161,8 @@ fit_sbm_const = function(	trees, 					# either a single tree in phylo format, or
 	
 	if(!is.null(focal_diffusivities)){
 		focal_LLs = SBM_LLs_of_transitions_CPP(	radius 				= radius,
-												time_steps			= phylogenetic_distances,
-												distances 			= geodesic_distances,
+												time_steps			= phylodistances,
+												distances 			= geodistances,
 												diffusivities		= focal_diffusivities,
 												max_error			= 1e-7,
 												max_Legendre_terms	= 200)$loglikelihoods
@@ -163,20 +177,46 @@ fit_sbm_const = function(	trees, 					# either a single tree in phylo format, or
 	}else{
 		consistency = NA
 	}
+	
+		
+	#####################################
+	# Calculate QQ-plot using simulations
+	
+	if(NQQ>0){
+		sim_geodistances = numeric(NQQ * NC)
+		next_g = 1 # index in sim_geodistances[] for placing the next simulated geodistance
+		for(tr in 1:Ntrees){
+			tip_pairs = tip_pairs_per_tree[[tr]]
+			if(length(tip_pairs_per_tree[[tr]])>0){
+				for(q in 1:NQQ){
+					sim = castor::simulate_sbm(tree = trees[[tr]], radius = radius, diffusivity = diffusivity, root_latitude = NULL, root_longitude = NULL)
+					if(!sim$success) return(list(success=FALSE, error=sprintf("Calculation of QQ failed at simulation %d for tree %d: Could not simulate SBM for the fitted model: %s",q,tr,sim$error), diffusivity=diffusivity, loglikelihood=loglikelihood, Ncontrasts=NC));
+					sim_geodistances[next_g + c(1:length(tip_pairs))] = radius * geodesic_angles(sim$tip_latitudes[tip_pairs[,1]],sim$tip_longitudes[tip_pairs[,1]],sim$tip_latitudes[tip_pairs[,2]],sim$tip_longitudes[tip_pairs[,2]])
+					next_g = next_g + length(tip_pairs)
+				}
+			}
+		}
+		probs  = c(1:NC)/NC
+		QQplot = cbind(quantile(geodistances, probs=probs, na.rm=TRUE, type=8), quantile(sim_geodistances, probs=probs, na.rm=TRUE, type=8))
+	}
+	
+	#####################################
 
 	return(list(success					= TRUE,
 				diffusivity 			= diffusivity,
 				loglikelihood			= loglikelihood,
 				Ncontrasts				= NC,
-				phylogenetic_distances 	= phylogenetic_distances,
-				geodesic_distances		= geodesic_distances,
+				phylodistances 			= phylodistances,
+				geodistances			= geodistances,
 				focal_loglikelihoods	= focal_LLs,
-				standard_errors			= (if(Nbootstraps>0) sd(bootstrap_fit_diffusivities, na.rm=TRUE) else NULL),
+				standard_error			= (if(Nbootstraps>0) sd(bootstrap_fit_diffusivities, na.rm=TRUE) else NULL),
 				CI50lower				= (if(Nbootstraps>0) unname(quantile(bootstrap_fit_diffusivities, probs=0.25, type=8, na.rm=TRUE)) else NULL),
 				CI50upper				= (if(Nbootstraps>0) unname(quantile(bootstrap_fit_diffusivities, probs=0.75, type=8, na.rm=TRUE)) else NULL),
 				CI95lower				= (if(Nbootstraps>0) unname(quantile(bootstrap_fit_diffusivities, probs=0.025, type=8, na.rm=TRUE)) else NULL),
 				CI95upper				= (if(Nbootstraps>0) unname(quantile(bootstrap_fit_diffusivities, probs=0.975, type=8, na.rm=TRUE)) else NULL),
-				consistency				= consistency))
+				consistency				= consistency,
+				QQplot					= (if(NQQ>0) QQplot else NULL),
+				SBM_PD_functor			= SBM_PD_functor))
 }
 
 

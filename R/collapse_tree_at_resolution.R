@@ -46,7 +46,7 @@ collapse_tree_at_resolution = function(	tree,
 							root 		= results$new_root+1)
 	if(rename_collapsed_nodes){
 		old2new_clade	= results$old2new_clade + 1;
-		collapsed_tree$tip.label[old2new_clade[Ntips+results$collapsed_nodes+1]] = tree$tip.label[results$representative_tips+1];
+		collapsed_tree$tip.label[old2new_clade[Ntips+results$collapsed_nodes+1]] = tree$tip.label[results$farthest_tips+1];
 	}
 	class(collapsed_tree) = "phylo";
 	attr(collapsed_tree,"order") = "none";

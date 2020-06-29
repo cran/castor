@@ -29,6 +29,7 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 	}
 	tips_to_keep = which(keep_tip);
 	if(length(tips_to_keep)==0) stop("ERROR: No tips kept (all filtered out)")
+	if(length(tips_to_keep)==1) stop("ERROR: Only one tip to be kept, so the resulting tree would not be an actual tree")
 	
 	if(length(tips_to_keep)==Ntips){
 		# special case: keeping full tree

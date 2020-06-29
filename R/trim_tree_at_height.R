@@ -22,8 +22,9 @@ trim_tree_at_height = function(	tree,
 	Ntips_new  			= results$Ntips_new
 	Nnodes_new	 		= results$Nnodes_new
 	Nclades_new			= Ntips_new+Nnodes_new
-	new2old_clade 		= results$new2old_clade + 1; # switch to 1-based indices
-	new2old_edge		= results$new2old_edge + 1;
+	new2old_clade 		= results$new2old_clade + 1 # switch to 1-based indices
+	new2old_edge		= results$new2old_edge + 1
+	new_edges_trimmed	= results$new_edges_trimmed + 1
 	new_tips_ex_nodes 	= results$new_tips_ex_nodes + 1;
 	clade_labels		= c(tree$tip.label, tree$node.label)
 	trimmed_tree = list(Nnode 		= Nnodes_new,
@@ -35,9 +36,10 @@ trim_tree_at_height = function(	tree,
 	class(trimmed_tree) = "phylo";
 	attr(trimmed_tree,"order") = "none";
 
-	return(list(tree			= trimmed_tree,
-				Nedges_trimmed	= results$Nedges_trimmed,
-				Nedges_removed	= (Nedges-results$Nedges_new),
-				new2old_clade	= new2old_clade, 
-				new2old_edge	= new2old_edge));
+	return(list(tree				= trimmed_tree,
+				Nedges_trimmed		= results$Nedges_trimmed,
+				Nedges_removed		= (Nedges-results$Nedges_new),
+				new2old_clade		= new2old_clade, 
+				new2old_edge		= new2old_edge,
+				new_edges_trimmed	= new_edges_trimmed));
 }

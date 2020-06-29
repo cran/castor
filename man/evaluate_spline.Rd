@@ -4,14 +4,15 @@
 Evaluate a scalar spline at arbitrary locations.
 }
 \description{
-Given a natural spline function \eqn{Y:\R\to\R}, defined as a series of Y values on a discrete X grid, evaluate its values at arbitrary X points. Supported splines degrees are 0 (Y is piecewise constant), 1 (piecewise linear), 2 (piecewise quadratic) and 3 (piecewise cubic).
+Given a natural spline function \eqn{Y:\R\to\R}, defined as a series of Y values on a discrete X grid, evaluate its values (or derivative) at arbitrary X points. Supported splines degrees are 0 (Y is piecewise constant), 1 (piecewise linear), 2 (piecewise quadratic) and 3 (piecewise cubic).
 }
 \usage{
 evaluate_spline(Xgrid, 
                 Ygrid,
                 splines_degree,
                 Xtarget,
-                extrapolate = "const")
+                extrapolate = "const",
+                derivative  = 0)
 }
 \arguments{
 \item{Xgrid}{
@@ -29,6 +30,9 @@ Numeric vector, listing arbitrary X values on which to evaluate Y.
 \item{extrapolate}{
 Character, specifying how to extrapolate Y beyond \code{Xgrid} if needed. Available options are "const" (i.e. use the value of Y on the nearest \code{Xgrid} point) or "splines" (i.e. use the polynomial coefficients from the nearest grid point).
 }
+\item{derivative}{
+Integer, specifying which derivative to return. To return the spline's value, set \code{derivative=0}. Currently only the options 0,1,2 are supported.
+}
 }
 
 
@@ -38,7 +42,7 @@ Spline functions are returned by some of castor's fitting routines, so \code{eva
 
 
 \value{
-A numeric vector of the same length as \code{Xtarget}, listing the values of Y on \code{Xtarget}.
+A numeric vector of the same length as \code{Xtarget}, listing the values (or derivatives, if \code{derivative>0}) of Y on \code{Xtarget}.
 }
 
 \author{Stilianos Louca}

@@ -64,7 +64,7 @@ Strictly positive numeric, specifying the product \eqn{\rho\lambda_o} (present-d
 Numeric, specifying an optional maximum allowed age for the tree's root. If the tree ends up expanding past that age, all remaining lineages are forced to coalesce at that age. This is not statistically consistent with the provided HBD model (in fact it corresponds to a modified HBD model with a spike in the PSR at that time). This argument merely provides a way to prevent excessively large trees if the PSR is close to zero at older ages and when not conditioning on the stem nor crown age, while still keeping the original statistical properties at younger ages. To disable this feature set \code{force_max_age} to \code{Inf}.
 }
 \item{splines_degree}{
-Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided \code{PSR} between grid points in \code{age_grid}. For example, if \code{splines_degree==1}, then the provided \code{PSR} is interpreted as a piecewise-linear curve; if \code{splines_degree==2} the PSR is interpreted as a quadratic spline; if \code{splines_degree==3} the PSR is interpreted as cubic splines. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. If your \code{age_grid} is fine enough, then \code{splines_degree=1} is usually sufficient.
+Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided rates \code{PSR}, \code{PDR}, \code{lambda}, \code{mu} and \code{rho} between grid points in \code{age_grid}. For example, if \code{splines_degree==1}, then the provided rates are interpreted as piecewise-linear curves; if \code{splines_degree==2} the rates are interpreted as quadratic splines; if \code{splines_degree==3} the rates are interpreted as cubic splines. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. If your \code{age_grid} is fine enough, then \code{splines_degree=1} is usually sufficient.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -102,7 +102,7 @@ Note that HBD trees can also be generated using the function \code{\link{generat
 \value{
 A named list with the following elements:
 \item{success}{
-Logical, indicating whether the calculation was successful. If \code{FALSE}, then the returned list includes an additional `\code{error}' element (character) providing a description of the error; all other return variables may be undefined.
+Logical, indicating whether the simulation was successful. If \code{FALSE}, then the returned list includes an additional `\code{error}' element (character) providing a description of the error; all other return variables may be undefined.
 }
 \item{trees}{A list of length \code{Ntrees}, listing the generated trees. Each tree will be an ultrametric timetree of class "phylo".}
 }

@@ -35,7 +35,7 @@ simulate_bm_model = function(	tree,
 			if(nrow(diffusivity)!=ncol(diffusivity)) stop(sprintf("ERROR: Diffusivity matrix must be quadratic (instead, it has dimensions %d x %d)",nrow(diffusivity),ncol(diffusivity)))
 		}
 		Ndegrees = Ntraits;
-		sigma 	 = sqrt(2) * t(chol(diffusivity)); # Cholesky decomposition, i.e. lower-triangular matrix such that diffusivity = cholesky * cholesky^T
+		sigma 	 = sqrt(2) * t(chol(diffusivity)); # Cholesky decomposition, i.e. lower-triangular matrix such that diffusivity = 0.5 * cholesky * cholesky^T
 	}
 	
 	# run simulation
@@ -64,7 +64,6 @@ simulate_bm_model = function(	tree,
 																	include_nodes	= include_nodes,
 																	Nsimulations	= Nsimulations);
 	}
-
 	# unflatten returned arrays
 	tip_states  = NULL
 	node_states = NULL

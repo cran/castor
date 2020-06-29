@@ -17,7 +17,9 @@ fit_sbm_parametric(tree,
               time_grid             = NULL,
               planar_approximation  = FALSE,
               only_basal_tip_pairs  = FALSE,
+              only_distant_tip_pairs= FALSE,
               min_MRCA_time         = 0,
+              max_MRCA_age          = Inf,
               param_min             = -Inf,
               param_max             = +Inf,
               param_scale           = NULL,
@@ -26,6 +28,7 @@ fit_sbm_parametric(tree,
               Nthreads              = 1,
               Nbootstraps           = 0,
               Ntrials_per_bootstrap = NULL,
+              NQQ                   = 0,
               fit_control           = list(),
               SBM_PD_functor        = NULL,
               focal_param_values    = NULL,
@@ -64,10 +67,15 @@ Logical, specifying whether to estimate the diffusivity based on a planar approx
 \item{only_basal_tip_pairs}{
 Logical, specifying whether to only compare immediate sister tips, i.e., tips connected through a single parental node.
 }
+\item{only_distant_tip_pairs}{
+Logical, specifying whether to only compare tips at distinct geographic locations.
+}
 \item{min_MRCA_time}{
 Numeric, specifying the minimum allowed time (distance from root) of the most recent common ancestor (MRCA) of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set \code{min_MRCA_time=0} to disable this filter.
 }
-
+\item{max_MRCA_age}{
+Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
+}
 \item{param_min}{
 Optional numeric vector of size NP, specifying lower bounds for model parameters. If of size 1, the same lower bound is applied to all parameters. Use \code{-Inf} to omit a lower bound for a parameter. If \code{NULL}, no lower bounds are applied. For fixed parameters, lower bounds are ignored.
 }
@@ -91,6 +99,9 @@ Integer, specifying the number of parametric bootstraps to perform for estimatin
 }
 \item{Ntrials_per_bootstrap}{
 Integer, specifying the number of fitting trials to perform for each bootstrap sampling. If \code{NULL}, this is set equal to \code{max(1,Ntrials)}. Decreasing \code{Ntrials_per_bootstrap} will reduce computation time, at the expense of potentially inflating the estimated confidence intervals; in some cases (e.g., for very large trees) this may be useful if fitting takes a long time and confidence intervals are very narrow anyway. Only relevant if \code{Nbootstraps>0}.
+}
+\item{NQQ}{
+Integer, optional number of simulations to perform for creating QQ plots of the theoretically expected distribution of geodistances vs. the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting. If <=0, no QQ plots will be calculated.
 }
 \item{fit_control}{
  Named list containing options for the \code{nlminb} optimization routine, such as \code{iter.max}, \code{eval.max} or \code{rel.tol}. For a complete list of options and default values see the documentation of \code{nlminb} in the \code{stats} package.
@@ -143,6 +154,9 @@ The log-likelihood of the fitted model for the given data.
 \item{NFP}{
 Integer, number of fitted (i.e., non-fixed) model parameters.
 }
+\item{Ncontrasts}{
+Integer, number of independent contrasts used for fitting.
+}
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
 }
@@ -182,6 +196,9 @@ Integer vector of size \code{Ntrials}, listing the number of likelihood evaluati
 \item{standard_errors}{
 Numeric vector of size NP, estimated standard error of the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
+\item{medians}{
+Numeric vector of size NP, median the estimated parameters across parametric bootstraps. Only returned if \code{Nbootstraps>0}.
+}
 \item{CI50lower}{
 Numeric vector of size NP, lower bound of the 50\% confidence interval (25-75\% percentile) for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
@@ -196,6 +213,9 @@ Numeric vector of size NP, upper bound of the 95\% confidence interval for the p
 }
 \item{consistency}{
 Numeric between 0 and 1, estimated consistency of the data with the fitted model. See the documentation of \code{\link{fit_sbm_const}} for an explanation.
+}
+\item{QQplot}{
+Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the fitted model.
 }
 }
 
@@ -232,11 +252,11 @@ diffusivity_functor = function(times, params){
 	return(params[1] + (times/max_time)*(params[2]-params[1]))
 }
 true_params = c(1, 2)
-time_grid 	= seq(0,max_time,length.out=2)
-simulation 	= simulate_sbm(tree,
-					radius = radius, 
-                    diffusivity = diffusivity_functor(time_grid,true_params), 
-                    time_grid = time_grid)
+time_grid   = seq(0,max_time,length.out=2)
+simulation  = simulate_sbm(tree,
+                      radius      = radius, 
+                      diffusivity = diffusivity_functor(time_grid,true_params), 
+                      time_grid   = time_grid)
 
 # fit time-independent SBM to get a rough estimate
 fit_const = fit_sbm_const(tree,simulation$tip_latitudes,simulation$tip_longitudes,radius=radius)

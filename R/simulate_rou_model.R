@@ -12,7 +12,7 @@ simulate_rou_model = function(	tree,
 								drop_dims		= TRUE){
 	Ntips  = length(tree$tip.label);
 	Nnodes = tree$Nnode;
-	results = simulate_reflected_Ornstein_Uhlenbeck_model_CPP(	Ntips				= Ntips,
+	results = simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(Ntips				= Ntips,
 																Nnodes				= Nnodes,
 																Nedges				= nrow(tree$edge),
 																tree_edge 			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based,

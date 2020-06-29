@@ -69,7 +69,7 @@ generate_tree_hbd_reverse = function(	Ntips,							# (integer) Number of tips in
 		if((!is.null(PDR)) && (length(PDR)==1)) PDR = rep(PDR,times=NG);
 		if((!is.null(lambda)) && (length(lambda)==1)) lambda = rep(lambda,times=NG);
 		if((!is.null(mu)) && (length(mu)==1)) mu = rep(mu,times=NG);
-		if(age_grid[1]>tail(age_grid,1)) return(list(success = FALSE, error = sprintf("Values in age_grid must be strictly increasing")))
+		if(any(diff(age_grid)<=0)) return(list(success = FALSE, error = sprintf("Values in age_grid must be strictly increasing")))
 	}
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
 	if(age_grid[1]>0) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including present-day (age 0)")))

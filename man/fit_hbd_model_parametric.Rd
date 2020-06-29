@@ -4,7 +4,7 @@
 Fit a parametric homogenous birth-death model to a timetree.
 }
 \description{
-Given an ultrametric timetree, fit a homogenous birth-death (HBD) model in which speciation and extinction rates (\eqn{\lambda} and \eqn{mu}) are given as parameterized functions of time before present.  ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Every HBD model is defined based on the values that \eqn{\lambda} and \eqn{\mu} take over time as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled); in turn, \eqn{\lambda}, \eqn{\mu} and \eqn{\rho} can be parameterized by a finite set of parameters. This function estimates these parameters by maximizing the likelihood (Morlon et al. 2011) of the timetree under the resulting HBD model.
+Given an ultrametric timetree, fit a homogenous birth-death (HBD) model in which speciation and extinction rates (\eqn{\lambda} and \eqn{\mu}) are given as parameterized functions of time before present.  ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction rates (in the literature this is sometimes referred to simply as ``birth-death model''). Every HBD model is defined based on the values that \eqn{\lambda} and \eqn{\mu} take over time as well as the sampling fraction \eqn{\rho} (fraction of extant species sampled); in turn, \eqn{\lambda}, \eqn{\mu} and \eqn{\rho} can be parameterized by a finite set of parameters. This function estimates these parameters by maximizing the likelihood (Morlon et al. 2011) of the timetree under the resulting HBD model.
 }
 \usage{
 fit_hbd_model_parametric( tree, 
@@ -16,8 +16,8 @@ fit_hbd_model_parametric( tree,
                           oldest_age         = NULL,
                           age0               = 0,
                           lambda,
-                          mu,
-                          rho0,
+                          mu                 = 0,
+                          rho0               = 1,
                           age_grid           = NULL,
                           condition          = "auto",
                           relative_dt        = 1e-3,
@@ -53,13 +53,13 @@ Strictly positive numeric, specifying the oldest time before present (``age'') t
 Non-negative numeric, specifying the youngest age (time before present) to consider for fitting, and with respect to which \code{rho} is defined. If \code{age0>0}, then \code{rho0} refers to the sampling fraction at age \code{age0}, i.e. the fraction of lineages extant at \code{age0} that are included in the tree. See below for more details.
 }
 \item{lambda}{
-Function specifying the speciation rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with strictly positive entries.
+Function specifying the speciation rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with strictly positive entries. Can also be a single number (i.e., lambda is fixed).
 }
 \item{mu}{
-Function specifying the extinction rate at any given age and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with non-negative entries.
+Function specifying the extinction rate at any given age and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with non-negative entries. Can also be a single number (i.e., mu is fixed).
 }
 \item{rho0}{
-Function specifying the sampling fraction (fraction of extant species sampled at \code{age0}) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a numeric between 0 (exclusive) and 1 (inclusive).
+Function specifying the sampling fraction (fraction of extant species sampled at \code{age0}) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a numeric between 0 (exclusive) and 1 (inclusive). Can also be a single number (i.e., rho0 is fixed).
 }
 \item{age_grid}{
 Numeric vector, specifying ages at which the \code{lambda} and \code{mu} functionals should be evaluated. This age grid must be fine enough to capture the possible variation in \eqn{\lambda} and \eqn{\mu} over time, within the permissible parameter range. If of size 1, then lambda & mu are assumed to be time-independent.

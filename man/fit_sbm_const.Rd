@@ -13,15 +13,19 @@ fit_sbm_const(trees,
         radius,
         planar_approximation    = FALSE,
         only_basal_tip_pairs    = FALSE,
+        only_distant_tip_pairs  = FALSE,
         min_MRCA_time           = 0,
+        max_MRCA_age            = Inf,
         min_diffusivity         = NULL,
         max_diffusivity         = NULL,
         Nbootstraps             = 0, 
+        NQQ                     = 0,
+        SBM_PD_functor          = NULL,
         focal_diffusivities     = NULL)
 }
 \arguments{
 \item{trees}{
-Either a single rooted tree or a list of rooted trees, of class "phylo". The root of each tree is assumed to be the unique node with no incoming edge. Edge lengths are assumed to represent time intervals or a similarly interpretable phylogenetic distance.
+Either a single rooted tree or a list of rooted trees, of class "phylo". The root of each tree is assumed to be the unique node with no incoming edge. Edge lengths are assumed to represent time intervals or a similarly interpretable phylogenetic distance. When multiple trees are provided, it is either assumed that their roots coincide in time (if \code{align_trees_at_root=TRUE}) or that each tree's youngest tip was sampled at present day (if \code{align_trees_at_root=FALSE}).
 }
 \item{tip_latitudes}{
 Numeric vector of length Ntips, or a list of vectors, listing latitudes of tips in decimal degrees (from -90 to 90). If \code{trees} is a list of trees, then \code{tip_latitudes} should be a list of vectors of the same length as \code{trees}, listing tip latitudes for each of the input trees.
@@ -38,8 +42,14 @@ Logical, specifying whether to estimate the diffusivity based on a planar approx
 \item{only_basal_tip_pairs}{
 Logical, specifying whether to only compare immediate sister tips, i.e., tips connected through a single parental node.
 }
+\item{only_distant_tip_pairs}{
+Logical, specifying whether to only compare tips at distinct geographic locations.
+}
 \item{min_MRCA_time}{
 Numeric, specifying the minimum allowed time (distance from root) of the most recent common ancestor (MRCA) of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set \code{min_MRCA_time<=0} to disable this filter.
+}
+\item{max_MRCA_age}{
+Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
 }
 \item{min_diffusivity}{
 Non-negative numeric, specifying the minimum possible diffusivity. If NULL, this is automatically chosen.
@@ -49,6 +59,12 @@ Non-negative numeric, specifying the maximum possible diffusivity. If NULL, this
 }
 \item{Nbootstraps}{
 Non-negative integer, specifying an optional number of parametric bootstraps to performs for estimating standard errors and confidence intervals.
+}
+\item{NQQ}{
+Integer, optional number of simulations to perform for creating QQ plots of the theoretically expected distribution of geodistances vs. the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting. If <=0, no QQ plots will be calculated.
+}
+\item{SBM_PD_functor}{
+SBM probability density functor object. Used internally and for debugging purposes. Unless you know what you're doing, you should keep this \code{NULL}.
 }
 \item{focal_diffusivities}{
 Optional numeric vector, listing diffusivities of particular interest and for which the log-likelihoods should be returned. This may be used e.g. for diagnostic purposes, e.g. to see how "sharp" the likelihood peak is at the maximum-likelihood estimate.
@@ -77,18 +93,18 @@ Numeric, the estimated diffusivity, in units distance^2/time. Distance units are
 Numeric, the log-likelihood of the data at the estimated diffusivity.
 }
 \item{Ncontrasts}{
-Integer, number of independent contrasts (i.e., tip pairs) used to estimat the diffusivity. This is the number of independent data points used.
+Integer, number of independent contrasts (i.e., tip pairs) used to estimate the diffusivity. This is the number of independent data points used.
 }
-\item{phylogenetic_distances}{
+\item{phylodistances}{
 Numeric vector of length \code{Ncontrasts}, listing the phylogenetic distances of the independent contrasts used in the fitting.
 }
-\item{geodesic_distances}{
+\item{geodistances}{
 Numeric vector of length \code{Ncontrasts}, listing the geographical distances of the independent contrasts used in the fitting.
 }
 \item{focal_loglikelihoods}{
 Numeric vector of the same length as \code{focal_diffusivities}, listing the log-likelihoods for the diffusivities provided in \code{focal_diffusivities}.
 }
-\item{standard_errors}{
+\item{standard_error}{
 Numeric, estimated standard error of the estimated diffusivity, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{CI50lower}{
@@ -106,6 +122,12 @@ Numeric, upper bound of the 95\% confidence interval for the estimated diffusivi
 \item{consistency}{
 Numeric between 0 and 1, estimated consistency of the data with the fitted model. If \eqn{L} denotes the loglikelihood of new data generated by the fitted model (under the same model) and \eqn{M} denotes the expectation of \eqn{L}, then \code{consistency} is the probability that \eqn{|L-M|} will be greater or equal to \eqn{|X-M|}, where \eqn{X} is the loglikelihood of the original data under the fitted model.
 Only returned if \code{Nbootstraps>0}. A low consistency (e.g., <0.05) indicates that the fitted model is a poor description of the data. See Lindholm et al. (2019) for background.
+}
+\item{QQplot}{
+Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the fitted model.
+}
+\item{SBM_PD_functor}{
+SBM probability density functor object. Used internally and for debugging purposes.
 }
 }
 

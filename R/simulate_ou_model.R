@@ -1,4 +1,4 @@
-# Perform random simulation of an Ornstein-Uhlenbeck model of continuous trait evolution, moving from root to tips
+# Perform random simulation of an Ornstein-Uhlenbeck model of continuous trait evolution along a tree, moving from root to tips
 # The root's state is drawn randomly from the OU stationary distribution
 # Optionally, multiple independent simulations can be performed using the same model (e.g. as part of some Monte Carlo integration)
 simulate_ou_model = function(	tree, 
@@ -11,7 +11,7 @@ simulate_ou_model = function(	tree,
 								drop_dims		= TRUE){
 	Ntips  = length(tree$tip.label);
 	Nnodes = tree$Nnode;
-	results = simulate_Ornstein_Uhlenbeck_model_CPP(Ntips				= Ntips,
+	results = simulate_Ornstein_Uhlenbeck_on_tree_CPP(Ntips				= Ntips,
 													Nnodes				= Nnodes,
 													Nedges				= nrow(tree$edge),
 													tree_edge 			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based,

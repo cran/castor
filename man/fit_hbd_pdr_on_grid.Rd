@@ -160,8 +160,14 @@ Integer, specifying the number of iterations performed during the optimization p
 \item{Nevaluations}{
 Integer, specifying the number of likelihood evaluations performed during the optimization path that yielded the maximum likelihood.
 }
+\item{bootstrap_estimates}{
+If \code{Nbootstraps>0}, this will be a named list containing the elements \code{PDR} (numeric matrix of size \code{Nbootstraps} x Ngrid, listing the fitted PDR at each grid point and for each bootstrap) and \code{rholambda0} (a numeric vector of size \code{Nbootstraps}, listing the fitted \eqn{\rho\lambda_o} for each bootstrap).
+}
 \item{standard_errors}{
 If \code{Nbootstraps>0}, this will be a named list containing the elements \code{PDR} (numeric vector of size Ngrid, listing bootstrap-estimated standard errors for the fitted PDRs) and \code{rholambda0} (a single numeric, bootstrap-estimated standard error for the fitted \eqn{\rho\lambda_o}).
+}
+\item{medians}{
+If \code{Nbootstraps>0}, this will be a named list containing the elements \code{PDR} (numeric vector of size Ngrid, listing median fitted PDRs across bootstraps) and \code{rholambda0} (a single numeric, median fitted \eqn{\rho\lambda_o} across bootstraps).
 }
 \item{CI50lower}{
 If \code{Nbootstraps>0}, this will be a named list containing the elements \code{PDR} (numeric vector of size Ngrid, listing bootstrap-estimated lower bounds of the 50-percent confidence intervals for the fitted PDRs) and \code{rholambda0} (a single numeric, bootstrap-estimated lower bound of the 50-percent confidence intervals for the fitted \eqn{\rho\lambda_o}).

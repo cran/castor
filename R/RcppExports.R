@@ -13,12 +13,16 @@ get_member_lists_from_group_assignments_CPP <- function(Ngroups, pool2group) {
     .Call(`_castor_get_member_lists_from_group_assignments_CPP`, Ngroups, pool2group)
 }
 
+place_sorted_values_into_bins_CPP <- function(items, bin_mins, bin_maxs) {
+    .Call(`_castor_place_sorted_values_into_bins_CPP`, items, bin_mins, bin_maxs)
+}
+
 split_undirected_graph_CPP <- function(Nnodes, Nedges, edges) {
     .Call(`_castor_split_undirected_graph_CPP`, Nnodes, Nedges, edges)
 }
 
-evaluate_spline_CPP <- function(Xgrid, Ygrid, splines_degree, Xtarget, extrapolate) {
-    .Call(`_castor_evaluate_spline_CPP`, Xgrid, Ygrid, splines_degree, Xtarget, extrapolate)
+evaluate_spline_CPP <- function(Xgrid, Ygrid, splines_degree, Xtarget, extrapolate, derivative) {
+    .Call(`_castor_evaluate_spline_CPP`, Xgrid, Ygrid, splines_degree, Xtarget, extrapolate, derivative)
 }
 
 derivatives_of_grid_curve_CPP <- function(Xgrid, Ygrid) {
@@ -43,6 +47,10 @@ smoothenTimeSeriesSavitzkyGolay_CPP <- function(times, data, windowTimeSpan, win
 
 get_inhomogeneous_grid_1D_CPP <- function(Xstart, Xend, Ngrid, densityX, densityY, xepsilon) {
     .Call(`_castor_get_inhomogeneous_grid_1D_CPP`, Xstart, Xend, Ngrid, densityX, densityY, xepsilon)
+}
+
+get_Ornstein_Uhlenbeck_time_series_CPP <- function(times, start_value, stationary_mean, stationary_std, decay_rate) {
+    .Call(`_castor_get_Ornstein_Uhlenbeck_time_series_CPP`, times, start_value, stationary_mean, stationary_std, decay_rate)
 }
 
 get_Poisson_event_times_CPP <- function(time_grid, rates, splines_degree, Nevents, time0) {
@@ -169,8 +177,8 @@ root_tree_at_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, new_root_nod
     .Call(`_castor_root_tree_at_node_CPP`, Ntips, Nnodes, Nedges, tree_edge, new_root_node)
 }
 
-get_tree_with_collapsed_monofurcations_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, force_keep_root) {
-    .Call(`_castor_get_tree_with_collapsed_monofurcations_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, force_keep_root)
+get_tree_with_collapsed_monofurcations_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, force_keep_root, force_keep_nodes) {
+    .Call(`_castor_get_tree_with_collapsed_monofurcations_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, force_keep_root, force_keep_nodes)
 }
 
 get_subtree_with_specific_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, clades_to_keep, collapse_monofurcations, force_keep_root, keep_all_children_of_explicit_clades_to_keep, keep_all_tips_of_explicit_clades_to_keep) {
@@ -273,8 +281,8 @@ get_trait_depth_consenTRAIT_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, ed
     .Call(`_castor_get_trait_depth_consenTRAIT_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix)
 }
 
-autocorrelation_function_of_continuous_trait_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix) {
-    .Call(`_castor_autocorrelation_function_of_continuous_trait_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix)
+ACF_continuous_trait_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix) {
+    .Call(`_castor_ACF_continuous_trait_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix)
 }
 
 get_empirical_state_frequencies_per_node_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, tip_states) {
@@ -317,8 +325,8 @@ WMPR_ASR_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length,
     .Call(`_castor_WMPR_ASR_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, tip_states, transition_costs, branch_length_exponent, weight_posteriors_by_scenario_counts, verbose, verbose_prefix)
 }
 
-ASR_with_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, eigenvalues, EVmatrix, inverse_EVmatrix, prior_probabilities_per_tip, prior_probabilities_for_root, include_ancestral_likelihoods, reroot, exponentiation_accuracy, max_polynomials, store_exponentials) {
-    .Call(`_castor_ASR_with_fixed_rates_Markov_model_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, eigenvalues, EVmatrix, inverse_EVmatrix, prior_probabilities_per_tip, prior_probabilities_for_root, include_ancestral_likelihoods, reroot, exponentiation_accuracy, max_polynomials, store_exponentials)
+ASR_with_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, eigenvalues, EVmatrix, inverse_EVmatrix, prior_probabilities_per_tip, root_prior_type, root_prior, include_ancestral_likelihoods, reroot, runtime_out_seconds, exponentiation_accuracy, max_polynomials, store_exponentials) {
+    .Call(`_castor_ASR_with_fixed_rates_Markov_model_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, eigenvalues, EVmatrix, inverse_EVmatrix, prior_probabilities_per_tip, root_prior_type, root_prior, include_ancestral_likelihoods, reroot, runtime_out_seconds, exponentiation_accuracy, max_polynomials, store_exponentials)
 }
 
 apply_fixed_rate_Markov_model_to_missing_clades_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, exponentiation_accuracy, max_polynomials, likelihoods_known, likelihoods, unknown_likelihoods_as_priors) {
@@ -381,16 +389,28 @@ get_HBD_PSR_loglikelihood_CPP <- function(branching_ages, oldest_age, age_grid, 
     .Call(`_castor_get_HBD_PSR_loglikelihood_CPP`, branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds)
 }
 
+get_HBDS_model_loglikelihood_CPP <- function(branching_ages, Ptip_ages, Pnode_ages, CSA_ages, CSA_probs, CSA_kappas, concentrated_tip_counts, concentrated_node_counts, oldest_age, age_grid, lambdas, mus, psis, kappas, splines_degree, condition, relative_ODE_step, E_value_step, runtime_out_seconds) {
+    .Call(`_castor_get_HBDS_model_loglikelihood_CPP`, branching_ages, Ptip_ages, Pnode_ages, CSA_ages, CSA_probs, CSA_kappas, concentrated_tip_counts, concentrated_node_counts, oldest_age, age_grid, lambdas, mus, psis, kappas, splines_degree, condition, relative_ODE_step, E_value_step, runtime_out_seconds)
+}
+
+simulate_deterministic_HBDS_CPP <- function(CSA_ages, CSA_probs, CSA_kappas, age_grid, lambdas, mus, psis, kappas, splines_degree, age0, N0, LTT0, requested_ages, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds) {
+    .Call(`_castor_simulate_deterministic_HBDS_CPP`, CSA_ages, CSA_probs, CSA_kappas, age_grid, lambdas, mus, psis, kappas, splines_degree, age0, N0, LTT0, requested_ages, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
+}
+
+get_congruent_HBDS_CPP <- function(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds) {
+    .Call(`_castor_get_congruent_HBDS_CPP`, CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
+}
+
 simulate_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations) {
     .Call(`_castor_simulate_fixed_rates_Markov_model_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations)
 }
 
-simulate_Ornstein_Uhlenbeck_model_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, stationary_mean, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations) {
-    .Call(`_castor_simulate_Ornstein_Uhlenbeck_model_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, stationary_mean, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations)
+simulate_Ornstein_Uhlenbeck_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, stationary_mean, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations) {
+    .Call(`_castor_simulate_Ornstein_Uhlenbeck_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, stationary_mean, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations)
 }
 
-simulate_reflected_Ornstein_Uhlenbeck_model_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations) {
-    .Call(`_castor_simulate_reflected_Ornstein_Uhlenbeck_model_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations)
+simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations) {
+    .Call(`_castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations)
 }
 
 simulate_scalar_Brownian_motion_model_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_states, diffusivity, include_tips, include_nodes, Nsimulations) {
@@ -407,6 +427,10 @@ simulate_neutral_gene_evolution_CPP <- function(Ntips, Nnodes, Nedges, Nsites, N
 
 generate_random_tree_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times) {
     .Call(`_castor_generate_random_tree_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times)
+}
+
+generate_random_tree_HBDS_CPP <- function(max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, include_extant, include_extinct, include_birth_times, include_death_times) {
+    .Call(`_castor_generate_random_tree_HBDS_CPP`, max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, include_extant, include_extinct, include_birth_times, include_death_times)
 }
 
 generate_tree_from_branching_ages_CPP <- function(branching_ages) {
@@ -445,6 +469,14 @@ simulate_deterministic_HBD_MSC_CPP <- function(oldest_age, age_grid, PSRs, CTs, 
     .Call(`_castor_simulate_deterministic_HBD_MSC_CPP`, oldest_age, age_grid, PSRs, CTs, rho0, sLTT0, gLTT0, splines_degree, relative_dt)
 }
 
+geodesic_angles_CPP <- function(latitudes1, longitudes1, latitudes2, longitudes2) {
+    .Call(`_castor_geodesic_angles_CPP`, latitudes1, longitudes1, latitudes2, longitudes2)
+}
+
+get_all_pairwise_geodesic_angles_CPP <- function(latitudes1, longitudes1, latitudes2, longitudes2) {
+    .Call(`_castor_get_all_pairwise_geodesic_angles_CPP`, latitudes1, longitudes1, latitudes2, longitudes2)
+}
+
 draw_SBM_geodesic_angle_CPP <- function(tD) {
     .Call(`_castor_draw_SBM_geodesic_angle_CPP`, tD)
 }
@@ -455,6 +487,10 @@ simulate_SBM_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_leng
 
 simulate_TSBM_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi) {
     .Call(`_castor_simulate_TSBM_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi)
+}
+
+move_points_on_sphere_CPP <- function(radius, old_latitudes, old_longitudes, distances, directions) {
+    .Call(`_castor_move_points_on_sphere_CPP`, radius, old_latitudes, old_longitudes, distances, directions)
 }
 
 SBM_LLs_of_transitions_CPP <- function(radius, time_steps, distances, diffusivities, max_error, max_Legendre_terms) {
@@ -481,11 +517,15 @@ TSBM_LL_of_sampled_transitions_CPP <- function(radius, MRCA_times, child_times1,
     .Call(`_castor_TSBM_LL_of_sampled_transitions_CPP`, radius, MRCA_times, child_times1, child_times2, old_thetas, old_phis, new_thetas, new_phis, time_grid, diffusivities, splines_degree, Nlat, Nlon, sampling_rates, SBM_PD_functor)
 }
 
-fit_SBM_diffusivity_from_transitions_CPP <- function(radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps) {
-    .Call(`_castor_fit_SBM_diffusivity_from_transitions_CPP`, radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps)
+fit_SBM_diffusivity_from_transitions_CPP <- function(radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps, SBM_PD_functor) {
+    .Call(`_castor_fit_SBM_diffusivity_from_transitions_CPP`, radius, time_steps, distances, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps, SBM_PD_functor)
 }
 
 fit_SBM_from_sampled_transitions_CPP <- function(radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps) {
     .Call(`_castor_fit_SBM_from_sampled_transitions_CPP`, radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps)
+}
+
+ACF_spherical_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix) {
+    .Call(`_castor_ACF_spherical_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix)
 }
 

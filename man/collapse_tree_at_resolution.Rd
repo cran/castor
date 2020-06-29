@@ -28,7 +28,7 @@ Logical. Instead of considering edge lengths, consider edge counts as phylogenet
 Logical, indicating whether collapsed nodes should be turned into tips at the same location (thus potentially shortening the tree). If \code{FALSE}, then the incoming edge of each collapsed node is extended by some length L, where L is the distance of the node to its farthest descending tip (thus maintaining the height of the tree).
 }
 \item{rename_collapsed_nodes}{
-Logical, indicating whether collapsed nodes should be renamed using a representative tip name (the farthest descending tip).
+Logical, indicating whether collapsed nodes should be renamed using a representative tip name (the farthest descending tip). See details below.
 }
 \item{criterion}{
 Character, specifying the criterion to use for collapsing (i.e. how to interpret \code{resolution}). '\code{max_tip_depth}': Collapse nodes based on their maximum distance to any descending tip. '\code{sum_tip_paths}': Collapse nodes based on the sum of descending edges (each edge counted once). '\code{max_tip_pair_dist}': Collapse nodes based on the maximum distance between any pair of descending tips.

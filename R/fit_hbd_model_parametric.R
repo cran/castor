@@ -12,8 +12,8 @@ fit_hbd_model_parametric = function(tree,
 									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
 									age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting and with respect to which rho is defined (rho0:=rho(age0) is the fraction of lineages extant at age0 that are included in the tree)
 									lambda,							# function handle, mapping age & model_parameters to the current speciation rate, (age,param_values) --> lambda. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
-									mu,								# function handle, mapping age & model_parameters to the current extinction rate, (age,param_values) --> mu. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
-									rho0,							# function handle, mapping model_parameters to the sampling fraction at age0 (aka. rarefaction), (param_values) --> rho. Must be defined for all parameters within the imposed bounds.
+									mu					= 0,		# function handle, mapping age & model_parameters to the current extinction rate, (age,param_values) --> mu. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[]. Can also be a single numeric.
+									rho0				= 1,		# function handle, mapping model_parameters to the sampling fraction at age0 (aka. rarefaction), (param_values) --> rho. Must be defined for all parameters within the imposed bounds. Can also be a single numeric.
 									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the lambda and mu functionals should be evaluated. This age grid must be fine enough to capture the possible variation in lambda() and mu() over time. If NULL or of length 1, then lambda & mu are assumed to be time-independent.
 									condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -25,6 +25,40 @@ fit_hbd_model_parametric = function(tree,
 	# basic input error checking
 	if(tree$Nnode<2) return(list(success = FALSE, error="Tree is too small"));
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
+	if((!is.null(oldest_age)) && (!is.null(age_grid)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g)",oldest_age)))
+	if(is.null(max_model_runtime)) max_model_runtime = 0;
+	if(is.null(age_grid)){
+		age_grid = 0
+	}else{
+		if(any(diff(age_grid)<0)) age_grid = sort(age_grid) # avoid common errors where age_grid is in reverse order
+	}
+	max_start_attempts 	= max(1,max_start_attempts)
+	Ntrials 			= max(1,Ntrials)
+	Nthreads 			= max(1,Nthreads)
+
+	# check if some of the functionals are actually fixed numbers
+	model_fixed = TRUE
+	if(is.numeric(lambda) && (length(lambda)==1)){
+		# the provided lambda is actually a single number, so convert to a function
+		lambda_value = lambda
+		lambda = function(ages,params){ rep(lambda_value, times=length(ages)) }
+	}else{
+		model_fixed = FALSE
+	}
+	if(is.numeric(mu) && (length(mu)==1)){
+		# the provided mu is actually a single number, so convert to a function
+		mu_value = mu
+		mu = function(ages,params){ rep(mu_value, times=length(ages)) }
+	}else{
+		model_fixed = FALSE
+	}
+	if(is.numeric(rho0) && (length(rho0)==1)){
+		# the provided rho0 is actually a single number, so convert to a function
+		rho0_value = rho0
+		rho0 = function(params){ rho0_value }
+	}else{
+		model_fixed = FALSE
+	}
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
@@ -45,58 +79,26 @@ fit_hbd_model_parametric = function(tree,
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
 
 	# more input error checking
+	if(is.null(oldest_age)) oldest_age = root_age;
 	if(!(condition %in% c("crown","stem","auto","none"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown', 'none' or 'auto'.",condition)));
 	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
-	NP 					= length(param_values);
-	max_start_attempts 	= max(1,max_start_attempts)
-	Ntrials 			= max(1,Ntrials)
-	Nthreads 			= max(1,Nthreads)
-	if((!is.null(age_grid)) && (age_grid[1]>tail(age_grid,1))) age_grid = rev(age_grid); # avoid common errors where age_grid is in reverse order
-	if(is.null(oldest_age)) oldest_age = root_age;
-	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
-	if(is.null(age_grid)) age_grid = 0;
-	param_names = names(param_values);
-	if(is.null(param_guess)){
-		if(any(is.finite(param_values))){
-			return(list(success=FALSE, error=sprintf("Missing guessed parameter values")))
-		}else{
-			param_guess = rep(NA, times=NP);
-		}
-	}
-	if(length(param_guess)!=NP){
-		return(list(success=FALSE, error=sprintf("Number of guessed parameters (%d) differs from number of model parameters (%d)",length(param_guess),NP)))
-	}else if(!is.null(param_names)){
-		names(param_guess) = param_names;
-	}
-	if((!is.null(param_names)) && (length(param_names)!=NP)){
-		return(list(success=FALSE, error=sprintf("Number of parameter names (%d) differs from number of model parameters (%d)",length(param_names),NP)))
-	}
-	if(is.null(param_min)){
-		param_min = rep(-Inf,times=NP);
-	}else if(length(param_min)==1){
-		param_min = rep(param_min,times=NP);
-	}else if(length(param_min)!=NP){
-		return(list(success=FALSE, error=sprintf("Length of param_min[] (%d) differs from number of model parameters (%d)",length(param_min),NP)))
-	}
-	if(is.null(param_max)){
-		param_max = rep(+Inf,times=NP);
-	}else if(length(param_max)==1){
-		param_max = rep(param_max,times=NP);
-	}else if(length(param_max)!=NP){
-		return(list(success=FALSE, error=sprintf("Length of param_max[] (%d) differs from number of model parameters (%d)",length(param_max),NP)))
-	}
-	if(is.null(param_scale)){
-		param_scale = rep(NA,times=NP);
-	}else if(length(param_scale)==1){
-		param_scale = rep(param_scale,times=NP);
-	}else if(length(param_scale)!=NP){
-		return(list(success=FALSE, error=sprintf("Length of param_scale[] (%d) differs from number of model parameters (%d)",length(param_scale),NP)))
-	}
-	if(is.null(max_model_runtime)) max_model_runtime = 0;
-	if(any(is.nan(param_guess) | is.na(param_guess))) return(list(success=FALSE, error=sprintf("Some guessed parameter values are NA or NaN; you must specify a valied guess for each model parameter")));
-	param_values[is.nan(param_values)] = NA # standardize representation of non-fixed params
-	param_scale[is.nan(param_scale)] = NA	# standardize representation of unknown param scales
-	if(any((!is.na(param_scale)) & (param_scale==0))) return(list(success=FALSE, error=sprintf("Some provided parameter scales are zero; expecting non-zero scale for each parameter")));
+	if((!is.null(oldest_age)) && (!is.null(age_grid)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g)",oldest_age)))
+
+	# sanitize model parameters
+	sanitized_params = sanitize_parameters_for_fitting(param_values, param_guess = param_guess, param_min = param_min, param_max = param_max, param_scale = param_scale)
+	if(!sanitized_params$success) return(list(success=FALSE, error=sanitized_params$error))
+	NP				= sanitized_params$NP
+	NFP				= sanitized_params$NFP
+	param_names		= sanitized_params$param_names
+	param_values	= sanitized_params$param_values
+	param_guess		= sanitized_params$param_guess
+	param_min		= sanitized_params$param_min
+	param_max		= sanitized_params$param_max
+	param_scale		= sanitized_params$param_scale
+	fitted_params	= sanitized_params$fitted_params
+	fixed_params	= sanitized_params$fixed_params
+	
+	if((NFP>0) && model_fixed) return(list(success=FALSE, error="At least one model parameter is fitted, however all model aspects (lambda, mu, rho, kappa etc) are fixed"))
 	
 	# check if functionals are valid at least on the initial guess
 	lambda_guess 	= lambda(age_grid+age0,param_guess)
@@ -107,29 +109,6 @@ fit_hbd_model_parametric = function(tree,
 	if(!is.finite(rho0_guess)) return(list(success=FALSE, error=sprintf("rho0 is not a valid number for guessed parameters")));
 	if(length(lambda_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("lambda function must return vectors of the same length as the input ages")));
 	if(length(mu_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("mu function must return vectors of the same length as the input ages")));
-						
-	#################################
-	# PREPARE PARAMETERS TO BE FITTED
-	
-		
-	# determine which parameters are to be fitted
-	fitted_params	= which(is.na(param_values))
-	fixed_params	= which(!is.na(param_values))
-	NFP				= length(fitted_params);
-	param_guess[fixed_params] = param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
-	
-	# determine typical parameter scales
-	for(p in fitted_params){
-		if(is.na(param_scale[p])){
-			if(param_guess[p]!=0){
-				param_scale[p] = abs(param_guess[p]);
-			}else if((is.finite(param_min[p]) && (param_min[p]!=0)) || (is.finite(param_max[p]) && (param_max[p]!=0))){
-				param_scale[p] = mean(abs(c((if(is.finite(param_min[p]) && (param_min[p]!=0)) param_min[p] else NULL), (if(is.finite(param_max[p]) && (param_max[p]!=0)) param_max[p] else NULL))));
-			}else{
-				param_scale[p] = 1;
-			}
-		}
-	}
 	
 
 	################################
@@ -141,8 +120,8 @@ fit_hbd_model_parametric = function(tree,
 		params = param_values; params[fitted_params] = fparam_values * param_scale[fitted_params];
 		if(any(is.nan(params)) || any(is.infinite(params))) return(Inf); # catch weird cases where params become NaN
 		if(!is.null(param_names)) names(params) = param_names;
-		lambdas 	= lambda(age_grid+0,params)
-		mus 		= mu(age_grid+0,params)
+		lambdas 	= lambda(age_grid+age0,params)
+		mus 		= mu(age_grid+age0,params)
 		input_rho0 	= rho0(params)
 		if(!(all(is.finite(lambdas)) && all(is.finite(mus)) && is.finite(input_rho0))) return(Inf); # catch weird cases where lambda/mu/rho become NaN
 		if(length(age_grid)==1){
@@ -171,6 +150,8 @@ fit_hbd_model_parametric = function(tree,
 		return(-LL);
 	}
 		
+	# calculate loglikelihood for initial guess
+	guess_loglikelihood = -objective_function(param_guess[fitted_params]/param_scale[fitted_params])	
 
 	# fit with various starting points
 	fit_single_trial = function(trial){
@@ -251,6 +232,7 @@ fit_hbd_model_parametric = function(tree,
 				loglikelihood			= loglikelihood,
 				param_fitted			= fitted_param_values,
 				param_guess				= param_guess,
+				guess_loglikelihood		= guess_loglikelihood,
 				NFP						= NFP,
 				AIC						= 2*NFP - 2*loglikelihood,
 				BIC						= log(sum((sorted_node_ages<=oldest_age) & (sorted_node_ages>=age0)))*NFP - 2*loglikelihood,
@@ -263,13 +245,4 @@ fit_hbd_model_parametric = function(tree,
 				trial_Niterations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations),
 				trial_Nevaluations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)));
 }
-
-
-
-completement = function(N, indices){
-	pool = rep(TRUE,N);
-	pool[indices] = FALSE;
-	return(which(pool));
-}
-
 

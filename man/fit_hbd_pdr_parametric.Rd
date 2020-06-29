@@ -54,10 +54,10 @@ Strictly positive numeric, specifying the oldest time before present (``age'') t
 Non-negative numeric, specifying the youngest age (time before present) to consider for fitting, and with respect to which \code{rholambda0} is defined. If \code{age0>0}, then \code{rholambda0} refers to the product of the sampling fraction at age \code{age0} and the speciation rate at age \code{age0}. See below for more details.
 }
 \item{PDR}{
-Function specifying the pulled diversification rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument.
+Function specifying the pulled diversification rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument. Can also be a single number (i.e., PDR is fixed).
 }
 \item{rholambda0}{
-Function specifying the product \eqn{\rho\lambda_o} (sampling fraction times speciation rate at \code{age0}) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a strictly positive numeric.
+Function specifying the product \eqn{\rho\lambda_o} (sampling fraction times speciation rate at \code{age0}) for any given parameter values. This function must take exactly one argument, a numeric vector of size NP (parameter values), and return a strictly positive numeric. Can also be a single number (i.e., rholambda0 is fixed).
 }
 \item{age_grid}{
 Numeric vector, specifying ages at which the \code{PDR} function should be evaluated. This age grid must be fine enough to capture the possible variation in the PDR over time, within the permissible parameter range. If of size 1, then the PDR is assumed to be time-independent.

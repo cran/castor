@@ -19,35 +19,35 @@ fit_sbm_const_biased_sampling = function(	trees, 					# either a single tree in 
 							Nbootstraps=0,			# integer, number of boostraps to perform. If <=0, no boostrapping is performed.	
 							focal_diffusivities=NULL){	# optional integer vector, listing diffusivities D for which to calculate and return the loglikelihoods, e.g. for diagnostic purposes. This does not influence the actual fitting.
 	# basic input checking
-	if(class(trees)=="phylo"){
+	if("phylo" %in% class(trees)){
 		# trees[] is actually a single tree
 		trees = list(trees)
 		Ntrees = 1
-		if(!((class(tip_latitudes)=="list") && (length(tip_latitudes)==1))){
+		if(!(("list" %in% class(tip_latitudes)) && (length(tip_latitudes)==1))){
 			tip_latitudes = list(tip_latitudes)
 		}
-		if(!((class(tip_longitudes)=="list") && (length(tip_longitudes)==1))){
+		if(!(("list" %in% class(tip_longitudes)) && (length(tip_longitudes)==1))){
 			tip_longitudes = list(tip_longitudes)
 		}
-	}else if(class(trees)=="list"){
+	}else if("list" %in% class(trees)){
 		# trees[] is a list of trees
 		Ntrees = length(trees)
-		if(class(tip_latitudes)=="list"){
+		if("list" %in% class(tip_latitudes)){
 			if(length(tip_latitudes)!=Ntrees) return(list(success=FALSE,error=sprintf("Input list of tip_latitudes has length %d, but should be of length %d (number of trees)",length(tip_latitudes),Ntrees)))
-		}else if(class(tip_latitudes)=="numeric"){
+		}else if("numeric" %in% class(tip_latitudes)){
 			if(Ntrees!=1) return(list(success=FALSE,error=sprintf("Input tip_latitudes was given as a single vector, but expected a list of %d vectors (number of trees)",Ntrees)))
 			if(length(tip_latitudes)!=length(trees[[1]]$tip.label)) return(list(success=FALSE,error=sprintf("Input tip_latitudes was given as a single vector of length %d, but expected length %d (number of tips in the input tree)",length(tip_latitudes),length(trees[[1]]$tip.label))))
 			tip_latitudes = list(tip_latitudes)
 		}
-		if(class(tip_longitudes)=="list"){
+		if("list" %in% class(tip_longitudes)){
 			if(length(tip_longitudes)!=Ntrees) return(list(success=FALSE,error=sprintf("Input list of tip_longitudes has length %d, but should be of length %d (number of trees)",length(tip_longitudes),Ntrees)))
-		}else if(class(tip_longitudes)=="numeric"){
+		}else if("numeric" %in% class(tip_longitudes)){
 			if(Ntrees!=1) return(list(success=FALSE,error=sprintf("Input tip_longitudes was given as a single vector, but expected a list of %d vectors (number of trees)",Ntrees)))
 			if(length(tip_longitudes)!=length(trees[[1]]$tip.label)) return(list(success=FALSE,error=sprintf("ERROR: Input tip_longitudes was given as a single vector of length %d, but expected length %d (number of tips in the input tree)",length(tip_longitudes),length(trees[[1]]$tip.label))))
 			tip_longitudes = list(tip_longitudes)
 		}
 	}else{
-		return(list(success=FALSE,error=sprintf("Unknown data format '%s' for input trees[]: Expected a list of phylo trees or a single phylo tree",class(trees))))
+		return(list(success=FALSE,error=sprintf("Unknown data format '%s' for input trees[]: Expected a list of phylo trees or a single phylo tree",class(trees)[1])))
 	}
 	if(is.null(min_diffusivity) || is.na(min_diffusivity)) min_diffusivity = NaN;
 	if(is.null(max_diffusivity) || is.na(max_diffusivity)) max_diffusivity = NaN;
@@ -168,7 +168,8 @@ fit_sbm_const_biased_sampling = function(	trees, 					# either a single tree in 
 															max_iterations 		= 10000,
 															min_diffusivity		= min_diffusivity,
 															max_diffusivity		= max_diffusivity,
-															Nbootstraps			= Nbootstraps);
+															Nbootstraps			= Nbootstraps,
+															SBM_PD_functor		= list());
 		}
 		if(!fit$success) return(list(success=FALSE, error=fit$error))
 		diffusivity 				= fit$fit_diffusivity

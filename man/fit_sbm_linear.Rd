@@ -13,12 +13,17 @@ fit_sbm_linear(tree,
               radius,
               planar_approximation  = FALSE,
               only_basal_tip_pairs  = FALSE,
+              only_distant_tip_pairs= FALSE,
               min_MRCA_time         = 0,
+              max_MRCA_age          = Inf,
+              time1                 = 0,
+              time2                 = NULL,
               Ntrials               = 1,
               Nthreads              = 1,
               Nbootstraps           = 0,
               Ntrials_per_bootstrap = NULL,
               Nsignificance         = 0,
+              NQQ                   = 0,
               fit_control           = list(),
               verbose               = FALSE,
               verbose_prefix        = "")
@@ -42,8 +47,20 @@ Logical, specifying whether to estimate the diffusivity based on a planar approx
 \item{only_basal_tip_pairs}{
 Logical, specifying whether to only compare immediate sister tips, i.e., tips connected through a single parental node.
 }
+\item{only_distant_tip_pairs}{
+Logical, specifying whether to only compare tips at distinct geographic locations.
+}
 \item{min_MRCA_time}{
 Numeric, specifying the minimum allowed time (distance from root) of the most recent common ancestor (MRCA) of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set \code{min_MRCA_time=0} to disable this filter.
+}
+\item{max_MRCA_age}{
+Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
+}
+\item{time1}{
+Optional numeric, specifying the first time point at which to estimate the diffusivity. By default this is set to root (i.e., time 0).
+}
+\item{time2}{
+Optional numeric, specifying the first time point at which to estimate the diffusivity. By default this is set to the present day (i.e., the maximum distance of any tip from the root).
 }
 \item{Ntrials}{
 Integer, specifying the number of independent fitting trials to perform, each starting from a random choice of model parameters. Increasing \code{Ntrials} reduces the risk of reaching a non-global local maximum in the fitting objective.
@@ -58,7 +75,10 @@ Integer, specifying the number of parametric bootstraps to perform for estimatin
 Integer, specifying the number of fitting trials to perform for each bootstrap sampling. If \code{NULL}, this is set equal to \code{max(1,Ntrials)}. Decreasing \code{Ntrials_per_bootstrap} will reduce computation time, at the expense of potentially inflating the estimated confidence intervals; in some cases (e.g., for very large trees) this may be useful if fitting takes a long time and confidence intervals are very narrow anyway. Only relevant if \code{Nbootstraps>0}.
 }
 \item{Nsignificance}{
-Integer, specifying the number of simulations to perform under a const-diffusivity model for testing the statistical significance of the fitted slope. Set to 0 to not calculate the significance of the slope.
+Integer, specifying the number of simulations to perform under a const-diffusivity model for assessing the statistical significance of the fitted slope. Set to 0 to not calculate the significance of the slope.
+}
+\item{NQQ}{
+Integer, optional number of simulations to perform for creating QQ plots of the theoretically expected distribution of geodistances vs. the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting. If <=0, no QQ plots will be calculated.
 }
 \item{fit_control}{
  Named list containing options for the \code{nlminb} optimization routine, such as \code{iter.max}, \code{eval.max} or \code{rel.tol}. For a complete list of options and default values see the documentation of \code{nlminb} in the \code{stats} package.
@@ -96,14 +116,20 @@ The maximized fitting objective. Currently, only maximum-likelihood estimation i
 \item{objective_name}{
 The name of the objective that was maximized during fitting. Currently, only maximum-likelihood estimation is implemented, and hence this will always be ``loglikelihood''.
 }
-\item{diffusivity}{
-Numeric vector of size 2, listing the fitted diffusivity at the root and at the "present"" (i.e., at the tip furthest away from the root). The fitted model assumes that the diffusivity varied linearly between those two time points.
+\item{times}{
+Numeric vector of size 2, listing the two time points at which the diffusivity was estimated (\code{time1} and \code{time2}).
+}
+\item{diffusivities}{
+Numeric vector of size 2, listing the fitted diffusivity at \code{time1} and \code{time2}. The fitted model assumes that the diffusivity varied linearly between those two time points.
 }
 \item{loglikelihood}{
 The log-likelihood of the fitted linear model for the given data.
 }
 \item{NFP}{
 Integer, number of fitted (i.e., non-fixed) model parameters. Will always be 2.
+}
+\item{Ncontrasts}{
+Integer, number of independent contrasts used for fitting.
 }
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
@@ -156,6 +182,9 @@ Numeric between 0 and 1, estimated consistency of the data with the fitted model
 \item{significance}{
 Numeric between 0 and 1, estimate statistical significance of the fitted linear slope. Only returned if \code{Nsignificance>0}.
 }
+\item{QQplot}{
+Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the fitted model.
+}
 }
 
 \author{Stilianos Louca}
@@ -188,12 +217,12 @@ max_time = get_tree_span(tree)$max_distance
 # in this example we measure distances in Earth radii
 radius = 1
 diffusivity_functor = function(times, params){
-	return(params[1] + (times/max_time)*(params[2]-params[1]))
+    return(params[1] + (times/max_time)*(params[2]-params[1]))
 }
 true_params = c(1, 2)
-time_grid 	= seq(0,max_time,length.out=2)
-simulation 	= simulate_sbm(tree,
-					radius = radius, 
+time_grid   = seq(0,max_time,length.out=2)
+simulation  = simulate_sbm(tree,
+                    radius = radius, 
                     diffusivity = diffusivity_functor(time_grid,true_params), 
                     time_grid = time_grid)
 
@@ -209,7 +238,7 @@ fit = fit_sbm_linear(tree,
     
 # compare fitted & true params
 print(true_params)
-print(fit$diffusivity)
+print(fit$diffusivities)
 }
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the

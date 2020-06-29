@@ -52,6 +52,10 @@ If \code{index_only=TRUE}, an integer vector (X) of size Nedges, listing the reo
 
 \examples{
 \dontrun{
+# generate a random tree
+tree = generate_random_tree(list(birth_rate_factor=1), max_tips=100)$tree
+
+# get new tree with reordered edges
 postorder_tree = reorder_tree_edges(tree, root_to_tips=FALSE)
 }
 }

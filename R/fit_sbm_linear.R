@@ -6,12 +6,17 @@ fit_sbm_linear = function(	tree,
 							radius,								# numeric, radius to assume for the sphere (e.g. Earth). Use this e.g. if you want to hange the units in which diffusivity is estimated. Earth's mean radius is about 6371e3 m.
 							planar_approximation	= FALSE,	# logical, specifying whether the estimation formula should be based on a planar approximation of Earth's surface, i.e. geodesic angles are converted to distances and then those are treated as if they were Euclideanon a 2D plane. This approximation substantially increases the speed of computations.
 							only_basal_tip_pairs	= FALSE,	# logical, specifying whether only immediate sister tips should be considered, i.e. tip pairs with at most 2 edges between the two tips
+							only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 							min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
+							max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+							time1					= 0,		# optional numeric, specifying the first time point at which to estimate the diffusivity. By default this is set to root.
+							time2					= NULL,		# optional numeric, specifying the second time point at which to estimate the diffusivity. By default this is set to present day.
 							Ntrials					= 1,		# number of fitting trials to perform, each time starting with random parameter values
 							Nthreads				= 1,
 							Nbootstraps				= 0,		# (integer) optional number of parametric-bootstrap samples for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
 							Ntrials_per_bootstrap	= NULL,		# (integer) optional number of fitting trials for each bootstrap sampling. If NULL, this is set equal to Ntrials. A smaller Ntrials_per_bootstrap will reduce computation, at the expense of increasing the estimated confidence intervals (i.e. yielding more conservative estimates of confidence).
 							Nsignificance			= 0,		# (integer) optional number of simulations to perform (under a const-diffusivity model) for testing the statistical significance of the fitted slope. Set to 0 to not calculate the significance of the slope.
+							NQQ						= 0,		# (integer) optional number of simulations to perform for creating Q-Q plots of the theoretically expected distribution of geodistances vs the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting.
 							fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 							verbose					= FALSE,	# boolean, specifying whether to print informative messages
 							verbose_prefix			= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
@@ -21,15 +26,18 @@ fit_sbm_linear = function(	tree,
 	root_age	= get_tree_span(tree)$max_distance
 	Ntrials		= max(1,Ntrials)
 	Nthreads	= max(1,Nthreads)
-	if(min_MRCA_time<0) min_MRCA_time = Inf;
+	if(min_MRCA_time<0) min_MRCA_time = Inf
 	Ntrials = pmax(1,Ntrials)
-	if((class(tip_latitudes)=="list") && (length(tip_latitudes)==length(tree$tip.label))){
+	if(("list" %in% class(tip_latitudes)) && (length(tip_latitudes)==length(tree$tip.label))){
 		tip_latitudes = unlist(tip_latitudes)
 	}
-	if((class(tip_latitudes)=="list") && (length(tip_longitudes)==length(tree$tip.label))){
+	if(("list" %in% class(tip_latitudes)) && (length(tip_longitudes)==length(tree$tip.label))){
 		tip_longitudes = unlist(tip_longitudes)
 	}
 	if(is.null(Nbootstraps) || is.na(Nbootstraps) || (Nbootstraps<0)) Nbootstraps = 0;
+	if(is.null(time1)) time1 = 0
+	if(is.null(time2)) time2 = root_age
+	if(time1==time2) return(list(success=FALSE, error="time1 must differ from time2"))
 					
 					
 	####################################
@@ -42,6 +50,7 @@ fit_sbm_linear = function(	tree,
 								radius				= radius,
 								only_basal_tip_pairs= only_basal_tip_pairs,
 								min_MRCA_time		= min_MRCA_time,
+								max_MRCA_age		= max_MRCA_age,
 								Nbootstraps			= 0)
 	if(!fit_const$success) return(list(success=FALSE, error=sprintf("Failed to fit constant-diffusivity model: %s",fit_const$error)))
 		
@@ -55,7 +64,7 @@ fit_sbm_linear = function(	tree,
 	
 	if(verbose) cat(sprintf("%sFitting linear-diffusivity model..\n",verbose_prefix))
 	diffusivity_functor = function(times, params){
-		return(params[1] + (times/root_age)*(params[2]-params[1]))
+		return(pmax(0,params[1] + ((times-time1)/(time2-time1))*(params[2]-params[1])))
 	}
 	time_grid = seq(0,root_age,length.out=2)
 	fit_linear = fit_sbm_parametric(tree,
@@ -68,7 +77,9 @@ fit_sbm_linear = function(	tree,
 									time_grid 				= time_grid,
 									planar_approximation	= planar_approximation,
 									only_basal_tip_pairs	= only_basal_tip_pairs,
+									only_distant_tip_pairs	= only_distant_tip_pairs,
 									min_MRCA_time			= min_MRCA_time,
+									max_MRCA_age			= max_MRCA_age,
 									param_min				= 0.00001*c(fit_const$diffusivity,fit_const$diffusivity),
 									param_max				= c(Inf,Inf),
 									param_scale				= c(fit_const$diffusivity,fit_const$diffusivity),
@@ -76,6 +87,7 @@ fit_sbm_linear = function(	tree,
 									Nthreads				= Nthreads,
 									Nbootstraps				= Nbootstraps,
 									Ntrials_per_bootstrap	= Ntrials_per_bootstrap,
+									NQQ						= NQQ,
 									fit_control				= fit_control,
 									SBM_PD_functor			= SBM_PD_functor,
 									verbose					= verbose,
@@ -102,13 +114,16 @@ fit_sbm_linear = function(	tree,
 									time_grid 				= time_grid,
 									planar_approximation	= planar_approximation,
 									only_basal_tip_pairs	= only_basal_tip_pairs,
+									only_distant_tip_pairs	= only_distant_tip_pairs,
 									min_MRCA_time			= min_MRCA_time,
+									max_MRCA_age			= max_MRCA_age,
 									param_min				= 0.00001*c(fit_const$diffusivity,fit_const$diffusivity),
 									param_max				= c(Inf,Inf),
 									param_scale				= c(fit_const$diffusivity,fit_const$diffusivity),
 									Ntrials 				= Ntrials,
 									Nthreads				= Nthreads,
 									Nbootstraps				= 0,
+									NQQ						= 0,
 									fit_control				= fit_control,
 									SBM_PD_functor			= SBM_PD_functor,
 									verbose					= verbose,
@@ -128,9 +143,13 @@ fit_sbm_linear = function(	tree,
 	return(list(success					= TRUE,
 				objective_value			= fit_linear$objective_value,
 				objective_name			= fit_linear$objective_name,
-				diffusivity				= setNames(fit_linear$param_fitted,c("root","present")),
+				times					= setNames(c(time1,time2),c("time1","time2")),
+				diffusivities			= setNames(fit_linear$param_fitted,c("time1","time2")),
 				loglikelihood			= fit_linear$loglikelihood,
 				NFP						= fit_linear$NFP,
+				Ncontrasts				= fit_linear$Ncontrasts,
+				phylodistances			= fit_linear$phylodistances,
+				geodistances			= fit_linear$geodistances,
 				AIC						= fit_linear$AIC,
 				BIC						= fit_linear$BIC,
 				converged				= fit_linear$converged,
@@ -148,7 +167,8 @@ fit_sbm_linear = function(	tree,
 				CI95upper				= fit_linear$CI95upper,
 				consistency				= fit_linear$consistency,
 				const_diffusivity		= fit_const$diffusivity,
-				significance			= (if(Nsignificance>0) significance else NULL)))
+				significance			= (if(Nsignificance>0) significance else NULL),
+				QQplot					= fit_linear$QQplot))
 
 }
 

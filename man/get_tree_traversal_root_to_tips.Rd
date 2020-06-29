@@ -53,7 +53,11 @@ A list with the following elements:
 
 \examples{
 \dontrun{
-get_tree_traversal_root_to_tips(tree, include_tips=TRUE)
+# generate a random tree
+tree = generate_random_tree(list(birth_rate_factor=1), max_tips=100)$tree
+
+# get tree traversal
+traversal = get_tree_traversal_root_to_tips(tree, include_tips=TRUE)
 }
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the

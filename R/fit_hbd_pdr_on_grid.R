@@ -366,11 +366,13 @@ fit_hbd_pdr_on_grid = function(	tree,
 		# calculate standard errors and confidence intervals from distribution of bootstrapped parameters
 		standard_errors_flat = sqrt(pmax(0, colMeans(bootstrap_params^2, na.rm=TRUE) - colMeans(bootstrap_params, na.rm=TRUE)^2))
 		standard_errors = list(PDR=standard_errors_flat[1:NG], rholambda0=standard_errors_flat[NG+1])
-		quantiles = sapply(1:ncol(bootstrap_params), FUN=function(p) quantile(bootstrap_params[,p], probs=c(0.25, 0.75, 0.025, 0.975), na.rm=TRUE, type=8))
+		quantiles = sapply(1:ncol(bootstrap_params), FUN=function(p) quantile(bootstrap_params[,p], probs=c(0.25, 0.75, 0.025, 0.975, 0.5), na.rm=TRUE, type=8))
 		CI50lower = list(PDR=quantiles[1,1:NG], rholambda0=quantiles[1,NG+1])
 		CI50upper = list(PDR=quantiles[2,1:NG], rholambda0=quantiles[2,NG+1])
 		CI95lower = list(PDR=quantiles[3,1:NG], rholambda0=quantiles[3,NG+1])
 		CI95upper = list(PDR=quantiles[4,1:NG], rholambda0=quantiles[4,NG+1])
+		medians   = list(PDR=quantiles[5,1:NG], rholambda0=quantiles[5,NG+1])
+		bootstrap_estimates = list(PDR=bootstrap_params[,1:NG], rholambda0=bootstrap_params[,NG+1])
 	}
 
 	# return results
@@ -389,7 +391,9 @@ fit_hbd_pdr_on_grid = function(	tree,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations,
+				bootstrap_estimates		= (if(Nbootstraps>0) bootstrap_estimates else NULL),
 				standard_errors			= (if(Nbootstraps>0) standard_errors else NULL),
+				medians					= (if(Nbootstraps>0) medians else NULL),
 				CI50lower				= (if(Nbootstraps>0) CI50lower else NULL),
 				CI50upper				= (if(Nbootstraps>0) CI50upper else NULL),
 				CI95lower				= (if(Nbootstraps>0) CI95lower else NULL),
