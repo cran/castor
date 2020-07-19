@@ -1,6 +1,6 @@
 # Fit a homogenous-birth-death-sampling cladogenic model to a timetree, by estimating parameters for functional forms of lambda & mu & psi & kappa
 # An HBDS model is defined by a time-dependent speciation rate (lambda), a time-dependent extinction rate (mu), a time-dependent sampling rate (psi), and a time-dependent retention rate (kappa).
-# Optionally, the model may include a finite set of "concentrated sampling attempts" that occurred at specific times t_1,..,t_NCE with specific sampling probabilities psi_1,..,psi_NCE and specific retenion probabilities kappa_1,..,kappa_NCE
+# Optionally, the model may include a finite set of "concentrated sampling attempts" that occurred at specific times t_1,..,t_NCSA with specific sampling probabilities psi_1,..,psi_NCSA and specific retenion probabilities kappa_1,..,kappa_NCSA
 fit_hbds_model_parametric = function(tree, 
 									param_values,						# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
 									param_guess				= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
@@ -14,19 +14,19 @@ fit_hbds_model_parametric = function(tree,
 									psi						= 0,		# function handle, mapping age & model_parameters to the current continuous (Poissonian) sampling rate, (age,param_values) --> psi. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[]. Can also be a single numeric.
 									kappa					= 0,		# function handle, mapping age & model_parameters to the current retention probability (probability of a lineage remaining in the pool upon continuous sampling), (age,param_values) --> kappa. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[]. Can also be a single numeric.
 									age_grid				= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the lambda, mu & kappa functionals should be evaluated. This age grid must be fine enough to capture the possible variation in lambda(), mu() and kappa() over time. If NULL or of length 1, then lambda & mu & kappa are assumed to be time-independent.
-									CSA_ages				= NULL,		# optional numeric vector of length NCE, listing the ages of concentrated sampling attempts in strictly ascending order. These ages are assumed to be known, i.e. they are not fitted
-									CSA_probs				= NULL,		# function handle, mapping model_parameters to NCE concentrated sampling probabilities, (param_values) --> (psi_1,..,psi_NCE). Must be defined for all parameters within the imposed bounds. Must always return a numeric vector of length NCE. Can also be a single numeric. Only relevant if NCE>0.
-									CSA_kappas				= 0,		# function handle, mapping model_parameters to NCE concentrated retention probabilities, (param_values) --> (kappa_1,..,kappa_NCE). Must be defined for all parameters within the imposed bounds. Must always return a numeric vector of length NCE. Can also be a single numeric. Only relevant if NCE>0.
-									condition				= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. Note that "crown" really only makes sense when oldest_age==root_age.
-									ODE_relative_dt			= 0.001,	# (positive unitless number) relative integration time step for the ODE solvers. Relative to the typical time scales of the dynamics, as estimated from the theoretically maximum possible rate of change. Typical values are 0.001 - 0.1.
-									ODE_relative_dy			= 1e-4,		# (positive unitless mumber) unitless number, relative step for interpolating simulated values over time. So a ODE_relative_dy of 0.001 means that E is recorded and interpolated between points between which E differs by roughy 0.001. Typical values are 0.01-0.0001. A smaller E_value_step increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
-									CSA_age_epsilon			= NULL,		# (non-negative numeric, in units of time) age radius around a concentrated sampling attempt, within which to assume that sampling events were due to the concentrated sampling attempt. If NULL, this is chosen automatically based on the anticipated scale of numerical rounding errors. Only relevant if NCE>0.
-									Ntrials					= 1,		# number of fitting trials to perform, each time starting with random parameter values
-									max_start_attempts		= 1,		# number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to to keep looking for valid starting points.
-									Nthreads				= 1,
-									max_model_runtime		= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
-									Nbootstraps				= 0,		# (integer) optional number of parametric-bootstrap samples for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
-									Ntrials_per_bootstrap	= NULL,		# (integer) optional number of fitting trials for each bootstrap sampling. If NULL, this is set equal to Ntrials. A smaller Ntrials_per_bootstrap will reduce computation, at the expense of increasing the estimated confidence intervals (i.e. yielding more conservative estimates of confidence).
+									CSA_ages				= NULL,		# optional numeric vector of length NCSA, listing the ages of concentrated sampling attempts in strictly ascending order. These ages are assumed to be known, i.e. they are not fitted
+									CSA_probs				= NULL,		# function handle, mapping model_parameters to NCSA concentrated sampling probabilities, (param_values) --> (psi_1,..,psi_NCSA). Must be defined for all parameters within the imposed bounds. Must always return a numeric vector of length NCSA. Can also be a single numeric. Only relevant if NCSA>0.
+									CSA_kappas				= 0,		# function handle, mapping model_parameters to NCSA concentrated retention probabilities, (param_values) --> (kappa_1,..,kappa_NCSA). Must be defined for all parameters within the imposed bounds. Must always return a numeric vector of length NCSA. Can also be a single numeric. Only relevant if NCSA>0.
+									condition				= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age!=root_age, and "crown" when oldest_age==root_age. Note that "crown" really only makes sense when oldest_age==root_age.
+									ODE_relative_dt			= 0.001,	# positive unitless number, relative integration time step for the ODE solvers. Relative to the typical time scales of the dynamics, as estimated from the theoretically maximum possible rate of change. Typical values are 0.001 - 0.1.
+									ODE_relative_dy			= 1e-3,		# positive unitless mumber, unitless number, relative step for interpolating simulated values over time. So a ODE_relative_dy of 0.001 means that E is recorded and interpolated between points between which E differs by roughy 0.001. Typical values are 0.01-0.0001. A smaller E_value_step increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
+									CSA_age_epsilon			= NULL,		# non-negative numeric (in units of time), age radius around a concentrated sampling attempt, within which to assume that sampling events were due to the concentrated sampling attempt. If NULL, this is chosen automatically based on the anticipated scale of numerical rounding errors. Only relevant if NCSA>0.
+									Ntrials					= 1,		# integer, number of fitting trials to perform, each time starting with random parameter values
+									max_start_attempts		= 1,		# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
+									Nthreads				= 1,		# integer, number of parallel threads to use for running multiple fitting trials
+									max_model_runtime		= NULL,		# numeric, maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
+									Nbootstraps				= 0,		# integer optional number of parametric-bootstrap samples for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
+									Ntrials_per_bootstrap	= NULL,		# integer optional number of fitting trials for each bootstrap sampling. If NULL, this is set equal to Ntrials. A smaller Ntrials_per_bootstrap will reduce computation, at the expense of increasing the estimated confidence intervals (i.e. yielding more conservative estimates of confidence).
 									fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 									focal_param_values		= NULL,		# optional 2D numeric matrix with NP columns and an arbitrary number of rows, specifying parameter combinations of particular interest for which the loglikelihood should be calculated for. Can be used e.g. to explore the shape of the loglikelihood function.
 									verbose					= FALSE,	# boolean, specifying whether to print informative messages
@@ -35,12 +35,11 @@ fit_hbds_model_parametric = function(tree,
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
 	if(tree$Nnode<2) return(list(success = FALSE, error="Tree is too small"));
 	if((!is.null(oldest_age)) && (!is.null(age_grid)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g)",oldest_age)))
-	if(is.null(max_model_runtime)) max_model_runtime = 0
 	if(is.null(CSA_ages)){
-		NCE = 0
+		NCSA = 0
 		CSA_ages = numeric(0)
 	}else{
-		NCE = length(CSA_ages)
+		NCSA = length(CSA_ages)
 		if(any(diff(CSA_ages)<=0)) return(list(success=FALSE, error=sprintf("CSA_ages must be in strictly ascending order")))
 		if(any(CSA_ages<0)) return(list(success=FALSE, error=sprintf("CSA_ages must be non-negative")))
 	}
@@ -56,9 +55,10 @@ fit_hbds_model_parametric = function(tree,
 	}
 	if(is.null(Nbootstraps) || is.na(Nbootstraps) || (Nbootstraps<0)) Nbootstraps = 0;
 	if(is.null(Ntrials_per_bootstrap)) Ntrials_per_bootstrap = max(1,Ntrials)
-	max_start_attempts 	= max(1,max_start_attempts)
-	Ntrials 			= max(1,Ntrials)
-	Nthreads 			= max(1,Nthreads)
+	if(is.null(max_model_runtime)) max_model_runtime = 0
+	max_start_attempts 	= (if(is.null(max_start_attempts)) 1 else max(1,max_start_attempts))
+	Ntrials  = (if(is.null(Ntrials)) 1 else max(1,Ntrials))
+	Nthreads = (if(is.null(Nthreads)) 1 else max(1,Nthreads))
 	
 	# check if some of the functionals are actually fixed numbers
 	model_fixed = TRUE
@@ -90,25 +90,24 @@ fit_hbds_model_parametric = function(tree,
 	}else{
 		model_fixed = FALSE
 	}
-	if((NCE>0) && is.numeric(CSA_probs) && (length(CSA_probs)==1)){
+	if((NCSA>0) && is.numeric(CSA_probs) && (length(CSA_probs)==1)){
 		CSA_prob_value = CSA_probs
-		CSA_probs = function(params){ rep(CSA_prob_value, times=NCE) }
+		CSA_probs = function(params){ rep(CSA_prob_value, times=NCSA) }
 	}else{
 		model_fixed = FALSE
 	}
-	if((NCE>0) && is.numeric(CSA_kappas) && (length(CSA_kappas)==1)){
+	if((NCSA>0) && is.numeric(CSA_kappas) && (length(CSA_kappas)==1)){
 		CSA_kappa_value = CSA_kappas
-		CSA_kappas = function(params){ rep(CSA_kappa_value, times=NCE) }
+		CSA_kappas = function(params){ rep(CSA_kappa_value, times=NCSA) }
 	}else{
 		model_fixed = FALSE
 	}
 
 	# pre-compute some tree stats
-	if((NCE>0) && is.null(CSA_age_epsilon)){
-		CSA_age_epsilon = (if(NCE>1) min(tree_span,min(diff(CSA_ages))) else tree_span)/1000
+	if((NCSA>0) && is.null(CSA_age_epsilon)){
+		CSA_age_epsilon = (if(NCSA>1) min(tree_span,min(diff(CSA_ages))) else tree_span)/1000
 	}
-	lineage_counter = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), include_slopes=TRUE);
-	tree_events 	= extract_HBDS_events_from_tree(tree, root_age = root_age, CSA_ages = CSA_ages, age_epsilon = CSA_age_epsilon)
+	tree_events = extract_HBDS_events_from_tree(tree, root_age = root_age, CSA_ages = CSA_ages, age_epsilon = CSA_age_epsilon)
 
 	# sanitize model parameters
 	sanitized_params = sanitize_parameters_for_fitting(param_values, param_guess = param_guess, param_min = param_min, param_max = param_max, param_scale = param_scale)
@@ -140,13 +139,13 @@ fit_hbds_model_parametric = function(tree,
 	if(length(mu_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("mu function must return vectors of the same length as the input ages")));	
 	if(length(psi_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("psi function must return vectors of the same length as the input ages")));	
 	if(length(kappa_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("kappa function must return vectors of the same length as the input ages")));
-	if(NCE>0){
+	if(NCSA>0){
 		CSA_probs_guess	= CSA_probs(param_guess)
 		CSA_kappas_guess	= CSA_kappas(param_guess)
 		if(any(!is.finite(CSA_probs_guess))) return(list(success=FALSE, error=sprintf("CSA_probs is not a valid number for guessed parameters, at some ages")));
 		if(any(!is.finite(CSA_kappas_guess))) return(list(success=FALSE, error=sprintf("CSA_kappas is not a valid number for guessed parameters, at some ages")));
-		if(length(CSA_probs_guess)!=NCE) return(list(success=FALSE, error=sprintf("CSA_probs function must return vectors of the same length as the number of concentrated sampling attempts")));
-		if(length(CSA_kappas_guess)!=NCE) return(list(success=FALSE, error=sprintf("CSA_kappas function must return vectors of the same length as the number of concentrated sampling attempts")));
+		if(length(CSA_probs_guess)!=NCSA) return(list(success=FALSE, error=sprintf("CSA_probs function must return vectors of the same length as the number of concentrated sampling attempts")));
+		if(length(CSA_kappas_guess)!=NCSA) return(list(success=FALSE, error=sprintf("CSA_kappas function must return vectors of the same length as the number of concentrated sampling attempts")));
 		if(any(CSA_probs_guess>1)) return(list(success=FALSE, error=sprintf("CSA_probs is greater than 1 for guessed parameters, at some ages; expected probabilities between 0 and 1")));
 		if(any(CSA_kappas_guess>1)) return(list(success=FALSE, error=sprintf("CSA_kappas is greater than 1 for guessed parameters, at some ages; expected probabilities between 0 and 1")));
 	}
@@ -182,9 +181,9 @@ fit_hbds_model_parametric = function(tree,
 		results = get_HBDS_model_loglikelihood_CPP(	branching_ages					= tree_events$branching_ages,
 													Ptip_ages						= tree_events$Ptip_ages,
 													Pnode_ages						= tree_events$Pnode_ages,
-													CSA_ages						= (if(NCE==0) numeric(0) else CSA_ages),
-													CSA_probs						= (if(NCE==0) numeric(0) else CSA_probs(params)),
-													CSA_kappas						= (if(NCE==0) numeric(0) else CSA_kappas(params)),
+													CSA_ages						= (if(NCSA==0) numeric(0) else CSA_ages),
+													CSA_probs						= (if(NCSA==0) numeric(0) else CSA_probs(params)),
+													CSA_kappas						= (if(NCSA==0) numeric(0) else CSA_kappas(params)),
 													concentrated_tip_counts			= tree_events$concentrated_tip_counts,
 													concentrated_node_counts		= tree_events$concentrated_node_counts,
 													oldest_age						= oldest_age,
@@ -378,6 +377,7 @@ fit_hbds_model_parametric = function(tree,
 				Ndata					= Ndata,
 				AIC						= 2*NFP - 2*loglikelihood,
 				BIC						= log(Ndata)*NFP - 2*loglikelihood,
+				condition				= condition,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations,

@@ -20,7 +20,8 @@ simulate_deterministic_hbd(LTT0,
                            PDR            = NULL,
                            lambda0        = NULL,
                            splines_degree = 1,
-                           relative_dt    = 1e-3)
+                           relative_dt    = 1e-3,
+                           allow_unreal   = FALSE)
 }
 \arguments{
 \item{LTT0}{
@@ -58,6 +59,9 @@ Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided \co
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
+}
+\item{allow_unreal}{
+Logical, specifying whether HBD models with unrealistic parameters (e.g., negative \eqn{\mu}) should be supported. This may be desired for example when examining model congruence classes with negative \eqn{\mu}.
 }
 }
 \details{
@@ -136,4 +140,4 @@ plot( x = simulation$ages, y = simulation$LTT, type='l',
 % R documentation directory.
 \keyword{tree model}
 \keyword{simulation}
-\keyword{homogenous birth-death model}
+\keyword{birth-death model}

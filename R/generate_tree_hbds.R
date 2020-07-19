@@ -88,12 +88,14 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 		}
 		if(any(diff(time_grid)<=0)) return(list(success = FALSE, error = sprintf("Values in time_grid must be strictly increasing")))
 	}
-	NCE = (if(is.null(CSA_times)) 0 else length(CSA_times))
-	if((NCE==0) && (!is.null(CSA_probs)) && (length(CSA_probs)>0)) return(list(success=FALSE, error="CSA_times is missing while CSA_probs was provided; either provide both or none"))
-	if((NCE==0) && (!is.null(CSA_kappas)) && (length(CSA_probs)>0)) return(list(success=FALSE, error="CSA_times is missing while CSA_kappas was provided; either provide both or none"))
-	if((NCE>0) && is.null(CSA_probs)) return(list(success=FALSE, error="CSA_probs is missing while CSA_times was provided; either provide both or none"))
-	if((NCE>0) && is.null(CSA_kappas)) return(list(success=FALSE, error="CSA_kappas is missing while CSA_times was provided; either provide both or none"))
-	if((NCE>0) && (!is.null(CSA_probs)) && (!is.null(CSA_kappas))){
+	NCSA = (if(is.null(CSA_times)) 0 else length(CSA_times))
+	if((NCSA==0) && (!is.null(CSA_probs)) && (length(CSA_probs)>0)) return(list(success=FALSE, error="CSA_times is missing while CSA_probs was provided; either provide both or none"))
+	if((NCSA==0) && (!is.null(CSA_kappas)) && (length(CSA_probs)>0)) return(list(success=FALSE, error="CSA_times is missing while CSA_kappas was provided; either provide both or none"))
+	if((NCSA>0) && is.null(CSA_probs)) return(list(success=FALSE, error="CSA_probs is missing while CSA_times was provided; either provide both or none"))
+	if((NCSA>0) && is.null(CSA_kappas)) return(list(success=FALSE, error="CSA_kappas is missing while CSA_times was provided; either provide both or none"))
+	if((NCSA>0) && (!is.null(CSA_probs)) && (!is.null(CSA_kappas))){
+		if(length(CSA_probs)==1) CSA_probs 	 = rep(CSA_probs, times=NCSA)
+		if(length(CSA_kappas)==1) CSA_kappas = rep(CSA_kappas, times=NCSA)
 		if(length(CSA_times)!=length(CSA_probs)) return(list(success=FALSE, error="Number of CSA_times (%d) differs from number of CSA_probs (%d)",length(CSA_times),length(CSA_probs)))
 		if(length(CSA_times)!=length(CSA_kappas)) return(list(success=FALSE, error="Number of CSA_times (%d) differs from number of CSA_kappas (%d)",length(CSA_times),length(CSA_kappas)))
 		if(any(diff(CSA_times)<=0)) return(list(success=FALSE, error="CSA_times must be in strictly increasing order"))
@@ -141,6 +143,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 				tree				= tree,
 				root_time			= results$root_time,
 				final_time			= results$final_time,
+				root_age			= results$final_time - results$root_time,
 				Nbirths		 		= results$Nbirths,
 				Ndeaths				= results$Ndeaths,
 				Nsamplings			= results$Nsamplings,

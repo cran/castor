@@ -21,7 +21,8 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 										PDR				= NULL,		# either NULL, or a single numeric (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]). Only needed if lambda is NULL.
 										lambda0			= NULL,		# either NULL, or a single numeric specifying the speciation rate at age0. Only needed if lambda is NULL.
 										splines_degree	= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
-										relative_dt		= 1e-3){	# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.	
+										relative_dt		= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.	
+										allow_unreal	= FALSE){	# logical, specifying whether BD models with unrealistic parameters (e.g., negative mu or negative Pmissing) should be supported. This may be desired e.g. when examining model congruence classes with negative mu.
 	# check validity of input variables
 	if(is.null(rho0)) rho0 = 1;
 	if(is.null(mu) && is.null(mu_over_lambda)) return(list(success = FALSE, error = sprintf("Missing either mu or mu_over_lambda")))
@@ -61,19 +62,20 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 		
 	# simulate model backward in time
 	census_age = age_grid[1]
-	simulation = simulate_deterministic_HBD_model_CPP(	census_age		= census_age,
-														oldest_age		= oldest_age,
-														age_grid 		= age_grid,
-														lambdas 		= (if(is.null(lambda)) numeric() else lambda),
-														mus 			= (if(is.null(mu)) numeric() else mu),
-														mu_over_lambda	= (if(is.null(mu_over_lambda)) numeric() else mu_over_lambda),
-														PDRs	 		= (if(is.null(PDR)) numeric() else PDR),
-														anchor_age		= age0,
-														anchor_rho	 	= rho0,
-														anchor_lambda	= (if(is.null(lambda0)) NaN else lambda0),
-														anchor_LTT 		= LTT0,
-														splines_degree	= splines_degree,
-														relative_dt		= relative_dt);
+	simulation = simulate_deterministic_HBD_model_CPP(	census_age			= census_age,
+														oldest_age			= oldest_age,
+														age_grid 			= age_grid,
+														lambdas 			= (if(is.null(lambda)) numeric() else lambda),
+														mus 				= (if(is.null(mu)) numeric() else mu),
+														mu_over_lambda		= (if(is.null(mu_over_lambda)) numeric() else mu_over_lambda),
+														PDRs	 			= (if(is.null(PDR)) numeric() else PDR),
+														anchor_age			= age0,
+														anchor_rho	 		= rho0,
+														anchor_lambda		= (if(is.null(lambda0)) NaN else lambda0),
+														anchor_LTT 			= LTT0,
+														splines_degree		= splines_degree,
+														relative_dt			= relative_dt,
+														allow_unreal		= allow_unreal)
 	if(!simulation$success) return(list(success = FALSE, error = sprintf("Could not simulate model: %s",simulation$error)))
 	rholambda0 = simulation$anchor_rho*simulation$anchor_lambda;
 	census_rholambda = simulation$census_rho*simulation$census_lambda;

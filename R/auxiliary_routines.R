@@ -954,8 +954,9 @@ get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listi
 								PSR,							# numeric vector of size NG, listing the PSR on the age_grid
 								PDR,							# numeric vector of size NG, listing the PDR on the age_grid
 								lambda_psi,						# numeric vector of size NG, listing lambda*psi on the age_grid
-								psi					= NULL,		# numeric vector of size NG. Either psi or mu must be provided, but not both.
-								mu					= NULL,		# numeric vector of size NG. Either psi or mu must be provided, but not both.
+								psi					= NULL,		# numeric vector of size NG. Exactly one of psi, mu or Reff must be provided.
+								mu					= NULL,		# numeric vector of size NG. Exactly one of psi, mu or Reff must be provided.
+								Reff				= NULL,		# numeric vector of size NG. Exactly one of psi, mu or Reff must be provided.
 								lambda0				= NULL,		# numeric, specifying lambda at age 0 (present-day). Only relevant if mu is provided.
 								CSA_ages			= NULL,		# numeric vector of size NCSA, listing the ages of concentrated sampling attempts, in ascending order
 								CSA_pulled_probs 	= NULL,		# numeric vector of size NCSA, listing the pulled probabilities of concentrated sampling attempts, in ascending order
@@ -964,12 +965,12 @@ get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listi
 								ODE_relative_dt		= 0.001,
 								ODE_relative_dy		= 1e-4){
 	# basic error checking
-	NCE = (if(is.null(CSA_ages)) 0 else length(CSA_ages))
-	if((NCE==0) && (!is.null(CSA_pulled_probs)) && (length(CSA_pulled_probs)>0)) return(list(success=FALSE, error="No CE ages were provided, but CSA_pulled_probs were"))
-	if((NCE>0) && is.null(CSA_pulled_probs)) return(list(success=FALSE, error="Missing CSA_pulled_probs"))
-	if((NCE>0) && (length(CSA_pulled_probs)!=NCE)) return(list(success=FALSE, error=sprintf("Expected %d CSA_pulled_probs, but instead got %d",NCE,length(CSA_pulled_probs))))
-	if((NCE>0) && is.null(CSA_PSRs)) return(list(success=FALSE, error="Missing CSA_PSRs"))
-	if((NCE>0) && (length(CSA_PSRs)!=NCE)) return(list(success=FALSE, error=sprintf("Expected %d CSA_PSRs, but instead got %d",NCE,length(CSA_PSRs))))
+	NCSA = (if(is.null(CSA_ages)) 0 else length(CSA_ages))
+	if((NCSA==0) && (!is.null(CSA_pulled_probs)) && (length(CSA_pulled_probs)>0)) return(list(success=FALSE, error="No CE ages were provided, but CSA_pulled_probs were"))
+	if((NCSA>0) && is.null(CSA_pulled_probs)) return(list(success=FALSE, error="Missing CSA_pulled_probs"))
+	if((NCSA>0) && (length(CSA_pulled_probs)!=NCSA)) return(list(success=FALSE, error=sprintf("Expected %d CSA_pulled_probs, but instead got %d",NCSA,length(CSA_pulled_probs))))
+	if((NCSA>0) && is.null(CSA_PSRs)) return(list(success=FALSE, error="Missing CSA_PSRs"))
+	if((NCSA>0) && (length(CSA_PSRs)!=NCSA)) return(list(success=FALSE, error=sprintf("Expected %d CSA_PSRs, but instead got %d",NCSA,length(CSA_PSRs))))
 	if(is.null(CSA_ages)){
 		CSA_ages 			= numeric(0)
 		CSA_pulled_probs 	= numeric(0)
@@ -997,9 +998,11 @@ get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listi
 	}else if(length(lambda_psi)!=NG){
 		return(list(success=FALSE, error=sprintf("Expected %d lambda_psi values, but instead got %d",NG,length(lambda_psi))))
 	}
-	if(is.null(psi) && is.null(mu)) return(list(success=FALSE, error=sprintf("Expecting either psi or mu",NG)))
-	if((!is.null(psi)) && (!is.null(mu))) return(list(success=FALSE, error=sprintf("Either psi or mu must be provided, but not both",NG)))
-	if(is.null(mu) && (!is.null(lambda0))) return(list(success=FALSE, error=sprintf("lambda0 must not be provided if mu is not provided either; either provide both mu and lambda0, or none",NG)))
+	if(is.null(psi) && is.null(mu) && is.null(Reff)) return(list(success=FALSE, error=sprintf("Expecting either psi or mu or Reff")))
+	if(sum(!c(is.null(psi),is.null(mu),is.null(Reff)))>1) return(list(success=FALSE, error=sprintf("Only one of psi or mu or Reff must be provided")))
+	if((!is.null(psi)) && (!is.null(lambda0))) return(list(success=FALSE, error=sprintf("lambda0 must not be provided if psi is provided")))
+	if((!is.null(mu)) && is.null(lambda0)) return(list(success=FALSE, error=sprintf("lambda0 must be provided when mu is provided")))
+	if((!is.null(Reff)) && is.null(lambda0)) return(list(success=FALSE, error=sprintf("lambda0 must be provided when Reff is provided")))
 	if(!is.null(psi)){
 		if(length(psi)==1){
 			psi = rep(psi,times=NG)
@@ -1013,6 +1016,15 @@ get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listi
 		}else if(length(mu)!=NG){
 			return(list(success=FALSE, error=sprintf("Expected %d mu values, but instead got %d",NG,length(mu))))
 		}
+		if(NCSA>0) return(list(success=FALSE, error=sprintf("Providing mu to define a model is only available in the absence of CSAs")))
+	}
+	if(!is.null(Reff)){
+		if(length(Reff)==1){
+			Reff = rep(Reff,times=NG)
+		}else if(length(Reff)!=NG){
+			return(list(success=FALSE, error=sprintf("Expected %d Reff values, but instead got %d",NG,length(Reff))))
+		}
+		if(NCSA>0) return(list(success=FALSE, error=sprintf("Providing Reff to define a model is only available in the absence of CSAs")))
 	}
 	if(!(splines_degree %in% c(1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 1,2,3.",splines_degree)))
 
@@ -1025,6 +1037,7 @@ get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listi
 										lambda_psis			= lambda_psi,
 										psis				= (if(is.null(psi)) numeric(0) else psi),
 										mus					= (if(is.null(mu)) numeric(0) else mu),
+										Reffs				= (if(is.null(Reff)) numeric(0) else Reff),
 										lambda0				= (if(is.null(lambda0)) 0 else lambda0),
 										splines_degree		= splines_degree,
 										ODE_relative_dt		= ODE_relative_dt,
@@ -1043,7 +1056,145 @@ get_congruent_HBDS = function(	age_grid,						# numeric vector of size NG, listi
 				Pmissing		= results$Pmissings,
 				CSA_probs		= results$CSA_probs,
 				CSA_Pmissings	= results$CSA_Pmissings,
-				Rnot			= results$Rnots))
+				Reff			= results$Reffs))
+}
+
+
+generate_OU_time_series = function(	times,					# numeric vector of size NT
+									start_value,			# optional numeric. If NA or NaN or NULL, it will be chosen randomly from the stationary distribution
+									stationary_mean,		# numeric
+									stationary_std,			# non-negative numeric
+									decay_rate,				# strictly positive numeric, in units 1/time
+									constrain_min=-Inf,		# optional lower bound for the returned values
+									constrain_max=+Inf){	# optional upper bound for the returned values
+	values = get_Ornstein_Uhlenbeck_time_series_CPP(times			= times,
+													start_value		= (if((!is.null(start_value)) && is.finite(start_value)) start_value else NaN),
+													stationary_mean = stationary_mean,
+													stationary_std	= stationary_std,
+													decay_rate		= decay_rate)$values
+	return(list(times=times, values=pmin(constrain_max,pmax(constrain_min,values))))
+}
+
+
+
+
+# fit a homogenous birth-death model on a grid to a given extant timetree, choosing the "best" grid size according to AIC or BIC
+fit_hbd_model_on_best_grid_size = function(	tree, 
+											oldest_age			= NULL,		# numeric, the oldest age to consider in the evaluation of the likelihood as well as for defining the age grid. Typically set to the stem age or root age. Can be NULL (equivalent to the root age).
+											age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting and with respect to which rho is defined (rho(age0) is the fraction of lineages extant at age0 that are included in the tree)
+											grid_sizes			= c(1,10),	# integer vector, listing the grid sizes to consider
+											uniform_grid		= TRUE,		# logical, specifying whether the age grid should be uniform (equidistant age intervals). If FALSE, then the grid point density is chosen proportional to the square root of the LTT, hence resulting in higher resolution grid near the present.
+											criterion			= "AIC",	# character, how to choose the optimal grid point. Options are "AIC" or "BIC".
+											exhaustive			= TRUE,		# logical, whether to try all grid sizes for choosing the "best" one. If FALSE, the grid size is gradually increased until the selectin criterio (e.g., AIC) starts becoming worse, at which point the search is halted.
+											min_lambda			= 0,		# numeric, lower bound for the fitted lambdas (applying to all grid points).
+											max_lambda			= +Inf,		# numeric, upper bound for the fitted lambdas (applying to all grid points).
+											min_mu				= 0,		# numeric, lower bound for the fitted mus (applying to all grid points).
+											max_mu				= +Inf,		# numeric, upper bound for the fitted mus (applying to all grid points).
+											min_rho0			= 1e-10,	# numeric, lower bound for the fitted rho. Note that rho is always within (0,1]
+											max_rho0			= 1,		# numeric, upper bound for the fitted rho.
+											guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages).
+											guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages).
+											guess_rho0			= 1,		# initial guess for rho. Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
+											fixed_lambda		= NULL,		# optional fixed lambda value. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed).
+											fixed_mu			= NULL,		# optional fixed mu value. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed).
+											fixed_rho0			= NULL,		# optional fixed value for rho. If non-NULL and non-NA, then rho is not fitted. 
+											const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant if lambdas are non-fixed.
+											const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant if mus are non-fixed.
+											splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
+											condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age!=root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+											relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
+											Ntrials				= 1,
+											Nthreads			= 1,
+											max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
+											fit_control			= list(),
+											verbose				= FALSE,
+											verbose_prefix		= ""){
+	# basic error checking
+	if(verbose) cat(sprintf("%sChecking input parameters..\n",verbose_prefix))
+	if((!is.null(guess_lambda))	&& (length(guess_lambda)!=0)) return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL"))									
+	if((!is.null(guess_mu))	&& (length(guess_mu)!=0)) return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL"))									
+	if((!is.null(fixed_lambda))	&& (length(fixed_lambda)!=0)) return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL"))									
+	if((!is.null(fixed_mu))	&& (length(fixed_mu)!=0)) return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL"))									
+	if(length(min_lambda)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one min_lambda; instead, received %d",length(min_lambda))))
+	if(length(max_lambda)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one max_lambda; instead, received %d",length(max_lambda))))
+	if(!(criterion %in% c("AIC", "BIC"))) return(list(success=FALSE, error=sprintf("Invalid model selection criterion '%s'. Expected 'AIC' or 'BIC'",criterion)))
+	root_age = get_tree_span(tree)$max_distance
+	Nmodels  = length(grid_sizes)
+	
+	# calculate tree LTT if needed
+	if(!uniform_grid){
+		LTT = count_lineages_through_time(tree=tree, Ntimes = max(100,10*max(grid_sizes)), regular_grid = TRUE)
+		LTT$ages = root_age - LTT$times
+	}
+	
+	# determine order in which to examine models
+	if(exhaustive){
+		model_order = c(1:Nmodels)
+	}else{
+		# examine models in the order of increasing grid sizes
+		model_order = order(grid_sizes)
+	}
+	
+	# fit HBD model on various grid sizes, keeping track of the "best" Ngrid
+	if(verbose) cat(sprintf("%sFitting models with %s%d different grid sizes..\n",verbose_prefix,(if(exhaustive) "" else "up to "),Nmodels))
+	AICs 		= rep(NA, times=Nmodels)
+	BICs 		= rep(NA, times=Nmodels)
+	best_fit	= NULL
+	for(m in model_order){
+		Ngrid = grid_sizes[m]
+		if(uniform_grid){
+			age_grid = seq(from=age0, to=oldest_age, length.out=Ngrid)
+		}else{
+			age_grid = get_inhomogeneous_grid_1D(Xstart = age0, Xend = oldest_age, Ngrid = Ngrid, densityX = rev(LTT$ages), densityY=rev(LTT$lineages), extrapolate=TRUE)
+		}
+		if(verbose) cat(sprintf("%s  Fitting model with grid size %d..\n",verbose_prefix,Ngrid))
+		fit = fit_hbd_model_on_grid(tree				= tree, 
+									oldest_age			= oldest_age,
+									age0				= age0,
+									age_grid			= age_grid,
+									min_lambda			= min_lambda,
+									max_lambda			= max_lambda,
+									min_mu				= min_mu,
+									max_mu				= max_mu,
+									min_rho0			= min_rho0,
+									max_rho0			= max_rho0,
+									guess_lambda		= guess_lambda,
+									guess_mu			= guess_mu,
+									guess_rho0			= guess_rho0,
+									fixed_lambda		= fixed_lambda,
+									fixed_mu			= fixed_mu,
+									fixed_rho0			= fixed_rho0,
+									const_lambda		= const_lambda,
+									const_mu			= const_mu,
+									splines_degree		= splines_degree,
+									condition			= condition,
+									relative_dt			= relative_dt,
+									Ntrials				= Ntrials,
+									Nthreads			= Nthreads,
+									max_model_runtime	= max_model_runtime,
+									fit_control			= fit_control)
+		if(!fit$success) return(list(success=FALSE, error=sprintf("Fitting model with grid size %d failed: %s",Ngrid,fit$error)))
+		criterion_value = fit[[criterion]]
+		if(is.null(best_fit)){
+			best_fit = fit
+			worsened = FALSE
+		}else if(criterion_value<best_fit[[criterion]]){
+			best_fit = fit
+			worsened = FALSE
+		}else{
+			worsened = TRUE
+		}
+		AICs[m] = fit$AIC
+		BICs[m] = fit$BIC
+		if(verbose) cat(sprintf("%s  --> %s=%.10g. Best grid size so far: %d\n",verbose_prefix,criterion,criterion_value,length(best_fit$age_grid)))
+		if((!exhaustive) && worsened) break; # model selection criterion became worse compared to the previous grid size, so stop search and keep best model found so far
+	}
+	
+	return(list(success	 	= TRUE,
+				best_fit 	= best_fit,
+				grid_sizes	= grid_sizes,
+				AICs		= AICs,
+				BICs		= BICs))
 }
 
 

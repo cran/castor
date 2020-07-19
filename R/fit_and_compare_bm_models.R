@@ -52,13 +52,13 @@ fit_and_compare_bm_models = function(	trees1, 				# either a single tree in phyl
 			random_fit1 = fit_bm_model(trees=trees1, tip_states=random_tip_states1, Nbootstraps=0, check_input=FALSE)
 			if(!random_fit1$success){
 				# fitting failed
-				if(verbose) cat(sprintf("%s  WARNING: BM fitting failed for random simulation %d, for tree set 1\n",verbose_prefix,r))
+				if(verbose) cat(sprintf("%s  WARNING: BM fitting failed for random simulation #%d, for tree set 1\n",verbose_prefix,r))
 				next;
 			}
 			random_fit2 = fit_bm_model(trees=trees2, tip_states=random_tip_states2, Nbootstraps=0, check_input=FALSE)
 			if(!random_fit2$success){
 				# fitting failed
-				if(verbose) cat(sprintf("%s  WARNING: BM fitting failed for random simulation %d, for tree set 2\n",verbose_prefix,r))
+				if(verbose) cat(sprintf("%s  WARNING: BM fitting failed for random simulation #%d, for tree set 2\n",verbose_prefix,r))
 				next;
 			}
 			Nsuccess = Nsuccess + 1

@@ -114,8 +114,8 @@ Numeric vector of size NG, listing the product of the speciation rate and Poisso
 \item{psi_kappa}{
 Numeric vector of size NG, listing the product of the continuous sampling rate and the continuous retention probability (in units 1/time) at the ages given in \code{ages[]}.
 }
-\item{Rnot}{
-Numeric vector of size NG, listing the basic reproduction rate (\eqn{R_0=\lambda/(\mu+\psi(1-\kappa))}) at the ages given in \code{ages[]}.
+\item{Reff}{
+Numeric vector of size NG, listing the effective reproduction ratio (\eqn{R_e=\lambda/(\mu+\psi(1-\kappa))}) at the ages given in \code{ages[]}.
 }
 \item{CSA_pulled_probs}{
 Numeric vector of size NG, listing the pulled concentrated sampling probabilities, \eqn{\tilde{\rho}_k=\rho_k/(1-E)}.
@@ -166,4 +166,4 @@ plot( x = simulation$ages, y = simulation$LTT, type='l',
 % R documentation directory.
 \keyword{tree model}
 \keyword{simulation}
-\keyword{homogenous birth-death model}
+\keyword{birth-death model}

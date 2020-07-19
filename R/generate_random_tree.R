@@ -104,6 +104,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 				tree				= tree,
 				root_time			= results$root_time,
 				final_time			= results$final_time,
+				root_age			= results$final_time - results$root_time,
 				equilibrium_time	= results$equilibrium_time,
 				extant_tips			= extant_tips,
 				Nbirths		 		= results$Nbirths,

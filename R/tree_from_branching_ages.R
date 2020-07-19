@@ -7,7 +7,7 @@ tree_from_branching_ages = function(branching_ages, 			# numeric vector of size 
 									node_basename	= NULL,		# basename for nodes (e.g. "node."). If NULL, then nodes will not have any labels.
 									edge_basename	= NULL){	# basename for edge (e.g. "edge."). If NULL, then edges will not have any labels.
 
-	results = generate_tree_from_branching_ages_CPP(branching_ages = branching_ages)
+	results = get_tree_from_branching_ages_CPP(branching_ages = branching_ages)
 	if(!results$success) return(list(success=FALSE, error=results$error)); # something went wrong
 	Ntips	= results$Ntips
 	Nnodes 	= results$Nnodes

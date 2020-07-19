@@ -176,4 +176,4 @@ if(!sim$success){
 % R documentation directory.
 \keyword{tree model}
 \keyword{simulation}
-\keyword{homogenous birth-death model}
+\keyword{birth-death model}

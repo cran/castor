@@ -4,7 +4,7 @@
 Fit a parametric homogenous birth-death-sampling model to a timetree.
 }
 \description{
-Given a timetree (potentially sampled through time and not necessarily ultrametric), fit a homogenous birth-death-sampling (HBDS) model in which speciation, extinction and lineage sampling occurs at some continuous (Poissonian) rates \eqn{\lambda}, \eqn{\mu} and \eqn{\psi}, which are given as parameterized functions of time before present. Sampled lineages are kept in the pool of extant lineages at some ``retention probability'' \eqn{\kappa}, which may also depend on time. In addition, this model can include concentrated sampling attempts at a finite set of discrete time points \eqn{t_1,..,t_m}. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction/sampling rates. Every HBDS model is thus defined based on the values that \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} take over time, as well as the sampling probabilities \eqn{\psi_1,..,\psi_m} and retention probabilities \eqn{\kappa_1,..,\kappa_m} during the concentrated sampling attempts; each of these parameters, in turn, is assumed to be determined by a finite set of parameters. This function estimates these parameters by maximizing the corresponding likelihood of the timetree. Special cases of this model, are sometimes known as ``birth-death-skyline plots'' in the literature (Stadler 2013). In epidemiology, these models are often used to describe the phylogenies of viral strains sampled over the course of the epidemic.
+Given a timetree (potentially sampled through time and not necessarily ultrametric), fit a homogenous birth-death-sampling (HBDS) model in which speciation, extinction and lineage sampling occurs at some continuous (Poissonian) rates \eqn{\lambda}, \eqn{\mu} and \eqn{\psi}, which are given as parameterized functions of time before present. Sampled lineages are kept in the pool of extant lineages at some ``retention probability'' \eqn{\kappa}, which may also depend on time. In addition, this model can include concentrated sampling attempts (CSAs) at a finite set of discrete time points \eqn{t_1,..,t_m}. ``Homogenous'' refers to the assumption that, at any given moment in time, all lineages exhibit the same speciation/extinction/sampling rates. Every HBDS model is thus defined based on the values that \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} take over time, as well as the sampling probabilities \eqn{\rho_1,..,\rho_m} and retention probabilities \eqn{\kappa_1,..,\kappa_m} during the concentrated sampling attempts; each of these parameters, in turn, is assumed to be determined by a finite set of parameters. This function estimates these parameters by maximizing the corresponding likelihood of the timetree. Special cases of this model are sometimes known as ``birth-death-skyline plots'' in the literature (Stadler 2013). In epidemiology, these models are often used to describe the phylogenies of viral strains sampled over the course of the epidemic.
 }
 \usage{
 fit_hbds_model_parametric(tree, 
@@ -25,7 +25,7 @@ fit_hbds_model_parametric(tree,
                           CSA_kappas            = 0,
                           condition             = "auto",
                           ODE_relative_dt       = 0.001,
-                          ODE_relative_dy       = 1e-4,
+                          ODE_relative_dy       = 1e-3,
                           CSA_age_epsilon       = NULL,
                           Ntrials               = 1,
                           max_start_attempts    = 1,
@@ -61,7 +61,7 @@ Optional numeric vector of size NP, specifying typical scales for model paramete
 Positive numeric, specifying the age of the tree's root. Can be used to define a time offset, e.g. if the last tip was not actually sampled at the present. If \code{NULL}, this will be calculated from the tree and it will be assumed that the last tip was sampled at the present.
 }
 \item{oldest_age}{
-Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is taken as the stem age.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBDS model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
+Strictly positive numeric, specifying the oldest time before present (``age'') to consider when calculating the likelihood. If this is equal to or greater than the root age, then \code{oldest_age} is interpreted as the stem age.  If \code{oldest_age} is less than the root age, the tree is split into multiple subtrees at that age by treating every edge crossing that age as the stem of a subtree, and each subtree is considered an independent realization of the HBDS model stemming at that age. This can be useful for avoiding points in the tree close to the root, where estimation uncertainty is generally higher. If \code{oldest_age==NULL}, it is automatically set to the root age.
 }
 \item{lambda}{
 Function specifying the speciation rate at any given age (time before present) and for any given parameter values. This function must take exactly two arguments, the 1st one being a numeric vector (one or more ages) and the 2nd one being a numeric vector of size NP (parameter values), and return a numeric vector of the same size as the 1st argument with strictly positive entries. Can also be a single numeric (i.e., lambda is fixed).
@@ -88,7 +88,7 @@ Function specifying the sampling probabilities during the various concentrated s
 Function specifying the retention probabilities during the various concentrated sampling attempts, depending on parameter values. Hence, for any choice of parameters, \code{CSA_kappas} must return a numeric vector of the same size as \code{CSA_ages}. Can also be a single numeric (i.e., retention probability during concentrated samplings is fixed).
 }
 \item{condition}{
-Character, either "crown", "stem", "none" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended. If "auto", the condition is chosen according to the recommendations mentioned earlier.
+Character, either "crown", "stem", "none" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended. If "auto", the condition is chosen according to the above recommendations.
 }
 \item{ODE_relative_dt}{
 Positive unitless number, specifying the default relative time step for the ordinary differential equation solvers. Typical values are 0.01-0.001.
@@ -133,11 +133,11 @@ Character, specifying the line prefix for printing progress reports to the scree
 
 
 \details{
-This function is designed to estimate a finite set of scalar parameters (\eqn{p_1,..,p_n\in\R}) that determine the speciation rate \eqn{\lambda}, the extinction rate \eqn{\mu}, the sampling rate \eqn{\psi}, the retention rate \eqn{\kappa}, the concentrated sampling probabilities \eqn{\psi_1,..,\psi_m} and the concentrated retention probabilities \eqn{\kappa_1,..,\kappa_m}, by maximizing the likelihood of observing a given timetree under the HBDS model. Note that the ages (times before present) of the concentrated sampling attempts are assumed to be known and are not fitted.
+This function is designed to estimate a finite set of scalar parameters (\eqn{p_1,..,p_n\in\R}) that determine the speciation rate \eqn{\lambda}, the extinction rate \eqn{\mu}, the sampling rate \eqn{\psi}, the retention rate \eqn{\kappa}, the concentrated sampling probabilities \eqn{\rho_1,..,\rho_m} and the concentrated retention probabilities \eqn{\kappa_1,..,\kappa_m}, by maximizing the likelihood of observing a given timetree under the HBDS model. Note that the ages (times before present) of the concentrated sampling attempts are assumed to be known and are not fitted.
 
 It is generally advised to provide as much information to the function \code{fit_hbds_model_parametric} as possible, including reasonable lower and upper bounds (\code{param_min} and \code{param_max}), a reasonable parameter guess (\code{param_guess}) and reasonable parameter scales \code{param_scale}. If some model parameters can vary over multiple orders of magnitude, it is advised to transform them so that they vary across fewer orders of magnitude (e.g., via log-transformation). It is also important that the \code{age_grid} is sufficiently fine to capture the variation of \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} over time, since the likelihood is calculated under the assumption that these functions vary linearly between grid points.
 
-Note that in this function age always refers to time before present, i.e., present day age is 0 and age increases towards the root. The functions \code{lambda}, \code{mu}, \code{psi} and \code{kappa} should be functions of age, not forward time.
+Note that in this function age always refers to time before present, i.e., present day age is 0 and age increases from tips to root. The functions \code{lambda}, \code{mu}, \code{psi} and \code{kappa} should be functions of age, not forward time. Similarly, concentrated sampling attempts (CSAs) are enumerated in order of increasing age, i.e., starting with the youngest CSA and moving towards older CSAs.
 }
 
 
@@ -178,6 +178,9 @@ The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(
 }
 \item{BIC}{
 The Bayesian information criterion for the fitted model, defined as \eqn{\log(n)k-2\log(L)}, where \eqn{k} is the number of fitted parameters, \eqn{n} is the number of data points (\code{Ndata}), and \eqn{L} is the maximized likelihood.
+}
+\item{condition}{
+Character, specifying what conditioning was root for the likelihood (e.g. "crown" or "stem").
 }
 \item{converged}{
 Logical, specifying whether the maximum likelihood was reached after convergence of the optimization algorithm. Note that in some cases the maximum likelihood may have been achieved by an optimization path that did not yet converge (in which case it's advisable to increase \code{iter.max} and/or \code{eval.max}).
@@ -222,7 +225,7 @@ Numeric vector of size NP, lower bound of the 95\% confidence interval (2.5-97.5
 Numeric vector of size NP, upper bound of the 95\% confidence interval for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{consistency}{
-Numeric between 0 and 1, estimated consistency of the data with the fitted model. See the documentation of \code{\link{fit_sbm_const}} for an explanation.
+Numeric between 0 and 1, estimated consistency of the data with the fitted model. See the documentation of \code{\link{fit_hbds_model_on_grid}} for an explanation.
 }
 }
 
@@ -268,11 +271,12 @@ psi_function = function(ages,params){
 
 # Define an age grid on which lambda_function & mu_function shall be evaluated
 # Should be sufficiently fine to capture the variation in lambda & mu
-age_grid = seq(from=0,to=100,by=0.01)
+age_grid = seq(from=0,to=root_age,by=0.01)
 
 # Perform fitting
 cat(sprintf("Fitting model to tree..\n"))
 fit = fit_hbds_model_parametric(tree, 
+                      root_age      = root_age,
                       param_values  = c(lambda0=NA, mu0=NA, alpha=NA, beta=NA, psi=NA),
                       param_guess   = c(1,1,0,0,0.5),
                       param_min     = c(0,0,-1,-1,0),
@@ -297,4 +301,4 @@ if(!fit$success){
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{tree model}
-\keyword{homogenous birth-death model}
+\keyword{birth-death-sampling model}

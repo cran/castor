@@ -674,6 +674,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_Colless_Imbalance_CPP
+double get_Colless_Imbalance_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const bool normalized);
+RcppExport SEXP _castor_get_Colless_Imbalance_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP normalizedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const bool >::type normalized(normalizedSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_Colless_Imbalance_CPP(Ntips, Nnodes, Nedges, tree_edge, normalized));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sort_tree_edges_root_to_tips_CPP
 IntegerVector sort_tree_edges_root_to_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const bool depth_first_search, const bool root_to_tips, const std::vector<long>& tree_edge);
 RcppExport SEXP _castor_sort_tree_edges_root_to_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP depth_first_searchSEXP, SEXP root_to_tipsSEXP, SEXP tree_edgeSEXP) {
@@ -1557,8 +1572,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // simulate_deterministic_HBD_model_CPP
-Rcpp::List simulate_deterministic_HBD_model_CPP(const double census_age, const double oldest_age, const std::vector<double>& age_grid, const std::vector<double>& lambdas, const std::vector<double>& mus, const std::vector<double> mu_over_lambda, const std::vector<double>& PDRs, const double anchor_age, const double anchor_rho, double anchor_lambda, const double anchor_LTT, const long splines_degree, const double relative_dt);
-RcppExport SEXP _castor_simulate_deterministic_HBD_model_CPP(SEXP census_ageSEXP, SEXP oldest_ageSEXP, SEXP age_gridSEXP, SEXP lambdasSEXP, SEXP musSEXP, SEXP mu_over_lambdaSEXP, SEXP PDRsSEXP, SEXP anchor_ageSEXP, SEXP anchor_rhoSEXP, SEXP anchor_lambdaSEXP, SEXP anchor_LTTSEXP, SEXP splines_degreeSEXP, SEXP relative_dtSEXP) {
+Rcpp::List simulate_deterministic_HBD_model_CPP(const double census_age, const double oldest_age, const std::vector<double>& age_grid, const std::vector<double>& lambdas, const std::vector<double>& mus, const std::vector<double> mu_over_lambda, const std::vector<double>& PDRs, const double anchor_age, const double anchor_rho, double anchor_lambda, const double anchor_LTT, const long splines_degree, const double relative_dt, const bool allow_unreal);
+RcppExport SEXP _castor_simulate_deterministic_HBD_model_CPP(SEXP census_ageSEXP, SEXP oldest_ageSEXP, SEXP age_gridSEXP, SEXP lambdasSEXP, SEXP musSEXP, SEXP mu_over_lambdaSEXP, SEXP PDRsSEXP, SEXP anchor_ageSEXP, SEXP anchor_rhoSEXP, SEXP anchor_lambdaSEXP, SEXP anchor_LTTSEXP, SEXP splines_degreeSEXP, SEXP relative_dtSEXP, SEXP allow_unrealSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1575,7 +1590,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type anchor_LTT(anchor_LTTSEXP);
     Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
     Rcpp::traits::input_parameter< const double >::type relative_dt(relative_dtSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_deterministic_HBD_model_CPP(census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt));
+    Rcpp::traits::input_parameter< const bool >::type allow_unreal(allow_unrealSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_deterministic_HBD_model_CPP(census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt, allow_unreal));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1730,8 +1746,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_congruent_HBDS_CPP
-Rcpp::List get_congruent_HBDS_CPP(const std::vector<double>& CSA_ages, const std::vector<double>& CSA_pulled_probs, const std::vector<double>& CSA_PSRs, const std::vector<double>& age_grid, const std::vector<double>& PSRs, const std::vector<double>& PDRs, const std::vector<double>& lambda_psis, std::vector<double> psis, std::vector<double> mus, const double lambda0, const long splines_degree, const double ODE_relative_dt, const double ODE_relative_dy, const double runtime_out_seconds);
-RcppExport SEXP _castor_get_congruent_HBDS_CPP(SEXP CSA_agesSEXP, SEXP CSA_pulled_probsSEXP, SEXP CSA_PSRsSEXP, SEXP age_gridSEXP, SEXP PSRsSEXP, SEXP PDRsSEXP, SEXP lambda_psisSEXP, SEXP psisSEXP, SEXP musSEXP, SEXP lambda0SEXP, SEXP splines_degreeSEXP, SEXP ODE_relative_dtSEXP, SEXP ODE_relative_dySEXP, SEXP runtime_out_secondsSEXP) {
+Rcpp::List get_congruent_HBDS_CPP(const std::vector<double>& CSA_ages, const std::vector<double>& CSA_pulled_probs, const std::vector<double>& CSA_PSRs, const std::vector<double>& age_grid, const std::vector<double>& PSRs, const std::vector<double>& PDRs, const std::vector<double>& lambda_psis, std::vector<double> psis, std::vector<double> mus, std::vector<double> Reffs, const double lambda0, const long splines_degree, const double ODE_relative_dt, const double ODE_relative_dy, const double runtime_out_seconds);
+RcppExport SEXP _castor_get_congruent_HBDS_CPP(SEXP CSA_agesSEXP, SEXP CSA_pulled_probsSEXP, SEXP CSA_PSRsSEXP, SEXP age_gridSEXP, SEXP PSRsSEXP, SEXP PDRsSEXP, SEXP lambda_psisSEXP, SEXP psisSEXP, SEXP musSEXP, SEXP ReffsSEXP, SEXP lambda0SEXP, SEXP splines_degreeSEXP, SEXP ODE_relative_dtSEXP, SEXP ODE_relative_dySEXP, SEXP runtime_out_secondsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1744,12 +1760,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<double>& >::type lambda_psis(lambda_psisSEXP);
     Rcpp::traits::input_parameter< std::vector<double> >::type psis(psisSEXP);
     Rcpp::traits::input_parameter< std::vector<double> >::type mus(musSEXP);
+    Rcpp::traits::input_parameter< std::vector<double> >::type Reffs(ReffsSEXP);
     Rcpp::traits::input_parameter< const double >::type lambda0(lambda0SEXP);
     Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
     Rcpp::traits::input_parameter< const double >::type ODE_relative_dt(ODE_relative_dtSEXP);
     Rcpp::traits::input_parameter< const double >::type ODE_relative_dy(ODE_relative_dySEXP);
     Rcpp::traits::input_parameter< const double >::type runtime_out_seconds(runtime_out_secondsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_congruent_HBDS_CPP(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds));
+    rcpp_result_gen = Rcpp::wrap(get_congruent_HBDS_CPP(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, Reffs, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1940,14 +1957,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// generate_tree_from_branching_ages_CPP
-Rcpp::List generate_tree_from_branching_ages_CPP(const std::vector<double>& branching_ages);
-RcppExport SEXP _castor_generate_tree_from_branching_ages_CPP(SEXP branching_agesSEXP) {
+// get_tree_from_branching_ages_CPP
+Rcpp::List get_tree_from_branching_ages_CPP(const std::vector<double>& branching_ages);
+RcppExport SEXP _castor_get_tree_from_branching_ages_CPP(SEXP branching_agesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const std::vector<double>& >::type branching_ages(branching_agesSEXP);
-    rcpp_result_gen = Rcpp::wrap(generate_tree_from_branching_ages_CPP(branching_ages));
+    rcpp_result_gen = Rcpp::wrap(get_tree_from_branching_ages_CPP(branching_ages));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_tree_from_sampling_branching_ages_CPP
+Rcpp::List get_tree_from_sampling_branching_ages_CPP(const std::vector<double>& sampling_ages, const std::vector<double>& branching_ages);
+RcppExport SEXP _castor_get_tree_from_sampling_branching_ages_CPP(SEXP sampling_agesSEXP, SEXP branching_agesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type sampling_ages(sampling_agesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type branching_ages(branching_agesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_tree_from_sampling_branching_ages_CPP(sampling_ages, branching_ages));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2450,6 +2479,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_tree_to_clade_list_CPP", (DL_FUNC) &_castor_tree_to_clade_list_CPP, 6},
     {"_castor_extract_fasttree_constraints_CPP", (DL_FUNC) &_castor_extract_fasttree_constraints_CPP, 4},
     {"_castor_get_gamma_statistic_CPP", (DL_FUNC) &_castor_get_gamma_statistic_CPP, 5},
+    {"_castor_get_Colless_Imbalance_CPP", (DL_FUNC) &_castor_get_Colless_Imbalance_CPP, 5},
     {"_castor_sort_tree_edges_root_to_tips_CPP", (DL_FUNC) &_castor_sort_tree_edges_root_to_tips_CPP, 6},
     {"_castor_root_tree_at_node_CPP", (DL_FUNC) &_castor_root_tree_at_node_CPP, 5},
     {"_castor_get_tree_with_collapsed_monofurcations_CPP", (DL_FUNC) &_castor_get_tree_with_collapsed_monofurcations_CPP, 7},
@@ -2499,7 +2529,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_ASR_binomial_CPP", (DL_FUNC) &_castor_ASR_binomial_CPP, 8},
     {"_castor_get_MuSSE_loglikelihood_classic_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_classic_CPP, 13},
     {"_castor_get_MuSSE_loglikelihood_CPP", (DL_FUNC) &_castor_get_MuSSE_loglikelihood_CPP, 22},
-    {"_castor_simulate_deterministic_HBD_model_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_model_CPP, 13},
+    {"_castor_simulate_deterministic_HBD_model_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBD_model_CPP, 14},
     {"_castor_get_PSR_from_PDR_HBD_CPP", (DL_FUNC) &_castor_get_PSR_from_PDR_HBD_CPP, 8},
     {"_castor_get_PSR_of_HBD_model_CPP", (DL_FUNC) &_castor_get_PSR_of_HBD_model_CPP, 8},
     {"_castor_get_HBD_model_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_model_loglikelihood_CPP, 10},
@@ -2507,7 +2537,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_HBD_PSR_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBD_PSR_loglikelihood_CPP, 8},
     {"_castor_get_HBDS_model_loglikelihood_CPP", (DL_FUNC) &_castor_get_HBDS_model_loglikelihood_CPP, 19},
     {"_castor_simulate_deterministic_HBDS_CPP", (DL_FUNC) &_castor_simulate_deterministic_HBDS_CPP, 16},
-    {"_castor_get_congruent_HBDS_CPP", (DL_FUNC) &_castor_get_congruent_HBDS_CPP, 14},
+    {"_castor_get_congruent_HBDS_CPP", (DL_FUNC) &_castor_get_congruent_HBDS_CPP, 15},
     {"_castor_simulate_fixed_rates_Markov_model_CPP", (DL_FUNC) &_castor_simulate_fixed_rates_Markov_model_CPP, 11},
     {"_castor_simulate_Ornstein_Uhlenbeck_on_tree_CPP", (DL_FUNC) &_castor_simulate_Ornstein_Uhlenbeck_on_tree_CPP, 11},
     {"_castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP", (DL_FUNC) &_castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP, 11},
@@ -2516,7 +2546,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_simulate_neutral_gene_evolution_CPP", (DL_FUNC) &_castor_simulate_neutral_gene_evolution_CPP, 13},
     {"_castor_generate_random_tree_CPP", (DL_FUNC) &_castor_generate_random_tree_CPP, 18},
     {"_castor_generate_random_tree_HBDS_CPP", (DL_FUNC) &_castor_generate_random_tree_HBDS_CPP, 21},
-    {"_castor_generate_tree_from_branching_ages_CPP", (DL_FUNC) &_castor_generate_tree_from_branching_ages_CPP, 1},
+    {"_castor_get_tree_from_branching_ages_CPP", (DL_FUNC) &_castor_get_tree_from_branching_ages_CPP, 1},
+    {"_castor_get_tree_from_sampling_branching_ages_CPP", (DL_FUNC) &_castor_get_tree_from_sampling_branching_ages_CPP, 2},
     {"_castor_generate_tree_from_PSR_CPP", (DL_FUNC) &_castor_generate_tree_from_PSR_CPP, 9},
     {"_castor_get_branching_ages_from_LTT_CPP", (DL_FUNC) &_castor_get_branching_ages_from_LTT_CPP, 2},
     {"_castor_generate_random_tree_BM_rates_CPP", (DL_FUNC) &_castor_generate_random_tree_BM_rates_CPP, 17},

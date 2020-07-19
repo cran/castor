@@ -35,7 +35,7 @@ Numeric state of each trait at each tip in each tree in the second data set, sim
 Integer, specifying the number of parametric bootstraps to perform for calculating the confidence intervals of BM diffusivities fitted to each data set. If <=0, no bootstrapping is performed.
 }
 \item{Nsignificance}{
-Integer, specifying the number of simulations to perform for assessing the statistical significance of the log-transformed difference between the diffusivities fitted to the two data sets, i.e. of \eqn{|\log(D_1)-\log(D_2)|}. Set to 0 to not calculate the significance of the slope. See below for additional details.
+Integer, specifying the number of simulations to perform for assessing the statistical significance of the log-transformed difference between the diffusivities fitted to the two data sets, i.e. of \eqn{|\log(D_1)-\log(D_2)|}. Set to 0 to not calculate the statistical significance. See below for additional details.
 }
 \item{check_input}{
 Logical, specifying whether to perform some basic checks on the validity of the input data. If you are certain that your input data are valid, you can set this to \code{FALSE} to reduce computation.
@@ -67,7 +67,7 @@ Logical, indicating whether the fitting was successful for both data sets. If \c
 A named list containing the fitting results for the first data set, in the same format as returned by \code{\link{fit_bm_model}}. In particular, the diffusivity fitted to the first data set will be stored in \code{fit1$diffusivity}.
 }
 \item{fit2}{
-A named list containing the fitting results for the second data set, in the same format as returned by \code{\link{fit_bm_model}}. In particular, the diffusivity fitted to the second data set will be stored in \code{fit1$diffusivity}.
+A named list containing the fitting results for the second data set, in the same format as returned by \code{\link{fit_bm_model}}. In particular, the diffusivity fitted to the second data set will be stored in \code{fit2$diffusivity}.
 }
 \item{log_difference}{
 The absolute difference between the log-transformed diffusivities, i.e. \eqn{|\log(D_1)-\log(D_2)|}. In the multivariate case, this will be a matrix of size Ntraits x Ntraits.

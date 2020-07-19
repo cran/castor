@@ -128,6 +128,9 @@ Numeric, giving the time at which the tree's root was first split during the sim
 \item{final_time}{
 Numeric, giving the final time at the end of the simulation.
 }
+\item{root_age}{
+Numeric, giving the age (time before present) at the tree's root. This is equal to \code{final_time}-\code{root_time}.
+}
 \item{Nbirths}{
 Integer, the total number of speciation (birth) events that occured during the simulation.
 }
@@ -210,4 +213,4 @@ if(!simul$success){
 % R documentation directory.
 \keyword{tree model}
 \keyword{simulation}
-\keyword{homogenous birth-death-sampling model}
+\keyword{birth-death-sampling model}

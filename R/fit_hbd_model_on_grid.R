@@ -12,7 +12,7 @@
 fit_hbd_model_on_grid = function(	tree, 
 									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
 									age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting and with respect to which rho is defined (rho(age0) is the fraction of lineages extant at age0 that are included in the tree)
-									age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which the lambda is defined as a piecewise linear curve. If NULL, the lambda is assumed to be time-independent.
+									age_grid			= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which lambda and mu is defined as a piecewise linear curve. If NULL, the lambda and mu are assumed to be time-independent.
 									min_lambda			= 0,		# optional lower bound for the fitted lambdas. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
 									max_lambda			= +Inf,		# optional upper bound for the fitted lambdas. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the upper bound at each age-grid point.
 									min_mu				= 0,		# optional lower bound for the fitted mus. Either a single numeric (applying to all age-grid-points) or a numeric vector of size NG, specifying the lower bound at each age-grid point.
@@ -28,7 +28,7 @@ fit_hbd_model_on_grid = function(	tree,
 									const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
-									condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+									condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age!=root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 									Ntrials				= 1,
 									Nthreads			= 1,
@@ -61,13 +61,14 @@ fit_hbd_model_on_grid = function(	tree,
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
 
 	# more error checking
+	Ntrials  = (if(is.null(Ntrials)) 1 else max(1,Ntrials))
+	Nthreads = (if(is.null(Nthreads)) 1 else max(1,Nthreads))
 	if(is.null(fixed_rho0)) fixed_rho0 = NA;
 	if((!is.na(fixed_rho0)) && ((fixed_rho0<=0) || (fixed_rho0>1))) return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the accepted range (0,1].",fixed_rho0)));
-	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
 	if(is.null(age_grid) || (length(age_grid)<=1)){
 		if((!is.null(guess_lambda)) && (length(guess_lambda)>1)) return(list(success = FALSE, error = sprintf("Invalid number of guessed lambdas; since no age grid was provided, you must provide a single (constant) guess_lambda or none at all")));
 		if((!is.null(guess_mu)) && (length(guess_mu)>1)) return(list(success = FALSE, error = sprintf("Invalid number of guessed mus; since no age grid was provided, you must provide a single (constant) guess_mu or none at all")));
-		age_grid = 0 # single-point grid, means that lambdas are assumed time-independent
+		age_grid = 0 # single-point grid, means that lambda and mu are assumed time-independent
 		NG = 1
 	}else{
 		NG = length(age_grid)
@@ -108,17 +109,6 @@ fit_hbd_model_on_grid = function(	tree,
 	}else if(length(fixed_mu)==1){
 		fixed_mu = rep(fixed_mu,times=NG);
 	}
-
-	# verify that fixed params are within the imposed bounds
-# 	if(any(fixed_lambda[!is.na(fixed_lambda)]<min_lambda[!is.na(fixed_lambda)]) || any(fixed_lambda[!is.na(fixed_lambda)]>max_lambda[!is.na(fixed_lambda)])){
-# 		return(list(success = FALSE, error=sprintf("Some fixed lambdas are outside of the requested bounds")));
-# 	}
-# 	if(any(fixed_mu[!is.na(fixed_mu)]<min_mu[!is.na(fixed_mu)]) || any(fixed_mu[!is.na(fixed_mu)]>max_mu[!is.na(fixed_mu)])){
-# 		return(list(success = FALSE, error=sprintf("Some fixed mus are outside of the requested bounds")));
-# 	}
-# 	if((!is.na(fixed_rho0)) && ((fixed_rho0<min_rho0) || (fixed_rho0>max_rho0))){
-# 		return(list(success = FALSE, error=sprintf("Fixed rho (%g) is outside of the requested bounds (%g - %g)",fixed_rho0,min_rho0,max_rho0)));
-# 	}
 	
 						
 	#################################
@@ -169,7 +159,7 @@ fit_hbd_model_on_grid = function(	tree,
 	}
 	scale_rho 	 = abs(guess_rho0);
 	if(scale_rho==0) scale_rho = 1;
-	param_scales = c(rep(scale_lambda,times=NG),rep(scale_mu,times=NG),scale_rho);
+	param_scales = c(scale_lambda,scale_mu,scale_rho);
 	
 	# define auxiliary function for obtaining full parameter list from rescaled free fitted parameters
 	# input: fparam_values[] is a 1D vector of length NFP, listing rescaled values for the free fitted parameters
@@ -295,6 +285,7 @@ fit_hbd_model_on_grid = function(	tree,
 				NFP						= Nfree,
 				AIC						= 2*Nfree - 2*loglikelihood,
 				BIC						= log(sum((sorted_node_ages<=oldest_age) & (sorted_node_ages>=age0)))*Nfree - 2*loglikelihood,
+				condition				= condition,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations));

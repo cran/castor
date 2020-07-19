@@ -12,7 +12,7 @@ simulate_tdsse(Nstates,
                proxy_map            = NULL,
                time_grid            = NULL,
                parameters           = list(),
-               splines_degree		= 1,
+               splines_degree       = 1,
                start_state          = NULL,
                max_tips             = NULL, 
                max_time             = NULL,
@@ -38,7 +38,7 @@ Integer, specifying the number of possible discrete states a tip can have, influ
 Integer, optionally specifying a number of "proxy-states" that are observed instead of the underlying speciation/extinction-modulating states. To simulate a HiSSE model, this should be smaller than \code{Nstates}. Each state corresponds to a different proxy-state, as defined using the variable \code{proxy_map} (see below). For BiSSE/MuSSE with no hidden states, \code{NPstates} can be set to either \code{NULL} or equal to \code{Nstates}, and proxy-states are equivalent to states.
 }
 \item{proxy_map}{
-Integer vector of size \code{Nstates} and with values in 1,..\code{NPstates}, specifying the correspondence between states (i.e. diversification-rate categories) and (observed) proxy-states, in a HiSSE model. Specifically, \code{proxy_map[s]} indicates which proxy-state the state s is represented by. Each proxy-state can represent multiple states (i.e. proxies are ambiguous), but each state must be represented by exactly one proxy-state. For non-HiSSE models, set this to \code{NULL}. See below for more details.
+Integer vector of size \code{Nstates} and with values in 1,..,\code{NPstates}, specifying the correspondence between states (i.e. diversification-rate categories) and (observed) proxy-states, in a HiSSE model. Specifically, \code{proxy_map[s]} indicates which proxy-state the state s is represented by. Each proxy-state can represent multiple states (i.e. proxies are ambiguous), but each state must be represented by exactly one proxy-state. For non-HiSSE models, set this to \code{NULL}. See below for more details.
 }
 \item{time_grid}{
 Numeric vector listing discrete times in ascending order, used to define the time-dependent rates of the model. The time grid should generally cover the maximum possible simulation time, otherwise it will be polynomially extrapolated (according to \code{splines_degree}).

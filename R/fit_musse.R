@@ -268,7 +268,7 @@ fit_musse = function(	tree,
 	# figure out which parameters are fitted vs fixed
 	# get set of independent parameters (as a condensed vector)
 	# For example, if the birth_rate_model is "ER", only one birth rate is considered an independent model parameter (regardless of whether it is fixed or fitted)
-	provided_param_values 	= compress_params(transition_matrix, birth_rates, death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
+	provided_param_values 	= compress_musse_params(transition_matrix, birth_rates, death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
 	fitted_params			= which(is.na(provided_param_values))
 	fixed_params			= which(!is.na(provided_param_values))
 	NIP						= length(provided_param_values) # total number of independent model parameters (fixed+fitted)
@@ -278,9 +278,9 @@ fit_musse = function(	tree,
 	# determine lower & upper bounds for parameters
 	if(is.null(lower)) lower = list();
 	if(is.null(upper)) upper = list();
-	param_mins = compress_params(lower$transition_matrix, lower$birth_rates, lower$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+	param_mins = compress_musse_params(lower$transition_matrix, lower$birth_rates, lower$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
 	param_mins[is.na(param_mins) | is.nan(param_mins) | (param_mins<0)] = 0;
-	param_maxs = compress_params(upper$transition_matrix, upper$birth_rates, upper$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+	param_maxs = compress_musse_params(upper$transition_matrix, upper$birth_rates, upper$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
 	param_maxs[is.na(param_maxs) | is.nan(param_maxs)] = Inf
 	
 	# determine optimization options if not already provided
@@ -291,10 +291,10 @@ fit_musse = function(	tree,
 	if(is.null(first_guess)) first_guess = list();
 	if((!is.null(first_guess$birth_rates)) && (length(first_guess$birth_rates)==1)) first_guess$birth_rates = rep(first_guess$birth_rates,Nstates)
 	if((!is.null(first_guess$death_rates)) && (length(first_guess$death_rates)==1)) first_guess$death_rates = rep(first_guess$death_rates,Nstates)
-	first_guess_compr = compress_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
+	first_guess_compr = compress_musse_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
 	first_guess_compr[!is.na(provided_param_values)] = provided_param_values[!is.na(provided_param_values)] # incorporate fixed values into start values
 	first_guess_compr = pmin(pmax(first_guess_compr, param_mins), param_maxs) # make sure provisionary start params are within bounds
-	first_guess = uncompress_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
+	first_guess = uncompress_musse_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
 	if(any(is.na(first_guess$birth_rates)) || any(is.na(first_guess$death_rates))){
 		# some birth_rates and/or some death_rates are non-fixed and have unknown start values, so guesstimate by fitting a birth-death model
 		if(verbose) cat(sprintf("%sGuesstimating start speciation/extinction rates..\n",verbose_prefix))
@@ -367,9 +367,9 @@ fit_musse = function(	tree,
 		# make sure first-guess transition matrix is a valid transition matrix
 		diag(first_guess$transition_matrix) = -rowSums(first_guess$transition_matrix);
 	}
-	first_guess_compr = compress_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
+	first_guess_compr = compress_musse_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
 	first_guess_compr = pmin(pmax(first_guess_compr, param_mins), param_maxs) # make sure finalized start params are within bounds
-	first_guess 	  = uncompress_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
+	first_guess 	  = uncompress_musse_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 	return_value_on_failure$start_parameters = first_guess
 	
 	# at this point, all start parameters (first_guess/first_guess_compr) are assumed to be well defined (non-NA), either based on provided/fixed start values and/or based on some guesstimates
@@ -403,17 +403,17 @@ fit_musse = function(	tree,
 		# some (but not all) transition rate scales are zero, so determine scale based on mean transition-rate scale
 		param_scales$transition_matrix[param_scales$transition_matrix==0] = 0.1*mean(param_scales$transition_matrix)
 	}
-	param_scales = compress_params(param_scales$transition_matrix, param_scales$birth_rates, param_scales$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
+	param_scales = compress_musse_params(param_scales$transition_matrix, param_scales$birth_rates, param_scales$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
 						
 	# define objective function to be minimized (negated log-likelihood)
 	# the input to the objective function must be scaled and free (non-fixed) independent parametes
 	objective_function = function(fparam_values){
 		# # reverse parameter transformation. fparam_values are shifted with regards to their lower bounds, i.e. the true parameter values are: SQ(fparam_values)+param_mins
-		if(any(is.nan(fparam_values)) || any(is.infinite(fparam_values))) return(Inf);
+		if(any(is.nan(fparam_values)) || any(is.infinite(fparam_values))) return(if(optim_algorithm == "optim") 1e100 else Inf)
 		fparam_values 	= unscale_params(fparam_values, param_scales[fitted_params], param_mins[fitted_params])
 		if(any(fparam_values<param_mins[fitted_params]) || any(fparam_values>param_maxs[fitted_params])) return(Inf)
 		param_values 	= provided_param_values; param_values[fitted_params] = fparam_values; # merge fixed & fitted parameter values
-		param_values 	= uncompress_params(param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
+		param_values 	= uncompress_musse_params(param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
 		results = tryCatch({ get_MuSSE_loglikelihood_CPP(	Ntips 							= Ntips,
 												Nnodes							= Nnodes,
 												Nedges							= Nedges,
@@ -437,7 +437,7 @@ fit_musse = function(	tree,
 												D_temporal_resolution			= D_temporal_resolution,
 												runtime_out_seconds				= max_model_runtime)
 							}, error = function(e){ list(loglikelihood=NaN, success=FALSE) })
-		loglikelihood = if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) -Inf else results$loglikelihood;
+		loglikelihood = if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) (if(optim_algorithm == "optim") -1e100 else -Inf) else results$loglikelihood
 		return(-loglikelihood);
 	}
 
@@ -497,7 +497,7 @@ fit_musse = function(	tree,
 	if(NFP==0){
 		# all parameters are fixed, so no fitting needed
 		if(verbose) cat(sprintf("%sAll parameters are fixed; simply calculating loglikelihood of model..\n",verbose_prefix))
-		best_param_values 	= uncompress_params(provided_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
+		best_param_values 	= uncompress_musse_params(provided_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 		Nevaluations 		= NA
 		Niterations			= NA
 		converged 			= TRUE
@@ -547,7 +547,7 @@ fit_musse = function(	tree,
 			return_value_on_failure$error = "Fitting yielded NaN loglikelihood and/or rates"
 			return(return_value_on_failure);
 		}
-		best_param_values 	= uncompress_params(best_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
+		best_param_values 	= uncompress_musse_params(best_param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 		Nevaluations 		= fits[[best]]$Nevaluations
 		Niterations 		= fits[[best]]$Niterations
 		converged	 		= fits[[best]]$converged
@@ -600,7 +600,7 @@ fit_musse = function(	tree,
 	if(Nbootstraps>0){
 		if(verbose) cat(sprintf("%sEstimating confidence intervals using parametric bootstrapping..\n",verbose_prefix))
 		if(is.null(Ntrials_per_bootstrap)) Ntrials_per_bootstrap = max(1,Ntrials)
-		best_param_values_flat 	= flatten_params(best_param_values, Nstates);
+		best_param_values_flat 	= flatten_musse_params(best_param_values, Nstates);
 		bootstrap_param_values 	= matrix(NA,nrow=Nbootstraps,ncol=NP)
 		NBsucceeded 			= 0
 		for(b in 1:Nbootstraps){
@@ -656,7 +656,7 @@ fit_musse = function(	tree,
 			if(!fit$success){
 				if(verbose) cat(sprintf("%s  WARNING: Fitting failed for this bootstrap\n",verbose_prefix))
 			}else{
-				bootstrap_param_values[b,] = flatten_params(fit$parameters, Nstates)
+				bootstrap_param_values[b,] = flatten_musse_params(fit$parameters, Nstates)
 				#means			= means + bootstrapped_param_values_flat
 				#standard_errors = standard_errors + bootstrapped_param_values_flat^2
 				NBsucceeded = NBsucceeded + 1
@@ -664,14 +664,14 @@ fit_musse = function(	tree,
 		}
 		# calculate standard errors and confidence intervals from distribution of bootstrapped parameters
 		standard_errors_flat = sqrt(pmax(0, colMeans(bootstrap_param_values^2, na.rm=TRUE) - colMeans(bootstrap_param_values, na.rm=TRUE)^2))
-		standard_errors = unflatten_params(standard_errors_flat, Nstates, state_names)
+		standard_errors = unflatten_musse_params(standard_errors_flat, Nstates, state_names)
 		quantiles = sapply(1:NP, FUN=function(p) quantile(bootstrap_param_values[,p], probs=c(0.25, 0.75, 0.025, 0.975), na.rm=TRUE, type=8))
-		CI50lower = unflatten_params(quantiles[1,], Nstates, state_names)
-		CI50upper = unflatten_params(quantiles[2,], Nstates, state_names)
-		CI95lower = unflatten_params(quantiles[3,], Nstates, state_names)
-		CI95upper = unflatten_params(quantiles[4,], Nstates, state_names)
+		CI50lower = unflatten_musse_params(quantiles[1,], Nstates, state_names)
+		CI50upper = unflatten_musse_params(quantiles[2,], Nstates, state_names)
+		CI95lower = unflatten_musse_params(quantiles[3,], Nstates, state_names)
+		CI95upper = unflatten_musse_params(quantiles[4,], Nstates, state_names)
 		CI = cbind(best_param_values_flat,standard_errors_flat,t(as.matrix(quantiles)))
-		rownames(CI) = get_flat_param_names(Nstates)
+		rownames(CI) = get_flat_musse_param_names(Nstates)
 		colnames(CI) = c("ML_estimate", "standard_error", "CI50lower", "CI50upper", "CI95lower", "CI95upper")
 	}
 		
@@ -708,7 +708,7 @@ fit_musse = function(	tree,
 
 # generate a compressed flat vector of independent model parameter values, with parameters listed in a specific order
 # for example, if the birth-rate model is "ER" (as encoded by birth_rate_indices), then only one birth rate will be included in the flattened param vector
-compress_params = function(transition_matrix, birth_rates, death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices){
+compress_musse_params = function(transition_matrix, birth_rates, death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices){
 	if(is.null(transition_matrix)){
 		free_transition_rates = rep(NA, max(transition_indices))
 	}else{
@@ -737,10 +737,10 @@ compress_params = function(transition_matrix, birth_rates, death_rates, Nstates,
 }
 
 
-# given a compressed vector of independent model parameters (e.g. generated by compress_params()), return an unflattened named list of model parameters
+# given a compressed vector of independent model parameters (e.g. generated by compress_musse_params()), return an unflattened named list of model parameters
 # the returned list will have entries such as transition_matrix[], birth_rates[] and death_rates[], with the proper dimensionalities and potentially redundant values
 # For example, if the birth_rate_model is "ER" (as encoded by birth_rate_indices), then the returned birth_rates will be a vector with Nstates identical entries
-uncompress_params = function(params, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names){
+uncompress_musse_params = function(params, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names){
 	NFT = max(as.vector(transition_indices)) # number of free (fitted) transition rates
 	NFB = max(birth_rate_indices) # number of free (fitted) birth rates
 	NFD = max(death_rate_indices) # number of free (fitted) death rates
@@ -761,14 +761,14 @@ uncompress_params = function(params, Nstates, transition_indices, birth_rate_ind
 
 # return flattened list of model parameter values (transition matrix, birth rates, death rates)
 # matrices are flattened in row-major format
-flatten_params = function(params, Nstates){
+flatten_musse_params = function(params, Nstates){
 	flattened = c(as.vector(t(params$transition_matrix)), params$birth_rates, params$death_rates)
 	return(flattened)
 }
 
 # return unflattened list of model parameters (transition matrix, birth rates, death rates)
-# this is the reverse of flatten_params(..)
-unflatten_params = function(params_flat, Nstates, state_names){
+# this is the reverse of flatten_musse_params(..)
+unflatten_musse_params = function(params_flat, Nstates, state_names){
 	unflattened = list(	transition_matrix 	= matrix(params_flat[1:(Nstates*Nstates)], ncol=Nstates, nrow=Nstates, byrow=TRUE, dimnames=list(state_names,state_names)),
 						birth_rates			= setNames(params_flat[((Nstates*Nstates)+1):((Nstates*Nstates)+Nstates)], state_names),
 						death_rates			= setNames(params_flat[((Nstates*Nstates)+Nstates+1):((Nstates*Nstates)+(2*Nstates))], state_names))
@@ -779,8 +779,8 @@ get_name_series = function(base_name, N){
 	return(sapply(1:N, function(n) sprintf("%s%d",base_name,n)));
 }
 
-# return parameter names synchronized with the flattened lists generated by flatten_params(..)
-get_flat_param_names = function(Nstates){
+# return parameter names synchronized with the flattened lists generated by flatten_musse_params(..)
+get_flat_musse_param_names = function(Nstates){
 	Q = matrix(NA,nrow=Nstates,ncol=Nstates) # auxiliary matrix for getting flattened matrix indices (content does not matter)
 	return(c(	paste("Q",paste(as.character(as.vector(t(row(Q)))),as.character(as.vector(t(col(Q)))),sep="."),sep=""),
 				get_name_series("birth_rate.",Nstates), 

@@ -137,10 +137,10 @@ The name of the objective that was maximized during fitting. Currently, only max
 The log-likelihood of the fitted model for the given timetree.
 }
 \item{fitted_lambda}{
-Numeric vector of size Ngrid, listing fitted or fixed speciation rates \eqn{\lambda} at each age-grid point. Between grid points the fitted \eqn{\lambda} should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
+Numeric vector of size Ngrid, listing fitted or fixed speciation rates \eqn{\lambda} at each age-grid point. Between grid points \eqn{\lambda} should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
 }
 \item{fitted_mu}{
-Numeric vector of size Ngrid, listing fitted or fixed extinction rates \eqn{\mu} at each age-grid point. Between grid points the fitted \eqn{\mu} should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
+Numeric vector of size Ngrid, listing fitted or fixed extinction rates \eqn{\mu} at each age-grid point. Between grid points \eqn{\mu} should be interpreted as a piecewise polynomial function (natural spline) of degree \code{splines_degree}; to evaluate this function at arbitrary ages use the \code{castor} routine \code{\link{evaluate_spline}}.
 }
 \item{fitted_rho}{
 Numeric, specifying the fitted or fixed sampling fraction \eqn{\rho}.
@@ -165,6 +165,9 @@ The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(
 }
 \item{BIC}{
 The Bayesian information criterion for the fitted model, defined as \eqn{\log(n)k-2\log(L)}, where \eqn{k} is the number of fitted parameters, \eqn{n} is the number of data points (number of branching times), and \eqn{L} is the maximized likelihood.
+}
+\item{condition}{
+Character, specifying what conditioning was root for the likelihood (e.g. "crown" or "stem").
 }
 \item{converged}{
 Logical, specifying whether the maximum likelihood was reached after convergence of the optimization algorithm. Note that in some cases the maximum likelihood may have been achieved by an optimization path that did not yet converge (in which case it's advisable to increase \code{iter.max} and/or \code{eval.max}).
@@ -263,4 +266,4 @@ if(!fit$success){
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{tree model}
-\keyword{homogenous birth-death model}
+\keyword{birth-death model}

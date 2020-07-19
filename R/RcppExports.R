@@ -169,6 +169,10 @@ get_gamma_statistic_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_lengt
     .Call(`_castor_get_gamma_statistic_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
+get_Colless_Imbalance_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, normalized) {
+    .Call(`_castor_get_Colless_Imbalance_CPP`, Ntips, Nnodes, Nedges, tree_edge, normalized)
+}
+
 sort_tree_edges_root_to_tips_CPP <- function(Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge) {
     .Call(`_castor_sort_tree_edges_root_to_tips_CPP`, Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge)
 }
@@ -365,8 +369,8 @@ get_MuSSE_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, oldest_a
     .Call(`_castor_get_MuSSE_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, oldest_age, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior_type, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds)
 }
 
-simulate_deterministic_HBD_model_CPP <- function(census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt) {
-    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt)
+simulate_deterministic_HBD_model_CPP <- function(census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt, allow_unreal) {
+    .Call(`_castor_simulate_deterministic_HBD_model_CPP`, census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt, allow_unreal)
 }
 
 get_PSR_from_PDR_HBD_CPP <- function(age0, oldest_age, age_grid, PDR, rholambda0, splines_degree, relative_dt, include_nLTT0) {
@@ -397,8 +401,8 @@ simulate_deterministic_HBDS_CPP <- function(CSA_ages, CSA_probs, CSA_kappas, age
     .Call(`_castor_simulate_deterministic_HBDS_CPP`, CSA_ages, CSA_probs, CSA_kappas, age_grid, lambdas, mus, psis, kappas, splines_degree, age0, N0, LTT0, requested_ages, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
 }
 
-get_congruent_HBDS_CPP <- function(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds) {
-    .Call(`_castor_get_congruent_HBDS_CPP`, CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
+get_congruent_HBDS_CPP <- function(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, Reffs, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds) {
+    .Call(`_castor_get_congruent_HBDS_CPP`, CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, Reffs, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
 }
 
 simulate_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations) {
@@ -433,8 +437,12 @@ generate_random_tree_HBDS_CPP <- function(max_sampled_tips, max_sampled_nodes, m
     .Call(`_castor_generate_random_tree_HBDS_CPP`, max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, include_extant, include_extinct, include_birth_times, include_death_times)
 }
 
-generate_tree_from_branching_ages_CPP <- function(branching_ages) {
-    .Call(`_castor_generate_tree_from_branching_ages_CPP`, branching_ages)
+get_tree_from_branching_ages_CPP <- function(branching_ages) {
+    .Call(`_castor_get_tree_from_branching_ages_CPP`, branching_ages)
+}
+
+get_tree_from_sampling_branching_ages_CPP <- function(sampling_ages, branching_ages) {
+    .Call(`_castor_get_tree_from_sampling_branching_ages_CPP`, sampling_ages, branching_ages)
 }
 
 generate_tree_from_PSR_CPP <- function(age_grid, PSR, splines_degree, Ntips, stem_age, crown_age, relative_dt, force_max_age, Ntrees) {

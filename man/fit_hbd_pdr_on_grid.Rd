@@ -264,4 +264,4 @@ if(!fit$success){
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
 \keyword{tree model}
-\keyword{homogenous birth-death model}
+\keyword{birth-death model}

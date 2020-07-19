@@ -128,6 +128,9 @@ Numeric, giving the time at which the tree's root was first split during the sim
 \item{final_time}{
 Numeric, giving the final time at the end of the simulation. Note that if \code{coalescent==TRUE}, then this may be greater than the total time span of the tree (since the root of the coalescent tree need not correspond to the first speciation event).
 }
+\item{root_age}{
+Numeric, giving the age (time before present) at the tree's root. This is equal to \code{final_time}-\code{root_time}.
+}
 \item{equilibrium_time}{
 Numeric, giving the first time where the sign of (death rate - birth rate) changed from the beginning of the simulation, i.e. when speciation/extinction equilibrium was reached. May be infinite if the simulation stoped before reaching this point.
 }

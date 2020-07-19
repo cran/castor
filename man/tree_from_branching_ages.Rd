@@ -16,7 +16,7 @@ tree_from_branching_ages(   branching_ages,
 %- maybe also 'usage' for other objects documented here.
 \arguments{
 \item{branching_ages}{
-Integer vector of size Nnodes, listing branching ages (time before present) in ascending order. The last entry will be the root age.
+Numeric vector of size Nnodes, listing branching ages (time before present) in ascending order. The last entry will be the root age.
 }
 \item{tip_basename}{
 Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then tip labels will be integers "1", "2" and so on.
@@ -44,7 +44,7 @@ Logical, indicating whether the tree was successfully generated. If \code{FALSE}
 A rooted, ultrametric bifurcating tree of class "phylo", with the requested branching ages.
 }
 \item{error}{
-Character, containing an explanation of ther error that occurred. Only included if \code{success==FALSE}.
+Character, containing an explanation of the error that occurred. Only included if \code{success==FALSE}.
 }
 }
 
@@ -53,8 +53,10 @@ Character, containing an explanation of ther error that occurred. Only included 
 %\references{
 %}
 
-%\seealso{
-%}
+\seealso{
+\code{\link{tree_from_sampling_branching_ages}}
+}
+
 
 \examples{
 Nnodes              = 100

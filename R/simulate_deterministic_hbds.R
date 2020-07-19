@@ -11,7 +11,7 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 										psi								= NULL,		# numeric vector of the same length as age_grid[], listing per-capita sampling rates (Poissonian detection rates) at each age_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
 										kappa							= NULL,		# numeric vector of the same length as age_grid[], listing the retention probability (upon sampling) at each age_grid point, i.e. the probability that a sampled lineage remains in the pool. If 0, then every sampled lineage becomes a tip.
 										splines_degree					= 1,		# polynomial degree of time-dependent model parameters (lambda, mu, psi, kappa) between time-grid points
-										CSA_ages							= NULL,		# optional numeric vector listing concentrated sampling ages, in ascending order
+										CSA_ages						= NULL,		# optional numeric vector listing concentrated sampling ages, in ascending order
 										CSA_probs						= NULL,		# optional numeric vector listing concentrated sampling probabilities, corresponding to CSA_ages[]
 										CSA_kappas						= NULL,		# optional numeric vector listing retention probabilities during concentrated sampling attempts, corresponding to CSA_ages[]
 										requested_ages					= NULL,		# optional numeric vector listing ages (in ascending order), for which the various model variables are requested. If NULL, it will be set to age_grid.
@@ -141,7 +141,8 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 				diversification_rate= simulation$diversification, # net diversification rate
 				lambda_psi			= simulation$lambda_psi,
 				psi_kappa			= simulation$psi_kappa,
-				Rnot				= simulation$Rnot, # basic reproduction ratio
+				Reff				= simulation$Reff, # effective reproduction ratio
+				removal_rate		= simulation$mu+simulation$psi, # removal rate = mu+psi
 				CSA_pulled_probs 	= simulation$CSA_pulled_probs, # pulled_rho_k := rho_k/(1-Pmissing)
 				CSA_psis			= simulation$CSA_psis,
 				CSA_PSRs			= simulation$CSA_PSRs)) # PSRs exactly at the concentrated sampling attempts

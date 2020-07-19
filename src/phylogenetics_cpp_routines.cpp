@@ -13146,6 +13146,52 @@ double get_gamma_statistic_CPP(	const long					Ntips,
 
 
 
+// Given a rooted tree, calculate the Colless Index of tree imbalance
+// For bifurcating trees the Colless Index will be between 0 (perfectly balanced tree) and 1 (least balanced possible)
+// For multifurcating trees, however, the Colless Index may be above 1.
+// [[Rcpp::export]]
+double get_Colless_Imbalance_CPP(	const long					Ntips,
+									const long 					Nnodes,
+									const long					Nedges,
+									const std::vector<long>		&tree_edge,	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+									const bool					normalized){// (INPUT) whether to normalize the Colless index based on the maximum expected value for bifurcating trees
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal route (root --> tips)
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+
+	// calculate number of descending tips per node, traversing tips-->root (excluding the root)
+	dvector node2tip_count(Nnodes,0);
+	for(long q=traversal.queue.size()-1, clade; q>=1; --q){
+		clade = traversal.queue[q];
+		node2tip_count[clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2tip_count[clade-Ntips]);
+	}
+	
+	// calculate Colless Index
+	double colless = 0;
+	for(long q=traversal.queue.size()-1, parent_node, child1, child2; q>=0; --q){
+		parent_node = traversal.queue[q] - Ntips;
+		if(parent_node<0) continue;
+		for(long e1=traversal.node2first_edge[parent_node]; e1<=traversal.node2last_edge[parent_node]; ++e1){
+			child1  = tree_edge[2*traversal.edge_mapping[e1] + 1];
+			for(long e2=e1+1; e2<=traversal.node2last_edge[parent_node]; ++e2){
+				child2  = tree_edge[2*traversal.edge_mapping[e2] + 1];
+				colless += abs((child1<Ntips ? 1l : node2tip_count[child1-Ntips]) - (child2<Ntips ? 1l : node2tip_count[child2-Ntips]));
+			}
+		}
+	}
+	if(normalized) colless /= 0.5 * (Ntips-1) * (Ntips-2); // normalize by the maximum possible value if the tree was bifurcating
+	return colless;
+}
+
+
+
 #pragma mark -
 #pragma mark Generating & manipulating trees
 #pragma mark
@@ -20564,8 +20610,8 @@ bool get_MuSSE_flow(const long					Nstates,						// (INPUT) number of discrete s
 	string warningMessage;
 	modelE.initial = initial_E_per_state;
 	const double maxErate 				= modelE.estimate_max_rate_of_change();
-	const double minRecordingTimeStep 	= 1e-6/maxErate;
 	const double maxRecordingTimeStep 	= 0.1*oldest_age;
+	const double minRecordingTimeStep 	= min(1e-6/maxErate,maxRecordingTimeStep/10);
 	const long guessNrecordings 		= min(10000000l,long(2 + min(oldest_age/minRecordingTimeStep, max(oldest_age/maxRecordingTimeStep, oldest_age * maxErate/E_value_step))));
 	bool success = RungeKutta2<MuSSEstateE,MuSSEmodelE,ProgressReporter>
 								(0, // start_time
@@ -20756,7 +20802,7 @@ Rcpp::List get_MuSSE_loglikelihood_CPP(	const long					Ntips,
 										const long					Nedges,							// (INPUT) number of edges in the tree
 										const long					Nstates,						// (INPUT) number of discrete states that the modeled trait can have
 										const double				oldest_age,						// (INPUT) oldest age to consider. Typically this will be <=root_age
-										const std::vector<long> 		&tree_edge,						// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+										const std::vector<long> 	&tree_edge,						// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
 										const std::vector<double> 	&node_ages, 					// (INPUT) 1D array of size Nclades, specifying the age (time before present) of each tip & node. All tips are assumed to have age 0.
 										const std::vector<double> 	&transition_rates,				// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c.
 										const std::vector<double> 	&speciation_rates,				// (INPUT) 1D array of size Nstate, specifying the speciation rate at each state.
@@ -21313,7 +21359,7 @@ public:
 //   dY/dt = P(t)*Y + Q(t)*Y^2
 // with condition:
 //   Y(time0) = Y0
-void solve_Bernoulli_ODE2(	const dvector	&times,		// (INPUT) 1D vector of size NT, listing times in ascending order
+void solve_Bernoulli_ODE2(	const dvector	&times,		// (INPUT) 1D vector of size NT, listing times in ascending order. This should be fine enough so that P is accurately captured on this grid, due to internal approximations performed
 							const long		Pdegree,	// (INPUT) polynomial degree of function P
 							const dvector	&Pcoeff,	// (INPUT) 2D array of size NT x (Pdegree+1), listing polynomial coefficients of function P
 							const long 		Qdegree,	// (INPUT) polynomial degree of function Q
@@ -21451,7 +21497,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 												double						anchor_lambda,		// (INPUT) speciation rate at age anchor_age. Only needed if lambdas[] is empty. If both lambdas[] and anchor_lambda are provided, anchor_lambda is re-calculated from the provided lambdas.
 												const double				anchor_LTT,			// (INPUT) number of sampled lineages at anchor_age, i.e. taking into account anchor_rho.
 												const long					splines_degree,		// (INPUT) either 1, 2 or 3, specifying the degree of the splines defined by the lambdas, mus and PDRs on the age grid.
-												const double				relative_dt){		// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
+												const double				relative_dt,		// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
+												const bool					allow_unreal){		// (INPUT) if true, then BD models with unrealistic parameters (e.g., negative mu or negative Pmissing) are fully supported. This may be desired e.g. when examining model congruence classes with negative mu.
 	if((oldest_age<age_grid[0]) || (oldest_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies outside of the provided age_grid");
 	if((census_age<age_grid[0]) || (census_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "census_age lies outside of the provided age_grid");
 	if((anchor_age<age_grid[0]) || (anchor_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "anchor_age lies outside of the provided age_grid");
@@ -21500,6 +21547,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 									refined_age_grid,
 									refined_diversification_coeff);
 		NT = refined_age_grid.size();
+		Rcpp::checkUserInterrupt();
 			
 		// redefine lambda & mu splines on refined time grid
 		refine_piecewise_polynomial(lambda_degree, age_grid, coarse_lambda_coeff, refined_age_grid, refined_lambda_coeff, refined_lambdas);
@@ -21548,6 +21596,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 									refined_age_grid,
 									refined_PDR_coeff);
 		NT = refined_age_grid.size();
+		Rcpp::checkUserInterrupt();
 		
 		// evaluate PDR on refined grid
 		refined_PDRs.resize(NT);
@@ -21699,6 +21748,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	for(long t=0; t<NT; ++t){
 		if(refined_age_grid[t]<census_age){
 			Pmissing[t] = 1-census_rho; // lineage is younger than the census_age, so its ancestor must have existed at census_age, hence it is censused at t with probability = cencus_rho
+		}else if(allow_unreal){
+			Pmissing[t] = 1.0 - exp(R[t])/(1/census_rho + L[t]);
 		}else{
 			Pmissing[t] = max(0.0,min(1.0, 1.0 - exp(R[t])/(1/census_rho + L[t])));
 		}
@@ -21926,7 +21977,7 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 											const double				relative_dt,			// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 											const double				runtime_out_seconds){	// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.				
 	const long NB = branching_ages.size();
-	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	const double start_runtime 	= get_thread_monotonic_walltime_seconds();
 	const double age0 = 0;
 		
 	// basic error checking
@@ -22068,7 +22119,7 @@ Rcpp::List get_HBD_PDR_loglikelihood_CPP(	const std::vector<double>	&branching_a
 											const std::vector<double>	diff_PDR,				// (INPUT) optional 3D array of size NDPDR x NG x (diff_PDR_degree+1), in layer-row-major format, where NDPDR is number of "differentials", listing differentials of the PDR as functions of time, and diff_PDR_degree is the polynomial degree of those curves. If provided (i.e. non-empty), then the derivative of the log-likelihood along each of the NDPDR provided directions is calculated.
 											const long					diff_PDR_degree){		// (INPUT) polynomial degree for the provided diff_PDR. For example, if diff_PDR[a,:,:] is a piecewise linear curve then this will be 1.
 	const long NB = branching_ages.size();
-	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	const double start_runtime 	= get_thread_monotonic_walltime_seconds();
 	const double age0 = 0;
 	const long NG = age_grid.size();
 	const long NDPDR = diff_PDR.size()/(NG*(diff_PDR_degree+1));
@@ -22232,7 +22283,7 @@ Rcpp::List get_HBD_PSR_loglikelihood_CPP(	const std::vector<double>	&branching_a
 											const double				relative_dt,			// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 											const double				runtime_out_seconds){	// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.				
 	const long NB = branching_ages.size();
-	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	const double start_runtime 	= get_thread_monotonic_walltime_seconds();
 	const double age0 = 0;
 	
 	// basic error checking
@@ -22588,31 +22639,37 @@ bool aux_HBDS_simulate_E(	const dvector			&CSA_ages,	// (INPUT) optional 1D arra
 				simulation_end_age 		= min(oldest_age, CSA_ages[s]);
 				modelE.initial_E		= simul_E_values[s-1].back() * (1-CSA_probs[s-1]);
 			}
-			const double simulation_time		= simulation_end_age - simulation_start_age;
-			const double maxErate 				= modelE.estimate_max_rate_of_change(simulation_start_age,simulation_end_age);
-			const double minRecordingTimeStep 	= 1e-6/maxErate;
-			const double maxRecordingTimeStep 	= 0.1*simulation_time;
-			const long guessNrecordings 		= min(10000000l,long(2 + min(simulation_time/minRecordingTimeStep, simulation_time*max(1.0/maxRecordingTimeStep, maxErate/E_value_step))));
-			bool success = RungeKutta2<double,HBDSModelE,ProgressReporter>
-										(simulation_start_age,
-										simulation_end_age,
-										max(0.000001*simulation_time,min(0.2*simulation_time,relative_ODE_step/maxErate)), // default integration time step
-										modelE,
-										minRecordingTimeStep,
-										maxRecordingTimeStep,
-										guessNrecordings,
-										E_value_step, 	// recordingRelValueStep
-										5,				// maxTimeStepRefinements
-										4, 				// refinement_factor
-										ProgressReporter(true),
-										(runtime_out_seconds>0 ? max(runtime_out_seconds*0.01, runtime_out_seconds+start_runtime-get_thread_monotonic_walltime_seconds()) : 0.0),
-										warningMessage);	
-			if(!success){
-				error = warningMessage;
-				return false;
+			if(simulation_end_age>simulation_start_age){
+				const double simulation_time		= simulation_end_age - simulation_start_age;
+				const double maxErate 				= modelE.estimate_max_rate_of_change(simulation_start_age,simulation_end_age);
+				const double maxRecordingTimeStep 	= 0.1*simulation_time;
+				const double minRecordingTimeStep 	= min(1e-6/maxErate,maxRecordingTimeStep/10);
+				const long guessNrecordings 		= min(10000000l,long(2 + min(simulation_time/minRecordingTimeStep, simulation_time*max(1.0/maxRecordingTimeStep, maxErate/E_value_step))));
+				bool success = RungeKutta2<double,HBDSModelE,ProgressReporter>
+											(simulation_start_age,
+											simulation_end_age,
+											max(0.000001*simulation_time,min(0.2*simulation_time,relative_ODE_step/maxErate)), // default integration time step
+											modelE,
+											minRecordingTimeStep,
+											maxRecordingTimeStep,
+											guessNrecordings,
+											E_value_step, 	// recordingRelValueStep
+											5,				// maxTimeStepRefinements
+											4, 				// refinement_factor
+											ProgressReporter(true),
+											(runtime_out_seconds>0 ? max(runtime_out_seconds*0.01, runtime_out_seconds+start_runtime-get_thread_monotonic_walltime_seconds()) : 0.0),
+											warningMessage);	
+				if(!success){
+					error = warningMessage;
+					return false;
+				}
+				simul_E_ages[s]	  = modelE.ages;
+				simul_E_values[s] = modelE.trajectory;
+			}else{
+				// simulation interval has zero duration
+				simul_E_ages[s] 	= std::vector<double>(1,simulation_start_age);
+				simul_E_values[s] 	= std::vector<double>(1,modelE.initial_E);
 			}
-			simul_E_ages[s]	  = modelE.ages;
-			simul_E_values[s] = modelE.trajectory;
 		}
 	}
 	return true;
@@ -22631,9 +22688,9 @@ bool aux_HBDS_simulate_E(	const dvector			&CSA_ages,	// (INPUT) optional 1D arra
 Rcpp::List get_HBDS_model_loglikelihood_CPP(const std::vector<double>	&branching_ages,				// (INPUT) 1D array of size NB, listing branching ages (internal node ages, accounting for multiplicities in the case of multifurcations, and not including monofurcations) in ascending order, with branching_ages.last() being the root_age
 											const std::vector<double>	&Ptip_ages,						// (INPUT) 1D array of size NPtips, listing ages of Poissonian (continuous) terminal sampling events in ascending order, i.e. tips sampled due to the continuous sampling rate psi and without subsequently sampled descendants
 											const std::vector<double>	&Pnode_ages,					// (INPUT) 1D array of size NPnodes, listing ages of Poissonian (continuous) non-terminal sampling events in ascending order, i.e. monofurcating nodes sampled due to the continuous sampling rate psi and with subsequently sampled descendants
-											const std::vector<double>	&CSA_ages,	// (INPUT) optional 1D array of size NCSA, listing non-negative ages of concentrated sampling attempts in ascending order
-											const std::vector<double>	&CSA_probs,	// (INPUT) optional 1D array of size NCSA, listing sampling probabilities during concentrated sampling attempts
-											const std::vector<double>	&CSA_kappas,	// (INPUT) optional 1D array of size NCSA, listing retention probabilities during concentrated sampling attempts
+											const std::vector<double>	&CSA_ages,						// (INPUT) optional 1D array of size NCSA, listing non-negative ages of concentrated sampling attempts in ascending order
+											const std::vector<double>	&CSA_probs,						// (INPUT) optional 1D array of size NCSA, listing sampling probabilities during concentrated sampling attempts
+											const std::vector<double>	&CSA_kappas,					// (INPUT) optional 1D array of size NCSA, listing retention probabilities during concentrated sampling attempts
 											const std::vector<double>	&concentrated_tip_counts,		// (INPUT) optional 1D array of size NCSA, listing terminal sampling counts (number of tips sampled) during each concentrated sampling attempt
 											const std::vector<double>	&concentrated_node_counts,		// (INPUT) optional 1D array of size NCSA, listing non-terminal sampling counts (number of monofurcating nodes sampled) during each concentrated sampling attempt
 											const double				oldest_age,				// (INPUT) maximum age to consider, i.e. consider only branching and sampling events within ages [0:oldest_age]. If this is less than the root_age, then the tree is considered to be "cut" at oldest_age into multiple sub-trees, and the likelihood is calculated as if each sub-tree is an independent realization of the same model.
@@ -22651,7 +22708,7 @@ Rcpp::List get_HBDS_model_loglikelihood_CPP(const std::vector<double>	&branching
 	const long NCSA 		= CSA_ages.size();
 	const long NPtips	= Ptip_ages.size();
 	const long NPnodes	= Pnode_ages.size();
-	const double start_runtime = (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	const double start_runtime = get_thread_monotonic_walltime_seconds();
 		
 	// basic error checking
 	if(NB==0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Not enough input branching ages");
@@ -22692,7 +22749,7 @@ Rcpp::List get_HBDS_model_loglikelihood_CPP(const std::vector<double>	&branching
 										simul_E_ages,
 										simul_E_values,
 										error);
-	if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not simulate E over time: "+error);
+	if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not calculate E over time: "+error);
 		
 	// calculate the flow within each age segment, i.e. between ages CSA_ages[s-1]:CSA_ages[s]
 	std::vector<dvector> Phi_ages(NCSA+1), logPhi_coeff(NCSA+1), E_coeff(NCSA+1);
@@ -22869,9 +22926,9 @@ Rcpp::List get_HBDS_model_loglikelihood_CPP(const std::vector<double>	&branching
 
 // simulate various variables (such as the deterministic LTT) of an HBDS model
 // [[Rcpp::export]]
-Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,	// (INPUT) optional 1D array of size NCSA, listing non-negative ages of concentrated sampling attempts in ascending order
-											const std::vector<double>	&CSA_probs,	// (INPUT) optional 1D array of size NCSA, listing sampling probabilities during concentrated sampling attempts
-											const std::vector<double>	&CSA_kappas,	// (INPUT) optional 1D array of size NCSA, listing retention probabilities during concentrated sampling attempts
+Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (INPUT) optional 1D array of size NCSA, listing non-negative ages of concentrated sampling attempts in ascending order
+											const std::vector<double>	&CSA_probs,				// (INPUT) optional 1D array of size NCSA, listing sampling probabilities during concentrated sampling attempts
+											const std::vector<double>	&CSA_kappas,			// (INPUT) optional 1D array of size NCSA, listing retention probabilities during concentrated sampling attempts
 											const std::vector<double>	&age_grid,				// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus & psis will be defined on this age grid. This age grid must cover at least the range [0,root_age].
 											const std::vector<double>	&lambdas,				// (INPUT) 1D array of size NG, listing (per-lineage) speciation rates on the age-grid.
 											const std::vector<double>	&mus,					// (INPUT) 1D array of size NG, listing (per-lineage) extinction rates on the age-grid.
@@ -22885,13 +22942,13 @@ Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,
 											const double				ODE_relative_dt,		// (INPUT) unitless number, default relative integration time step for the ODE solvers. Relative to the typical time scales of the dynamics, as estimated from the theoretically maximum possible rate of change. Typical values are 0.001 - 0.01.
 											const double				ODE_relative_dy,		// (INPUT) unitless number, relative step for interpolating E & N and other simulated variables over time. For example, a ODE_relative_dy of 0.001 means that E is recorded and interpolated between points between which E differs by roughy 0.001. Typical values are 0.01-0.0001. A smaller ODE_relative_dy increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
 											const double				runtime_out_seconds){	// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.				
-	const long NCSA 				= CSA_ages.size();
-	const double start_runtime 	= (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
+	const long NCSA 			= CSA_ages.size();
+	const double start_runtime 	= get_thread_monotonic_walltime_seconds();
 	const long NRA 				= requested_ages.size();
 		
 	// basic error checking
 	if(NRA==0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Requested age-grid is empty");
-	const double oldest_age = vector_max(requested_ages);
+	const double oldest_age = max((NCSA==0 ? -INFTY_D : vector_max(CSA_ages)), vector_max(requested_ages));
 	if((age_grid[0]>0) || (age_grid.back()<oldest_age)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Age-grid does not cover the entire considered age interval [0:oldest_age]");
 	if((age_grid[0]>0) || (age_grid.back()<oldest_age)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Age-grid does not cover the entire considered age interval [0:oldest_age]");
 	if((NCSA>0) && (CSA_ages[0]>CSA_ages.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Concentrated sampling ages must be in ascending order");
@@ -22987,7 +23044,7 @@ Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,
 	
 	// calculate various model variables for the requested ages, such as total population size N, LTT, PDR etc.
 	double age;
-	dvector lambda_req(NRA), mu_req(NRA), psi_req(NRA), kappa_req(NRA), dlambda_req(NRA), total_diversity_req(NRA), LTT_req(NRA), Pmissing_req(NRA), PDR_req(NRA), PSR_req(NRA), lambda_psi_req(NRA), psi_kappa_req(NRA), Rnot_req(NRA), diversification_req(NRA);
+	dvector lambda_req(NRA), mu_req(NRA), psi_req(NRA), kappa_req(NRA), dlambda_req(NRA), total_diversity_req(NRA), LTT_req(NRA), Pmissing_req(NRA), PDR_req(NRA), PSR_req(NRA), lambda_psi_req(NRA), psi_kappa_req(NRA), Reff_req(NRA), diversification_req(NRA);
 	long previous_s = -1;
 	for(long a=0, k=-1, g=-1, s=-1, sg=-1; a<NRA; ++a){
 		age	= requested_ages[a];
@@ -23007,7 +23064,7 @@ Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,
 		lambda_psi_req[a]		= lambda_req[a] * psi_req[a];
 		psi_kappa_req[a]		= psi_req[a] * kappa_req[a];
 		PDR_req[a]				= lambda_req[a] - mu_req[a] - psi_req[a] + dlambda_req[a]/lambda_req[a];
-		Rnot_req[a] 			= lambda_req[a]/(mu_req[a]+psi_req[a]*(1-kappa_req[a]));
+		Reff_req[a] 			= lambda_req[a]/(mu_req[a]+psi_req[a]*(1-kappa_req[a]));
 		diversification_req[a] 	= lambda_req[a] - mu_req[a] - psi_req[a]*(1-kappa_req[a]);
 		previous_s			= s;
 	}
@@ -23018,9 +23075,9 @@ Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,
 		age = CSA_ages[k];
 		g 	= find_next_left_grid_point(age_grid, age, g);
 		const double Pmissing 	= polynomial_value(E_degree, &E_coeff[k+1][0*(E_degree+1)], age);
-		CSA_pulled_probs_req[k] 	= CSA_probs[k]/(1-Pmissing);
-		CSA_PSRs_req[k] 			= (1-Pmissing) * polynomial_value(lambda_degree, &lambda_coeff[g*(lambda_degree+1)], age);
-		CSA_psis_req[k] 			= polynomial_value(psi_degree, &psi_coeff[g*(psi_degree+1)], age);
+		CSA_pulled_probs_req[k] = CSA_probs[k]/(1-Pmissing);
+		CSA_PSRs_req[k] 		= (1-Pmissing) * polynomial_value(lambda_degree, &lambda_coeff[g*(lambda_degree+1)], age);
+		CSA_psis_req[k] 		= polynomial_value(psi_degree, &psi_coeff[g*(psi_degree+1)], age);
 	}
 
 	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
@@ -23037,7 +23094,7 @@ Rcpp::List simulate_deterministic_HBDS_CPP(	const std::vector<double>	&CSA_ages,
 								Rcpp::Named("diversification") 	= diversification_req, // net diversification rate
 								Rcpp::Named("lambda_psi")		= lambda_psi_req, // product of lambda * psi, also equal to pulled_lambda * pulled_psi
 								Rcpp::Named("psi_kappa")		= psi_kappa_req, // product of psi * kappa
-								Rcpp::Named("Rnot")				= Rnot_req, // Basic Reproduction Ratio R0 = lambda/(mu+psi*(1-kappa))
+								Rcpp::Named("Reff")				= Reff_req, // Effective Reproduction Ratio R0 = lambda/(mu+psi*(1-kappa))
 								Rcpp::Named("CSA_pulled_probs")	= CSA_pulled_probs_req,
 								Rcpp::Named("CSA_psis")			= CSA_psis_req,
 								Rcpp::Named("CSA_PSRs")			= CSA_PSRs_req,
@@ -23059,8 +23116,9 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 									const std::vector<double>	&PSRs,					// (INPUT) 1D array of size NG, listing pulled speciation rates on the age-grid.
 									const std::vector<double>	&PDRs,					// (INPUT) 1D array of size NG, listing pulled diversification rates on the age-grid.
 									const std::vector<double>	&lambda_psis,			// (INPUT) 1D array of size NG, listing the product lambda*psi on the age-grid.
-									std::vector<double>			psis,					// (INPUT) 1D array of size NG, listing the new continuous sampling rates on the age-grid. Either psi or mu must be provided, but not both.
-									std::vector<double>			mus,					// (INPUT) 1D array of size NG, listing the new extinction rates on the age grid. Either psi or mu must be provided, but not both. The latter option is only available if CSA_ages is empty, i.e. sampling was entirely Poissonian.
+									std::vector<double>			psis,					// (INPUT) 1D array of size NG, listing the new continuous sampling rates on the age-grid. Exactly one of psi or mu or Reff must be provided.
+									std::vector<double>			mus,					// (INPUT) 1D array of size NG, listing the new extinction rates on the age grid. Exactly one of psi or mu or Reff must be provided. Providing mu only available if CSA_ages is empty, i.e. sampling was entirely Poissonian.
+									std::vector<double>			Reffs,					// (INPUT) 1D array of size NG, listing the new effective reproduction ratios on the age grid. Exactly one of psi or mu or Reff must be provided. Providing Reff is only available if CSA_ages is empty, i.e. sampling was entirely Poissonian.
 									const double				lambda0,				// (INPUT) lambda at age 0, i.e. at present-day. Only relevant if mus[] was provided.
 									const long					splines_degree,			// (INPUT) either 0,1,2 or 3, specifying the degree of the splines defined by the lambdas and mus on the age grid.												
 									const double				ODE_relative_dt,		// (INPUT) unitless number, default relative integration time step for the ODE solvers. Relative to the typical time scales of the dynamics, as estimated from the theoretically maximum possible rate of change. Typical values are 0.001 - 0.01.
@@ -23071,33 +23129,37 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 	const long NCSA 	= CSA_ages.size();
 	const bool has_psi 	= (psis.size()>0);
 	const bool has_mu 	= (mus.size()>0);
+	const bool has_Reff	= (Reffs.size()>0);
 
 	// basic error checking
 	if(NG==0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Missing age_grid");
 	if((NCSA>0) && (CSA_ages[0]>CSA_ages.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Concentrated sampling ages must be in ascending order");
 	if((NCSA>0) && (CSA_ages[0]<0)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Concentrated sampling attempts must have non-negative ages");
-	if((!has_psi) && (!has_mu)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Expected either psi or mu; missing both");
-	if(has_psi && has_mu) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Either psi or mu must be provided, but not both");
-	if(has_mu && (NCSA>0)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "If NCSA>0, psi must be provided instead of mu");
+	if((!has_psi) && (!has_mu) && (!has_Reff)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Expected either psi or mu or Reff; missing all");
+	if(has_psi + has_mu + has_Reff > 1) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Exactly one of psi or mu or Reff must be provided");
+	if((!has_psi) && (NCSA>0)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "If NCSA>0, psi must be provided");
 	
 	// get splines representation of curves
-	dvector PSR_coeff, PDR_coeff, psi_coeff, lambda_psi_coeff;
+	dvector PSR_coeff, PDR_coeff, psi_coeff, Reff_coeff, lambda_psi_coeff;
 	const long PSR_degree			= splines_degree;
 	const long PDR_degree			= splines_degree;
 	const long psi_degree			= splines_degree;
+	const long Reff_degree			= splines_degree;
 	const long lambda_psi_degree	= splines_degree;
 	get_spline(age_grid, PSRs, PSR_degree, PSR_coeff);
 	get_spline(age_grid, PDRs, PDR_degree, PDR_coeff);
 	if(has_psi) get_spline(age_grid, psis, psi_degree, psi_coeff);
+	if(has_Reff) get_spline(age_grid, Reffs, Reff_degree, Reff_coeff);
 	get_spline(age_grid, lambda_psis, lambda_psi_degree, lambda_psi_coeff);
 
-	dvector lambdas(NG), Rnots(NG), Pmissings(NG);
+	dvector lambdas(NG), Pmissings(NG);
 	dvector CSA_probs(NCSA), CSA_Pmissings(NCSA);
 	bool valid = true;
 	if(has_psi){	
 		// get lambda & mu of the congruent model, based on PSR, PDR, lambda_psi and psi
 		double age, dpsi, dPDR, dPSR, dlambda_psi, dloglambda;
 		mus.resize(NG);
+		Reffs.resize(NG);
 		for(long g=0; g<NG; ++g){
 			age 			= age_grid[g];
 			dPSR			= polynomial_derivative(PSR_degree, &PSR_coeff[g*(PSR_degree+1)], age);
@@ -23108,16 +23170,16 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 			dloglambda		= (dlambda_psi/lambda_psis[g]) - (dpsi/psis[g]); // (1/lambda)dlambda/dt
 			mus[g] 			= lambdas[g] - psis[g] + dloglambda - PDRs[g];
 			if((mus[g]<0) && (mus[g]/lambdas[g]>=-1e-10)) mus[g] = 0; // mu is practically zero, so fix any putative rounding errors
-			Rnots[g]		= lambdas[g]/(mus[g] + psis[g]);
+			Reffs[g]		= lambdas[g]/(mus[g] + psis[g]);
 			Pmissings[g]	= 1 - PSRs[g]/lambdas[g];
-			valid 			= valid && (mus[g]>=0);
+			valid 			= valid && (psis[g]>=0) && (mus[g]>=0) && (lambdas[g]>=0);
 			if(g%10000==0) Rcpp::checkUserInterrupt();
 		}
 	
 		// get CSA_probs of the congruent model
 		double psi, lambda_psi, PSR;
 		for(long k=0, g=-1; k<NCSA; ++k){
-			age 				= CSA_ages[k]; // debug
+			age 				= CSA_ages[k];
 			g 					= find_next_left_grid_point(age_grid, age, g);
 			psi 				= polynomial_value(psi_degree, &psi_coeff[g*(psi_degree+1)], age);
 			PSR					= CSA_PSRs[k];
@@ -23135,7 +23197,7 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 	// 			congruent = congruent && (abs(prob-CSA_probs[k])/CSA_probs[k] < 1e-8);
 	// 		}
 		}
-	}else{
+	}else if(has_mu){
 		// get lambda & psi of the congruent model, based on PSR, PDR, lambda_psi and mu
 		
 		// solve ODE for lambda
@@ -23146,8 +23208,8 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 		modelLambda.lambda_psi.set_to_spline(age_grid, lambda_psis, lambda_psi_degree, ExtrapolationTypeConst, ExtrapolationTypeConst, lambda_psis[0], lambda_psis.back());
 		const double simulation_time		= age_grid.back() - age_grid[0];
 		const double maxLambdaRate 			= modelLambda.estimate_max_rate_of_change(age_grid[0],age_grid.back());
-		const double minRecordingTimeStep 	= 1e-6/maxLambdaRate;
 		const double maxRecordingTimeStep 	= 0.1*simulation_time;
+		const double minRecordingTimeStep 	= min(1e-6/maxLambdaRate,maxRecordingTimeStep/10);
 		const long guessNrecordings 		= min(10000000l,long(2 + min(simulation_time/minRecordingTimeStep, simulation_time*max(1.0/maxRecordingTimeStep, maxLambdaRate/ODE_relative_dy))));
 		string warningMessage;
 		bool success = RungeKutta2<double,HBDSModelLambda,ProgressReporter>
@@ -23166,17 +23228,99 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 									warningMessage);	
 		if(!success) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not simulate lambda: "+warningMessage);;
 		long dummyL1, dummyL2;
-		interpolateTimeSeriesAtTimes(modelLambda.ages, modelLambda.trajectory, 0, modelLambda.ages.size()-1, age_grid, 0, NG-1, dummyL1, dummyL2, lambdas);
+		interpolateTimeSeriesAtTimes(	modelLambda.ages, 
+										modelLambda.trajectory, 
+										0, 
+										modelLambda.ages.size()-1,
+										age_grid,
+										0,
+										NG-1,
+										dummyL1,
+										dummyL2,
+										lambdas);
 		
 		// get the remaining model variables
 		psis.resize(NG);
+		Reffs.resize(NG);
 		double age;
 		for(long g=0; g<NG; ++g){
 			age 			= age_grid[g];
 			psis[g] 		= lambda_psis[g]/lambdas[g];
-			Rnots[g]		= lambdas[g]/(mus[g] + psis[g]);
+			Reffs[g]		= lambdas[g]/(mus[g] + psis[g]);
 			Pmissings[g]	= 1 - PSRs[g]/lambdas[g];
-			valid 			= valid && (psis[g]>=0);
+			valid 			= valid && (psis[g]>=0) && (mus[g]>=0) && (lambdas[g]>=0);
+			if(g%10000==0) Rcpp::checkUserInterrupt();
+			if((runtime_out_seconds>0) && (g%100000==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted because the maximum allowed runtime was reached");		
+		}
+		
+	}else if(has_Reff){
+		// get lambda & mu & psi of the congruent model, based on PSR, PDR, lambda_psi and Reff
+		
+		// redefine some model variables onto a finer grid, needed to more accurately solve the ODE for lambda
+		// the refinement is chosen based on the PDR, since it is crucial that this accurately captured by the grid when solving the Bernoulli ODE
+		dvector refined_age_grid, refined_PDR_coeff;
+		const double age_span = age_grid.back() - age_grid[0];
+		const double mean_abs_PDR = vector_abs_mean(PDRs);
+		refine_piecewise_polynomial(PDR_degree,
+									age_grid,
+									PDR_coeff,
+									age_grid[0],
+									age_grid.back(),
+									max(1e-8*age_span,min(0.1*age_span,ODE_relative_dt/mean_abs_PDR)),	// max_time_step
+									(mean_abs_PDR==0 ? INFTY_D : 0.01*mean_abs_PDR),					// max_value_step
+									0.01, 																// max_relative_value_step
+									refined_age_grid,
+									refined_PDR_coeff);
+		const long NRG = refined_age_grid.size();
+		if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted because the maximum allowed runtime was reached");		
+		Rcpp::checkUserInterrupt();
+		
+		// define Q = (1/Reff - 1) as a splines (piecewise linear) on the refined age grid
+		const long Q_degree = 1;
+		dvector refined_Qs(NRG), refined_Q_coeff;
+		double age;
+		for(long rg=0, g=-1; rg<NRG; ++rg){
+			age 			= refined_age_grid[rg];
+			g 				= find_next_left_grid_point(age_grid, age, g);
+			refined_Qs[rg] 	= (1/polynomial_value(Reff_degree, &Reff_coeff[g*(Reff_degree+1)], age)) - 1;
+		}
+		get_spline(refined_age_grid, refined_Qs, Q_degree, refined_Q_coeff);
+		
+		// solve Bernoulli ODE to get lambda: dlambda/dt = lambda * PDR + lambda^2 * (1/Reff - 1)
+		dvector refined_lambda;
+		solve_Bernoulli_ODE2(	refined_age_grid,
+								PDR_degree,
+								refined_PDR_coeff,
+								Q_degree,
+								refined_Q_coeff,
+								0,
+								lambda0,
+								refined_lambda);
+		if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted because the maximum allowed runtime was reached");		
+		Rcpp::checkUserInterrupt();
+		
+		// interpolate refined_lambda onto requested age grid
+		long dummyL1, dummyL2;
+		interpolateTimeSeriesAtTimes(	refined_age_grid,
+										refined_lambda,
+										0,
+										NRG-1,
+										age_grid,
+										0,
+										NG-1,
+										dummyL1,
+										dummyL2,
+										lambdas);
+										
+		// get remaining model variables
+		mus.resize(NG);
+		psis.resize(NG);
+		for(long g=0; g<NG; ++g){
+			age 			= age_grid[g];
+			psis[g] 		= lambda_psis[g]/lambdas[g];
+			mus[g]			= lambdas[g]/Reffs[g] - psis[g];
+			Pmissings[g]	= 1 - PSRs[g]/lambdas[g];
+			valid 			= valid && (psis[g]>=0) && (mus[g]>=0) && (lambdas[g]>=0);
 			if(g%10000==0) Rcpp::checkUserInterrupt();
 			if((runtime_out_seconds>0) && (g%100000==0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted because the maximum allowed runtime was reached");		
 		}
@@ -23189,7 +23333,7 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 								Rcpp::Named("psis") 		= psis,
 								Rcpp::Named("lambda_psis") 	= lambda_psis,
 								Rcpp::Named("Pmissings") 	= Pmissings,
-								Rcpp::Named("Rnots") 		= Rnots,
+								Rcpp::Named("Reffs") 		= Reffs,
 								Rcpp::Named("CSA_probs") 	= CSA_probs,
 								Rcpp::Named("CSA_Pmissings")= CSA_Pmissings);
 }
@@ -24140,7 +24284,7 @@ Rcpp::List generate_random_tree_HBDS_CPP(	const long 	 				max_sampled_tips,	// 
 											polynomial_value(antirate_degree, &total_antirate_coeff[grid_point*(antirate_degree+1)+0], time) + target_antirate_increment, // target value
 											true,	// query function is monotonic
 											0,		// time_epsilon
-											1e-10,	// p-epsilon
+											1e-12,	// p-epsilon
 											10000,	// max_iterations
 											grid_point,			// Xmin_grid_guess,
 											last_grid_guess);	// Xmax_grid_guess
@@ -24505,17 +24649,17 @@ void get_branching_ages_from_PSR_before_stem(	const dvector			&age_grid,			// (I
 }
 
 
-// Given a list of Nnodes branching ages (time before present), generate a random phylogenetic coalescent (ultrametric) tree with Nnodes+1 tips
+// Given a list of Nnodes branching ages (time before present), generate a random phylogenetic coalescent (ultrametric, extant) timetree with Nnodes+1 tips
 // The oldest branching age will thus be the root age
 // tips are guaranteed to be connected in random order, i.e. this function can also be used to connect a random set of tips into a tree.
 // nodes will be indexed in chronological order (i.e. in order of decreasing age). In particular, node 0 will be the root.
-bool generate_tree_from_branching_ages(	const std::vector<double>	&branching_ages,// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order)
-										long						&Ntips,			// (OUTPUT) the number of tips in the generated tree
-										long						&Nedges,		// (OUTPUT) the number of edges in the generated tree
-										long						&root,			// (OUTPUT) the clade index of the root. This will always be equal to Ntips.
-										std::vector<long>			&tree_edge,		// (OUTPUT) 2D array of size Nedges x 2 in row-major format, listing tree edges
-										std::vector<double>			&edge_length,	// (OUTPUT) 1D array of size Nedges, listing edge lengths
-										std::string					&error){		// (OUTPUT) error message in case of failure
+bool get_tree_from_branching_ages(	const std::vector<double>	&branching_ages,// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order)
+									long						&Ntips,			// (OUTPUT) the number of tips in the generated tree
+									long						&Nedges,		// (OUTPUT) the number of edges in the generated tree
+									long						&root,			// (OUTPUT) the clade index of the root. This will always be equal to Ntips.
+									std::vector<long>			&tree_edge,		// (OUTPUT) 2D array of size Nedges x 2 in row-major format, listing tree edges
+									std::vector<double>			&edge_length,	// (OUTPUT) 1D array of size Nedges, listing edge lengths
+									std::string					&error){		// (OUTPUT) error message in case of failure
 	error = "";
 	const long Nnodes = branching_ages.size();
 	if(Nnodes<=0){ error = "No branching points provided"; return false; }
@@ -24583,21 +24727,20 @@ bool generate_tree_from_branching_ages(	const std::vector<double>	&branching_age
 			remove_item_from_vector(orphan_nodes, orphan1-Norphan_tips);
 		}
 		orphan_nodes.push_back(node);
-	}
-				
+	}				
 	return true;						
 }
-			
+	
 			
 
-// Rcpp wrapper function for generate_tree_from_branching_ages()
+// Rcpp wrapper function for get_tree_from_branching_ages()
 // [[Rcpp::export]]
-Rcpp::List generate_tree_from_branching_ages_CPP(const std::vector<double> &branching_ages){	// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order).
+Rcpp::List get_tree_from_branching_ages_CPP(const std::vector<double> &branching_ages){	// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order).
 	long Ntips, Nedges, root;
 	std::string error;
 	std::vector<long> tree_edge;
 	std::vector<double> edge_length;
-	const bool OK = generate_tree_from_branching_ages(branching_ages, Ntips, root, Nedges, tree_edge, edge_length, error);
+	const bool OK = get_tree_from_branching_ages(branching_ages, Ntips, root, Nedges, tree_edge, edge_length, error);
 	if(OK){
 		return Rcpp::List::create(	Rcpp::Named("success") 		= true,
 									Rcpp::Named("tree_edge") 	= Rcpp::wrap(tree_edge),
@@ -24610,6 +24753,134 @@ Rcpp::List generate_tree_from_branching_ages_CPP(const std::vector<double> &bran
 		return Rcpp::List::create( Rcpp::Named("success") = false, Rcpp::Named("error") = error);
 	}
 }
+
+
+
+// Given a list of Nnodes branching ages (time before present) and Ntips sampling ages, generate a random phylogenetic timetree with Ntips tips and Nnodes nodes
+// This may be used e.g. to generate random trees according to the HBDS model, assuming that branching and sampling ages are consistent with the HBDS model
+// The oldest branching age will be the root age
+// Nodes and tips will be indexed in chronological order (i.e. in order of decreasing age). In particular, node 0 will be the root.
+// Requirements: 
+//	At any given age t, the number of sampling events with age equal or smaller than t must be greater than the number of branching events with age equal or smaller than t.
+//	Ntips must be Nnodes+1.
+bool get_tree_from_sampling_branching_ages(	const std::vector<double>	&sampling_ages,	// (INPUT) 1D array of size Ntips, listing tip ages (in ascending order)
+											const std::vector<double>	&branching_ages,// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order)
+											long						&Nedges,		// (OUTPUT) the number of edges in the generated tree
+											long						&root,			// (OUTPUT) the clade index of the root. This will always be equal to Ntips.
+											std::vector<long>			&tree_edge,		// (OUTPUT) 2D array of size Nedges x 2 in row-major format, listing tree edges
+											std::vector<double>			&edge_length,	// (OUTPUT) 1D array of size Nedges, listing edge lengths
+											std::string					&error){		// (OUTPUT) error message in case of failure
+	error = "";
+	const long Ntips  = sampling_ages.size();
+	const long Nnodes = branching_ages.size();
+	if(Ntips<=0){ error = "No sampling points provided"; return false; }
+	if(Nnodes<=0){ error = "No branching points provided"; return false; }
+	if(Ntips!=Nnodes+1){ error = "Ntips differs from expectation (Nnodes+1)"; return false; }
+	if(sampling_ages.back()<sampling_ages[0]){ error = "Sampling ages must be in ascending order"; return false; }
+	if(branching_ages.back()<branching_ages[0]){ error = "Branching ages must be in ascending order"; return false; }
+	if(sampling_ages[0]>=branching_ages[0]){ error = "First sampling age must be younger than first branching age"; return false; }
+	if(sampling_ages.back()>=branching_ages.back()){ error = "Last sampling age must be younger than last branching age"; return false; }
+	
+	const long Nclades = Ntips + Nnodes;
+	root = Ntips; // this guaranteed by the design of the algorithm below, since nodes are indexed in chronological order (oldest node first)
+	Nedges = Nclades-1;
+	tree_edge.resize(Nedges*2);
+	edge_length.resize(Nedges);
+	
+	// iterate through branching and sampling events, backward in time
+	long next_edge = 0;
+	lvector orphan_nodes; // pool of nodes created but not yet connected to a parent
+	orphan_nodes.reserve(Nnodes);
+	lvector orphan_tips; // pool of tips sampled but not yet connected to a parent
+	orphan_tips.reserve(Ntips);
+	long orphan1, orphan2, child1, child2, Norphan_tips, Norphans, tip, node, temp;
+	long b = 0, s = 0; // next branching and next sampling event
+	while((b<Nnodes) || (s<Ntips)){
+		// determine if the next event is a branching event or sampling event
+		const bool branching = ((s>Ntips-1) || (branching_ages[b]<sampling_ages[s]));
+		if(branching){
+			// branching event: pick two random orphan clades to connect (pick without replacement)
+			if(orphan_nodes.size() + orphan_tips.size()<2){ error = "Inconsistent sampling & branching ages: Branching point #"+makeString(b+1)+" occurs at an age where fewer than 2 lineages are available to coalesce"; return false; }
+			Norphan_tips 	= orphan_tips.size();
+			Norphans 		= Norphan_tips + orphan_nodes.size();
+			orphan1 		= uniformIntWithin(0,Norphans-1);
+			orphan2 		= uniformIntWithin(0,Norphans-2);
+			if(orphan2>=orphan1) orphan2 += 1;
+			if(orphan2<orphan1){
+				// make sure orphan2>orphan1, needed for proper removal from lists at the end
+				temp = orphan1;
+				orphan1 = orphan2;
+				orphan2 = temp;	
+			}
+			// determine the clade indices corresponding to orphan1 & orphan2
+			if(orphan1<Norphan_tips){
+				child1 = orphan_tips[orphan1];
+			}else{
+				child1 = Ntips + orphan_nodes[orphan1-Norphan_tips];
+			}
+			if(orphan2<Norphan_tips){
+				child2 = orphan_tips[orphan2];
+			}else{
+				child2 = Ntips + orphan_nodes[orphan2-Norphan_tips];
+			}
+			// determine the node index corresponding to this branching age
+			node = Nnodes - 1 - b; // nodes are assigned indices in chronological order (i.e. in order of decreasing age), whereas branching ages are provided in increasing order
+			// connect child1 & child2 to the new node (whose age is branching_ages[b])
+			edge_length[next_edge] 	 = branching_ages[b] - (child1<Ntips ? sampling_ages[Ntips-1-child1] : branching_ages[Nnodes-1-(child1-Ntips)]);
+			tree_edge[next_edge*2+0] = Ntips+node;
+			tree_edge[next_edge*2+1] = child1;
+			++next_edge;
+			edge_length[next_edge]   = branching_ages[b] - (child2<Ntips ? sampling_ages[Ntips-1-child2] : branching_ages[Nnodes-1-(child2-Ntips)]);
+			tree_edge[next_edge*2+0] = Ntips+node;
+			tree_edge[next_edge*2+1] = child2;
+			++next_edge;
+			// update inventories of orphan nodes
+			// first remove orphan2, under the assumption that orphan2>orphan1 (so that orphan1 indexing is not messed up)
+			if(orphan2<Norphan_tips){
+				remove_item_from_vector(orphan_tips, orphan2);
+			}else{
+				remove_item_from_vector(orphan_nodes, orphan2-Norphan_tips);
+			}
+			if(orphan1<Norphan_tips){
+				remove_item_from_vector(orphan_tips, orphan1);
+			}else{
+				remove_item_from_vector(orphan_nodes, orphan1-Norphan_tips);
+			}
+			orphan_nodes.push_back(node);
+			++b;
+		}else{
+			// sampling event: add a new tip to the pool of orphan tips
+			tip = Ntips - 1 - s; // tips are assigned indices in chronological order (i.e. in order of decreasing age), whereas sampling ages are provided in increasing order
+			orphan_tips.push_back(tip);
+			++s;
+		}
+	}				
+	return true;						
+}
+
+
+// Rcpp wrapper function for get_tree_from_sampling_branching_ages()
+// [[Rcpp::export]]
+Rcpp::List get_tree_from_sampling_branching_ages_CPP(const std::vector<double> &sampling_ages,	// (INPUT) 1D array of size Ntips, listing tip sampling ages (in ascending order).
+													 const std::vector<double> &branching_ages){	// (INPUT) 1D array of size Nnodes, listing branching/node ages (in ascending order).
+	long Nedges, root;
+	std::string error;
+	std::vector<long> tree_edge;
+	std::vector<double> edge_length;
+	const bool OK = get_tree_from_sampling_branching_ages(sampling_ages, branching_ages, root, Nedges, tree_edge, edge_length, error);
+	if(OK){
+		return Rcpp::List::create(	Rcpp::Named("success") 		= true,
+									Rcpp::Named("tree_edge") 	= Rcpp::wrap(tree_edge),
+									Rcpp::Named("edge_length")	= Rcpp::wrap(edge_length),
+									Rcpp::Named("Nnodes") 		= branching_ages.size(),
+									Rcpp::Named("Ntips") 		= sampling_ages.size(),
+									Rcpp::Named("Nedges") 		= Nedges,
+									Rcpp::Named("root") 		= root);
+	}else{
+		return Rcpp::List::create( Rcpp::Named("success") = false, Rcpp::Named("error") = error);
+	}
+}
+
 
 
 // Given some pulled speciation rate (PSR) as a function of age (time before present), generate a random ultrametric timetree in backward time according to the homogenous birth-death process
@@ -24716,7 +24987,7 @@ Rcpp::List generate_tree_from_PSR_CPP(	const std::vector<double>	&age_grid,		// 
 	long dummyL;
 	bool OK;
 	for(long tree=0; tree<Ntrees; ++tree){
-		OK = generate_tree_from_branching_ages(branching_ages[tree], dummyL, root[tree], Nedges, tree_edge[tree], edge_length[tree], error);
+		OK = get_tree_from_branching_ages(branching_ages[tree], dummyL, root[tree], Nedges, tree_edge[tree], edge_length[tree], error);
 		if(!OK) return Rcpp::List::create( Rcpp::Named("success") = false, Rcpp::Named("error") = "Failed generating tree #"+makeString(tree+1)+": "+error);
 	}
 	return Rcpp::List::create(	Rcpp::Named("success") 		= true,
@@ -27808,9 +28079,7 @@ public:
 				if(time_steps[p]<=0) continue; // don't consider zero time steps, since they turn LL into NaN
 				if(with_sampling_rate){
 					// take into account location-dependent sampling rate
-					LPD = SBM_PD.transition_LPD(tD,	old_thetas[p], old_phis[p], new_thetas[p], new_phis[p], sampling_rate);
-					//Rcout << "  --> tD=" << tD << ", (" << old_thetas[p]*180/M_PI << ", " << old_phis[p]*180/M_PI << ") --> (" << new_thetas[p]*180/M_PI << ", " << new_phis[p]*180/M_PI << "): cond-LPD=" << LPD << endl; // debug
-					
+					LPD = SBM_PD.transition_LPD(tD,	old_thetas[p], old_phis[p], new_thetas[p], new_phis[p], sampling_rate);					
 				}else{
 					// assume equal sampling rate everywhere
 					LPD = (1/(2*M_PI)) * SBM_PD.axial_LPD(time_steps[p]*diffusivity/SQ(radius), cos(distances[p]/radius));
@@ -28070,7 +28339,7 @@ double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (
 			double LL1=guess_LL, LL2;
 			// keep decreasing min_diffusivity until LL starts decreasing
 			for(long i=0; i<20; ++i){
-				min_diffusivity /= 2;
+				min_diffusivity /= 1.5;
 				LL2 = LL(log(min_diffusivity));
 				if(LL2<LL1) break;
 				LL1 = LL2;
@@ -28085,7 +28354,7 @@ double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (
 			double LL1=guess_LL, LL2;
 			// keep increasing max_diffusivity until LL starts decreasing
 			for(long i=0; i<20; ++i){
-				max_diffusivity *= 2;
+				max_diffusivity *= 1.5;
 				LL2 = LL(log(max_diffusivity));
 				if(LL2<LL1) break;
 				LL1 = LL2;
@@ -28135,10 +28404,7 @@ Rcpp::List fit_SBM_diffusivity_from_transitions_CPP(const double				radius,				/
 	double guess_diffusivity 		= SBM_planar_diffusivity_estimate(time_steps, distances, vector<char>());
 	const double fit_diffusivity 	= aux_fit_SBM_diffusivity(LL, opt_epsilon, max_iterations, guess_diffusivity, min_diffusivity, max_diffusivity);
 	const double fit_LL 			= LL(log(fit_diffusivity));
-	if(std::isnan(fit_diffusivity)){
-		return Rcpp::List::create(	Rcpp::Named("success")	= false,
-									Rcpp::Named("error")	= "Fitted diffusivity is NaN");
-	}
+	if(std::isnan(fit_diffusivity)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Fitted diffusivity is NaN");
 	
 	// perform boostrapping if needed
 	dvector bootstrap_fit_diffusivities(Nbootstraps), bootstrap_fit_LLs(Nbootstraps), bootstrap_LLs(Nbootstraps);
