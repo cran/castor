@@ -73,7 +73,6 @@ fit_hbd_model_parametric = function(tree,
 	}
 
 	# pre-compute some tree stats
-	lineage_counter  = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), include_slopes=TRUE);
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1);
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
@@ -110,6 +109,13 @@ fit_hbd_model_parametric = function(tree,
 	if(length(lambda_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("lambda function must return vectors of the same length as the input ages")));
 	if(length(mu_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("mu function must return vectors of the same length as the input ages")));
 	
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
+
 
 	################################
 	# FITTING
@@ -180,11 +186,12 @@ fit_hbd_model_parametric = function(tree,
 		}
 		# run fit
 		if(is.finite(start_objective)){
-			fit = stats::nlminb(start_values/scales, 
+			fit = tryCatch({ stats::nlminb(start_values/scales, 
 								objective	= objective_function, 
 								lower		= lower_bounds/scales, 
 								upper		= upper_bounds/scales, 
 								control		= fit_control)
+							}, error = function(e){ list(objective=NaN, par=NA, convergence=1) })
 			return(list(objective_value=fit$objective, fparam_values = fit$par*scales, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[[1]], Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective));
 		}else{
 			return(list(objective_value=NA, fparam_values = NA, converged=FALSE, Niterations=0, Nevaluations=0, Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective));
@@ -212,7 +219,7 @@ fit_hbd_model_parametric = function(tree,
 		
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]
@@ -240,10 +247,10 @@ fit_hbd_model_parametric = function(tree,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations,
-				trial_start_objectives	= -sapply(1:Ntrials, function(trial) fits[[trial]]$start_objective),
+				trial_start_objectives	= -unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_objective)),
 				trial_objective_values	= -objective_values,
-				trial_Nstart_attempts	= sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts),
-				trial_Niterations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations),
-				trial_Nevaluations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)));
+				trial_Nstart_attempts	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts)),
+				trial_Niterations		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations)),
+				trial_Nevaluations		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations))));
 }
 

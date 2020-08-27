@@ -33,7 +33,10 @@ fit_hbd_pdr_parametric = function(	tree,
 	max_start_attempts 	= max(1,max_start_attempts)
 	Ntrials 			= max(1,Ntrials)
 	Nthreads 			= max(1,Nthreads)
-	if(any(diff(age_grid)<0)) age_grid = sort(age_grid) # avoid common errors where age_grid is in reverse order
+	if(!is.null(age_grid)){
+		if(any(diff(age_grid)<0)) age_grid = sort(age_grid) # avoid common errors where age_grid is in reverse order
+		if((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age_grid must cover the full considered age interval (age0=%.10g to oldest_age=%.10g)",age0,oldest_age)))
+	}
 	if(Ntrials<1) return(list(success = FALSE, error = sprintf("Ntrials must be at least 1")))
 	if(is.null(age_grid)) age_grid = 0;
 	if(is.null(max_model_runtime)) max_model_runtime = 0;
@@ -69,7 +72,7 @@ fit_hbd_pdr_parametric = function(	tree,
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1);
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
-	
+		
 	# sanitize model parameters
 	sanitized_params = sanitize_parameters_for_fitting(param_values, param_guess = param_guess, param_min = param_min, param_max = param_max, param_scale = param_scale)
 	if(!sanitized_params$success) return(list(success=FALSE, error=sanitized_params$error))
@@ -92,7 +95,14 @@ fit_hbd_pdr_parametric = function(	tree,
 	if(!all(is.finite(PDR_guess))) return(list(success=FALSE, error=sprintf("PDR is not a valid number for guessed parameters, at some ages")));
 	if(!is.finite(rholambda0_guess)) return(list(success=FALSE, error=sprintf("rholambda0 is not a valid number for guessed parameters")));
 	if(length(PDR_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("PDR function must return vectors of the same length as the input ages")));
-						
+
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
+		
 
 	################################
 	# FITTING
@@ -125,9 +135,8 @@ fit_hbd_pdr_parametric = function(	tree,
 												runtime_out_seconds	= max_model_runtime,
 												diff_PDR			= numeric(),
 												diff_PDR_degree		= 0);
-
-		if(!results$success) return(Inf);
-		LL = results$loglikelihood;
+		if(!results$success) return(Inf)
+		LL = results$loglikelihood
 		if(is.na(LL) || is.nan(LL) || is.infinite(LL)) return(Inf);
 		return(-LL);
 	}
@@ -191,7 +200,7 @@ fit_hbd_pdr_parametric = function(	tree,
 	}
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]
@@ -214,11 +223,11 @@ fit_hbd_pdr_parametric = function(	tree,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations,
-				trial_start_objectives	= -sapply(1:Ntrials, function(trial) fits[[trial]]$start_objective),
+				trial_start_objectives	= -unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_objective)),
 				trial_objective_values	= -objective_values,
-				trial_Nstart_attempts	= sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts),
-				trial_Niterations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations),
-				trial_Nevaluations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)));
+				trial_Nstart_attempts	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts)),
+				trial_Niterations		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations)),
+				trial_Nevaluations		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations))));
 }
 
 

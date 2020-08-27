@@ -5,6 +5,8 @@ Reconstruct past diversification dynamics from a diversity time series.
 }
 \description{
 Given a time series of past diversities (coalescent or not), this function estimates instantaneous birth (speciation) and death (extinction) rates that would lead to the observed diversity time series. The function is based on a deterministic model (or the continuum limit of a stochastic cladogenic model), in which instantaneous birth and death rates lead to a predictable growth of a tree (one new species per birth event). The reconstruction is non-parametric, i.e. does not rely on fitting a parameterized model. The reconstruction is only accurate in the deterministic limit, i.e. for high diversities where the stochastic nature of the cladogenic process diminishes. Of particular importance is the case where the time series is coalescent, i.e. represents the diversity (lineages-through-time) that would be represented in a coalescent tree with extinctions. 
+
+Note: This function is included for legacy reasons mainly. In most cases users should instead use the functions \code{\link{fit_hbd_model_on_grid}} and \code{\link{fit_hbd_model_parametric}} to fit birth-death models, or the functions \code{\link{fit_hbd_pdr_on_grid}}, \code{\link{fit_hbd_pdr_parametric}} and \code{\link{fit_hbd_psr_on_grid}} to fit BD model congruence classes (aka. ``pulled variables'') to a tree.
 }
 \usage{
 reconstruct_past_diversification( times,
@@ -53,7 +55,7 @@ Integer between 1 and 4. Polynomial order of the Savitzky-Golay smoothing filter
 
 
 \details{
-For a coalescent diversity time series \eqn{N_c(\tau)} at various ages \eqn{\tau} (distance from the end of the time series), reconstruction of the total diversity \eqn{N(\tau)} is based on the following formulas:
+This function can be used to fit a birth-death model to a coalescent diversity time series \eqn{N_c(\tau)} at various ages \eqn{\tau}, also known as ``lineages-through-time'' curve. The reconstruction of the total diversity \eqn{N(\tau)} is based on the following formulas:
 \deqn{
 E(\tau)=1+\frac{\nu(\tau)}{\beta(\tau)},\\
 }
@@ -139,14 +141,16 @@ Numeric vector of the same size as \code{times}, listing the estimated pulled to
 
 \author{Stilianos Louca}
 
-%\references{
-%Louca et al (2017). In review
-%}
+\references{
+Louca et al (2018). Bacterial diversification through geological time. Nature Ecology & Evolution. 2:1458-1467.
+}
 
 \seealso{
 \code{\link{generate_random_tree}},
-\code{\link{fit_tree_model}}
-\code{\link{count_lineages_through_time}}
+\code{\link{fit_tree_model}},
+\code{\link{count_lineages_through_time}},
+\code{\link{fit_hbd_model_parametric}},
+\code{\link{fit_hbd_model_on_grid}}
 }
 
 \examples{

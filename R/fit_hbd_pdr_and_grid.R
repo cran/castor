@@ -558,11 +558,11 @@ fit_hbd_pdr_and_grid = function(tree,
 	}
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= unlist(sapply(1:Ntrials, function(trial) (if(is.null(fits[[trial]]$objective_value)) NA else fits[[trial]]$objective_value)))
-	loglikelihoods		= unlist(sapply(1:Ntrials, function(trial) (if(is.null(fits[[trial]]$loglikelihood)) NA else fits[[trial]]$loglikelihood)))
-	runtimes			= unlist(sapply(1:Ntrials, function(trial) (if(is.null(fits[[trial]]$runtime)) NA else fits[[trial]]$runtime)))
-	start_loglikelihoods= unlist(sapply(1:Ntrials, function(trial) (if(is.null(fits[[trial]]$start_loglikelihood)) NA else fits[[trial]]$start_loglikelihood)))
-	start_runtimes		= unlist(sapply(1:Ntrials, function(trial) (if(is.null(fits[[trial]]$start_runtime)) NA else fits[[trial]]$start_runtime)))
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
+	loglikelihoods		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$loglikelihood))
+	runtimes			= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$runtime))
+	start_loglikelihoods= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_loglikelihood))
+	start_runtimes		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_runtime))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]

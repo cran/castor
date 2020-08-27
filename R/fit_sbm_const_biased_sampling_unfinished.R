@@ -159,17 +159,17 @@ fit_sbm_const_biased_sampling = function(	trees, 					# either a single tree in 
 														Nbootstraps			= Nbootstraps);
 		}else{
 			# assume equal sampling rate everywhere
-			fit = fit_SBM_diffusivity_from_transitions_CPP(	radius 				= radius,
-															time_steps			= phylogenetic_distances,
-															distances 			= geodesic_distances,
-															max_error			= 1e-7,
-															max_Legendre_terms	= 200,
-															opt_epsilon			= 1e-10,
-															max_iterations 		= 10000,
-															min_diffusivity		= min_diffusivity,
-															max_diffusivity		= max_diffusivity,
-															Nbootstraps			= Nbootstraps,
-															SBM_PD_functor		= list());
+			fit = fit_SBM_diffusivity_from_transitions_CPP(	radius 					= radius,
+															time_steps				= phylogenetic_distances,
+															distances 				= geodesic_distances,
+															max_error				= 1e-7,
+															max_Legendre_terms		= 200,
+															opt_epsilon				= 1e-10,
+															max_iterations 			= 10000,
+															min_diffusivity			= min_diffusivity,
+															max_diffusivity			= max_diffusivity,
+															Nbootstraps				= Nbootstraps,
+															SBM_PD_functor			= list());
 		}
 		if(!fit$success) return(list(success=FALSE, error=fit$error))
 		diffusivity 				= fit$fit_diffusivity

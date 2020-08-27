@@ -149,6 +149,14 @@ fit_hbds_model_parametric = function(tree,
 		if(any(CSA_probs_guess>1)) return(list(success=FALSE, error=sprintf("CSA_probs is greater than 1 for guessed parameters, at some ages; expected probabilities between 0 and 1")));
 		if(any(CSA_kappas_guess>1)) return(list(success=FALSE, error=sprintf("CSA_kappas is greater than 1 for guessed parameters, at some ages; expected probabilities between 0 and 1")));
 	}
+	
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
+
 
 	################################
 	# FITTING
@@ -269,7 +277,7 @@ fit_hbds_model_parametric = function(tree,
 	}	
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]
@@ -381,11 +389,11 @@ fit_hbds_model_parametric = function(tree,
 				converged				= fits[[best]]$converged,
 				Niterations				= fits[[best]]$Niterations,
 				Nevaluations			= fits[[best]]$Nevaluations,
-				trial_start_objectives	= -sapply(1:Ntrials, function(trial) fits[[trial]]$start_objective),
+				trial_start_objectives	= -unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_objective)),
 				trial_objective_values	= -objective_values,
-				trial_Nstart_attempts	= sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts),
-				trial_Niterations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations),
-				trial_Nevaluations		= sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations),
+				trial_Nstart_attempts	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts)),
+				trial_Niterations		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations)),
+				trial_Nevaluations		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)),
 				standard_errors			= (if(Nbootstraps>0) setNames(standard_errors, param_names) else NULL),
 				medians					= (if(Nbootstraps>0) setNames(medians, param_names) else NULL),
 				CI50lower				= (if(Nbootstraps>0) setNames(CI50lower, param_names) else NULL),

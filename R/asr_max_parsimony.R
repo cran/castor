@@ -89,5 +89,6 @@ asr_max_parsimony = function(	tree,
 							verbose_prefix							= "");
 	return(list(success 				= TRUE,
 				ancestral_likelihoods 	= results$posterior_probabilities,
+				scenario_counts			= matrix(results$scenario_counts, ncol=Nstates, byrow=TRUE),
 				total_cost 				= results$best_root_cost));
 }

@@ -117,6 +117,12 @@ fit_hbd_psr_on_grid = function(	tree,
 	scale_PSR = abs(guess_PSR); scale_PSR[scale_PSR==0] = mean(scale_PSR); scale_PSR[scale_PSR==0]=default_guess_PSR;
 	param_scales = c(rep(scale_PSR,times=NG));
 
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
 
 	################################
 	# FITTING
@@ -199,7 +205,7 @@ fit_hbd_psr_on_grid = function(	tree,
 	}
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]

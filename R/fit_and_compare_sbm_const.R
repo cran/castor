@@ -60,7 +60,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 	log_difference 	= abs(log(fit1$diffusivity) - log(fit2$diffusivity))
 	if(Nsignificance>0){
 		# calculate statistical significance of log_difference
-		if(verbose) cat(sprintf("%sCalculating statistical significance of ratio D1/D2..\n",verbose_prefix))
+		if(verbose) cat(sprintf("%sCalculating statistical significances..\n",verbose_prefix))
 		# bring all data into a standard format
 		if("phylo" %in% class(trees1)) trees1 = list(trees1)
 		if("phylo" %in% class(trees2)) trees2 = list(trees2)

@@ -8,7 +8,8 @@ read_tree = function(	string="",
 						include_node_labels 	= TRUE, 
 						underscores_as_blanks 	= FALSE, 
 						check_label_uniqueness 	= FALSE,
-						interpret_quotes		= FALSE){ # whether to interpret quotes as delimiters of tip/node names, rather than reading quotes just like any other character
+						interpret_quotes		= FALSE, 	# whether to interpret quotes as delimiters of tip/node names, rather than reading quotes just like any other character
+						trim_white				= TRUE){	# whether to trim flanking whitespace from tip, node and edge labels
 	if(file!=""){
 		if(string!="") stop("ERROR: Either string or file must be specified, but not both")
 		string = readChar(file, file.info(file)$size)
@@ -24,6 +25,12 @@ read_tree = function(	string="",
 	if(check_label_uniqueness){
 		duplicates = which(duplicated(results$tip_names))
 		if(length(duplicates)>0) stop(sprintf("ERROR: Duplicate tip labels (e.g. '%s') found in input tree",results$tip_names[duplicates[1]]))
+	}
+	
+	if(trim_white){
+		results$tip_names = trimws(results$tip_names, which="both")
+		if(include_node_labels) results$node_names  = trimws(results$node_names, which="both")
+		if(look_for_edge_labels) results$edge_names = trimws(results$edge_names, which="both")
 	}
 	
 	tree = list(Nnode 		= results$Nnodes,

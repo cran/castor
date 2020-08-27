@@ -16,7 +16,8 @@ read_tree(  string  = "",
             include_node_labels     = TRUE, 
             underscores_as_blanks   = FALSE, 
             check_label_uniqueness  = FALSE,
-            interpret_quotes        = FALSE)
+            interpret_quotes        = FALSE,
+            trim_white              = TRUE)
 }
 
 \arguments{
@@ -49,6 +50,9 @@ Logical, specifying whether to check if all tip labels are unique.
 }
 \item{interpret_quotes}{
 Logical, specifying whether to interpret quotes as delimiters of tip/node/edge labels. If \code{FALSE}, then quotes are read verbatim just like any other character.
+}
+\item{trim_white}{
+Logical, specifying whether to trim flanking whitespace from tip, node and edge labels.
 }
 }
 

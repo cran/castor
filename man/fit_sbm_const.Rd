@@ -11,6 +11,7 @@ fit_sbm_const(trees,
         tip_latitudes, 
         tip_longitudes, 
         radius,
+        phylodistance_matrixes  = NULL,
         planar_approximation    = FALSE,
         only_basal_tip_pairs    = FALSE,
         only_distant_tip_pairs  = FALSE,
@@ -35,6 +36,9 @@ Numeric vector of length Ntips, or a list of vectors, listing longitudes of tips
 }
 \item{radius}{
 Strictly positive numeric, specifying the radius of the sphere. For Earth, the mean radius is 6371 km.
+}
+\item{phylodistance_matrixes}{
+Numeric matrix, or a list of numeric matrixes, listing phylogenetic distances between tips for each tree. If \code{trees} is a list of trees, then \code{phylodistance_matrixes} should be a list of the same length as \code{trees}, whose n-th element should be a numeric matrix comprising as many rows and columns as there are tips in the n-th tree; the entry \code{phylodistance_matrixes[[n]][i,j]} is the phylogenetic distance between tips i and j in tree n. If \code{trees} is a single tree, then \code{phylodistance_matrixes} can be a single numeric matrix. If \code{NULL} (default), phylogenetic distances between tips are calculated based on the provided trees, otherwise phylogenetic distances are taken from \code{phylodistance_matrixes}; in the latter case the trees are only used for the topology (determining tip pairs for independent contrasts), but not for calculating phylogenetic distances.
 }
 \item{planar_approximation}{
 Logical, specifying whether to estimate the diffusivity based on a planar approximation of the SBM model, i.e. by assuming that geographic distances between tips are as if tips are distributed on a 2D cartesian plane. This approximation is only accurate if geographical distances between tips are small compared to the sphere's radius.

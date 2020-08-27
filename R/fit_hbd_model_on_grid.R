@@ -55,10 +55,11 @@ fit_hbd_model_on_grid = function(	tree,
 	}
 
 	# pre-compute some tree stats
-	lineage_counter  = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), include_slopes=TRUE);
+	lineage_counter  = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), max_time=root_age*0.99, include_slopes=TRUE);
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1)
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
+	Ntips			 = length(tree$tip.label)
 
 	# more error checking
 	Ntrials  = (if(is.null(Ntrials)) 1 else max(1,Ntrials))
@@ -118,9 +119,10 @@ fit_hbd_model_on_grid = function(	tree,
 	if(is.na(guess_rho0)) guess_rho0 = 1;
 	default_guess_PDR 	 				= mean(lineage_counter$relative_slopes); # a reasonable guesstimate for the average PDR is the average of the relative LTT-slope
 	default_guess_lambda 				= tail(lineage_counter$relative_slopes,1); # a reasonable guesstimate for lambda is the relative LTT-slope at age=0
-	guess_lambda[is.na(guess_lambda)] 	= default_guess_lambda;
-	default_guess_mu 					= max(0,default_guess_lambda - default_guess_PDR);
-	guess_mu[is.na(guess_mu)] 			= default_guess_mu;
+	if(default_guess_lambda<=0) default_guess_lambda = log(Ntips)/root_age
+	guess_lambda[is.na(guess_lambda)] 	= default_guess_lambda
+	default_guess_mu 					= (if(default_guess_lambda<=default_guess_PDR) 0.5*default_guess_lambda else (default_guess_lambda-default_guess_PDR))
+	guess_mu[is.na(guess_mu)] 			= default_guess_mu
 		
 	# make sure initial guess is within the imposed bounds
 	guess_lambda = pmin(max_lambda, pmax(min_lambda, guess_lambda));
@@ -134,9 +136,9 @@ fit_hbd_model_on_grid = function(	tree,
 	fixed_params		= which(!is.na(fixed_param_values))
 	guess_param_values 	= c(guess_lambda, guess_mu, guess_rho0); # should contain a valid numeric for each parameter, even if the parameter is fixed
 	guess_param_values[fixed_params] = fixed_param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
-	min_param_values	= c(min_lambda,min_mu,min_rho0);
-	max_param_values	= c(max_lambda,max_mu,max_rho0);
-
+	min_param_values	= c(min_lambda,min_mu,min_rho0)
+	max_param_values	= c(max_lambda,max_mu,max_rho0)
+	
 	# determine free (i.e. independent) fitted parameters
 	# for example, if lambda is enforced to be time-independent, this reduces the number of free parameters
 	# free2fitted[frp] (where frp=1,..,Nfree) will be a list of fitted parameter indices represented by the frp-th free parameter
@@ -157,9 +159,9 @@ fit_hbd_model_on_grid = function(	tree,
 	}else{ 
 		scale_mu[scale_mu==0] = mean(scale_mu); 
 	}
-	scale_rho 	 = abs(guess_rho0);
+	scale_rho = abs(guess_rho0);
 	if(scale_rho==0) scale_rho = 1;
-	param_scales = c(scale_lambda,scale_mu,scale_rho);
+	param_scales = c(scale_lambda,scale_mu,scale_rho)
 	
 	# define auxiliary function for obtaining full parameter list from rescaled free fitted parameters
 	# input: fparam_values[] is a 1D vector of length NFP, listing rescaled values for the free fitted parameters
@@ -172,7 +174,12 @@ fit_hbd_model_on_grid = function(	tree,
 		return(param_values)
 	}
 
-	
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * Nfree
 
 	################################
 	# FITTING
@@ -230,12 +237,13 @@ fit_hbd_model_on_grid = function(	tree,
 		}
 		start_values = pmax(lower_bounds,pmin(upper_bounds,start_values))
 		# run fit
-		fit = stats::nlminb(start_values/fparam_scales, 
+		fit = tryCatch({ stats::nlminb(start_values/fparam_scales, 
 							objective	= objective_function, 
 							lower		= lower_bounds/fparam_scales, 
 							upper		= upper_bounds/fparam_scales, 
 							control		= fit_control)
-		return(list(objective_value=fit$objective, fparam_values = fit$par, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1]));
+						}, error = function(e){ list(objective=NaN, par=NA, convergence=1) })
+		return(list(objective_value=fit$objective, fparam_values = fit$par, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1]))
 	}
 	
 	################################
@@ -258,7 +266,7 @@ fit_hbd_model_on_grid = function(	tree,
 	}
 	
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]

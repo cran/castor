@@ -36,6 +36,7 @@ Stilianos Louca
 #include <algorithm>
 #include <Rcpp.h>
 #include <time.h>
+#include <ctype.h>
 #include <sys/time.h>
 #include "STMathExpression.h"
 
@@ -1120,7 +1121,7 @@ double quantile_Students_t(double p, long n){
 
 
 
-// Sarting from a mapping pool-->group, calculate the reverse mapping group-->member_list
+// Starting from a mapping pool-->group, calculate the reverse mapping group-->member_list
 // [[Rcpp::export]]
 Rcpp::List get_member_lists_from_group_assignments_CPP(	const long				Ngroups,
 														const std::vector<long> &pool2group){	// (INPUT) 1D array mapping each item in the pool to a group index. Values must be between 0 and Ngroups-1. Negative values mean that an item is not affiliated with any group.
@@ -6897,9 +6898,10 @@ void refine_piecewise_polynomial(	const long					degree,						// (INPUT) polynom
 									const std::vector<double> 	&coarse_coeff,				// (INPUT) 2D array of size NC x (degree+1), in row-major format, listing polynomial coefficients of the original (coarse) spline
 									const double				start_time,					// (INPUT) start time for the refined time series. Must not be greater than coarse_times.back(). To surely include the left-most end of the input time series, you can set end_time=-INFTY_D.
 									const double				end_time,					// (INPUT) end time for the refined time series. Must not be smaller than coarse_times[0]. To surely include the right-most end of the input time series, you can set end_time=INFTY_D.
-									const double 				max_time_step,				// (INPUT) optional constraint on the time steps of the refined time series; to omit this constraint set this to INFTY_D
+									const std::vector<double>	&max_time_steps,			// (INPUT) optional constraint on the time steps of the refined time series; to omit this constraint set this to INFTY_D. This can either be empty, or a single number or a 1D array of size NC (i.e. specifying the maximum time step for each coarse time interval)
 									const double 				max_value_step,				// (INPUT) optional constraint on the value steps of the refined time series; to omit this constraint set this to INFTY_D
 									const double 				max_relative_value_step,	// (INPUT) optional constraint on the relative value steps of the refined time series; to omit this constraint set this to INFTY_D
+									const long					max_refined_grid_size,		// (INPUT) maximum size of the refined grid. This is a hard bound, to prevent using excessive RAM.
 									std::vector<double> 		&refined_times,				// (OUTPUT) 1D array of size NR, listing ascending time points of the new (refined) time series
 									std::vector<double> 		&refined_coeff){			// (OUTPUT) 2D array of size NR x (degree+1), in row-major format, listing polynomial coefficients of the new (refined) spline
 	const long NC = coarse_times.size();
@@ -6909,24 +6911,37 @@ void refine_piecewise_polynomial(	const long					degree,						// (INPUT) polynom
 	if(end_time<coarse_times[0]) return;
 	const long start_c = (start_time<coarse_times[0] ? 0 : find_next_left_grid_point(coarse_times, start_time, 0)); 		// coarse-grid point immediately below (or equal) to start_time
 	const long end_c   = (end_time>coarse_times.back() ? NC-1 : find_next_right_grid_point(coarse_times, end_time, NC-1));	// coarse-grid point immediately above (or equal) to end_time
+	const long baseN   = (end_c-start_c+1);
 	
 	// determine size of refined time series
 	std::vector<long> dN(NC-1,0); // dN[c] will be the resolution (number of additional time points) of the refined time series within the coarse time interval coarse_times[c]:coarse_times[c+1]. A dN of 0 means the particular coarse time interval does not need to be refined.
-	double left_time, right_time, min_value, max_value, max_rate;
-	for(long c=start_c; c<end_c; ++c){
-		left_time  	= max(start_time, coarse_times[c]);
-		right_time 	= min(end_time, coarse_times[c+1]);
-		min_value	= polynomial_lower_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
-		max_value	= polynomial_upper_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
-		max_rate 	= polynomial_bound_abs_derivative(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
-		if((right_time-left_time)>max_time_step)	dN[c] = max(dN[c], long(ceil((right_time-left_time)/max_time_step))-1);
-		if((max_value-min_value)>max_value_step)	dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_value_step))-1);
-		if(!std::isinf(max_relative_value_step)){
-			const double max_step = max_relative_value_step * 0.5*(abs(max_value)+abs(min_value));
-			if((max_step>0) && ((max_value-min_value)>max_step)) dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_step))-1);
+	double left_time, right_time, min_value, max_value, max_rate, max_time_step;
+	if(max_refined_grid_size>baseN){
+		for(long c=start_c; c<end_c; ++c){
+			left_time  		= max(start_time, coarse_times[c]);
+			right_time 		= min(end_time, coarse_times[c+1]);
+			min_value		= polynomial_lower_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
+			max_value		= polynomial_upper_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
+			max_rate 		= polynomial_bound_abs_derivative(degree, &coarse_coeff[c*(degree+1)+0], left_time, right_time);
+			max_time_step 	= (max_time_steps.empty() ? INFTY_D : (max_time_steps.size()==1 ? max_time_steps[0] : max_time_steps[c]));
+			if((right_time-left_time)>max_time_step)	dN[c] = max(dN[c], long(ceil((right_time-left_time)/max_time_step))-1);
+			if((max_value-min_value)>max_value_step)	dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_value_step))-1);
+			if(!std::isinf(max_relative_value_step)){
+				const double max_step = max_relative_value_step * 0.5*(abs(max_value)+abs(min_value));
+				if((max_step>0) && ((max_value-min_value)>max_step)) dN[c] = max(dN[c], long(ceil(max_rate*(right_time-left_time)/max_step))-1);
+			}
 		}
 	}
-	const long NR = (end_c-start_c+1) + vector_sum(dN);
+	long NR = baseN + vector_sum(dN);
+	
+	if((NR>max_refined_grid_size) && (max_refined_grid_size>baseN)){
+		// need to reduce refined grid size. We shall do it uniformly across time
+		const double factor = ((max_refined_grid_size-baseN)/double(NR-baseN));
+		for(long c=start_c; c<end_c; ++c){
+			dN[c] = long(floor(dN[c] * factor));
+		}
+		NR = baseN + vector_sum(dN);
+	}
 
 	// construct refined time series
 	refined_times.resize(NR);
@@ -12239,7 +12254,7 @@ NumericMatrix get_distance_matrix_between_clades_CPP(	const long 					Ntips,
 		// step 2: append the parent to the clade's ancestry
 		ancestors[clade2last_ancestor[clade]] = parent;
 	}
-	
+		
 	// calculate most-recent-common-ancestor and phylogenetic distance for each focal clade pair
 	long cladeA, cladeB, mrca;
 	NumericMatrix distances(Nfocals,Nfocals);
@@ -16897,11 +16912,13 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 			--pointer;
 		}else if(input[pointer]=='('){
 			// finished at this level, moving up to parents
-			while((pointer>=0) && (input[pointer]=='(')){
-				if(clade_stack.empty()){
-					return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Unbalanced parentheses, found redundant closing '(' at position "+makeString(pointer+1));
+			while((pointer>=0) && ((input[pointer]=='(') || std::isspace(input[pointer]))){
+				if(input[pointer]=='('){
+					if(clade_stack.empty()){
+						return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Unbalanced parentheses, found redundant closing '(' at position "+makeString(pointer+1));
+					}
+					clade_stack.pop_back();
 				}
-				clade_stack.pop_back();
 				--pointer;
 			}
 			if((pointer>=0) && (input[pointer]==',')) --pointer;
@@ -18576,6 +18593,7 @@ Rcpp::List WMPR_ASR_CPP(const long					Ntips,
 	}
 
 	return Rcpp::List::create(	Rcpp::Named("posterior_probabilities") 	= Rcpp::wrap(posterior_probabilities),
+								Rcpp::Named("scenario_counts") 			= Rcpp::wrap(scenario_count_per_node_and_state),
 								Rcpp::Named("best_root_cost")			= best_root_cost);
 }
 
@@ -19062,7 +19080,6 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 		get_inout_edges_per_clade(Ntips, Nnodes, Nedges, current_tree_edge, clade2first_inout_edge, clade2last_inout_edge, inout_edges);
 		double dummy_loglikelihood;
 		for(long new_root=Ntips; new_root<Nclades; ++new_root){
-			//cout << "  debug: rerooting at clade # " << new_root << endl; // debug
 			// reroot tree at this node (edge directions will change, but tip/node/edge indices remain the same)
 			reroot_tree_at_node(Ntips, Nnodes, Nedges, current_root, new_root, current_tree_edge);
 			current_root = new_root;
@@ -21506,12 +21523,13 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	const bool got_PDRs			= (!PDRs.empty());
 	const bool got_mus			= (!mus.empty());
 	const double age_span 		= age_grid.back()-age_grid[0];
+	const long NG				= age_grid.size();
 	if((!got_lambdas) && ((!got_PDRs) || std::isnan(anchor_lambda))) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Insufficient information; requiring either lambdas or PDRs & anchor_lambda");
 			
 	// refine age_grid as needed, based on the variation in the diversification_rates or PDRs profile
 	// also define or refine diversification_rates, PDRs, lambdas & mus onto that refined grid
 	std::vector<double> refined_age_grid, refined_diversification_coeff, refined_PDRs, refined_lambda_coeff, refined_mu_coeff, refined_lambdas, refined_mus, refined_diversification_rates;
-	double NT;
+	double NRG;
 	long lambda_degree, mu_degree, diversification_degree;
 	if(got_lambdas){
 		// start with provided lambdas & mus (or mu_over_lambda)
@@ -21535,18 +21553,25 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 		coarse_diversification_coeff = coarse_lambda_coeff; coarse_diversification_coeff -= coarse_mu_coeff;
 		
 		// refine time grid
+		dvector max_time_steps(NG);
+		double turnover_rate;
+		for(long g=0; g<NG; ++g){
+			turnover_rate  		= max(abs(lambdas[g])+abs(coarse_mus[g]), (g<NG-1 ? abs(lambdas[g+1])+abs(coarse_mus[g+1]) : 0.0));
+			max_time_steps[g] 	= max(1e-8*age_span,min(0.1*age_span,(turnover_rate==0 ? INFTY_D : relative_dt/turnover_rate)));
+		}
 		const double mean_abs_diversification_rate = vector_abs_mean(coarse_diversification_rates);
 		refine_piecewise_polynomial(splines_degree,
 									age_grid,
 									coarse_diversification_coeff,
 									age_grid[0],
 									oldest_age,
-									max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),				// max_time_step
+									max_time_steps,																		// max_time_steps
 									(mean_abs_diversification_rate==0 ? INFTY_D : 0.01*mean_abs_diversification_rate),	// max_value_step
 									0.01, 																				// max_relative_value_step
+									1e9,																				// max_refined_grid_size
 									refined_age_grid,
 									refined_diversification_coeff);
-		NT = refined_age_grid.size();
+		NRG = refined_age_grid.size();
 		Rcpp::checkUserInterrupt();
 			
 		// redefine lambda & mu splines on refined time grid
@@ -21554,12 +21579,12 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 		refine_piecewise_polynomial(mu_degree, age_grid, coarse_mu_coeff, refined_age_grid, refined_mu_coeff, refined_mus);
 
 		// calculate PDRs from lambdas & mus
-		refined_PDRs.resize(NT);
-		for(long t=0,tl,tr; t<NT; ++t){
+		refined_PDRs.resize(NRG);
+		for(long t=0,tl,tr; t<NRG; ++t){
 			if(t==0){
 				tl = 0; tr = 1;
-			}else if(t==NT-1){
-				tl = NT-2; tr = NT-1;
+			}else if(t==NRG-1){
+				tl = NRG-2; tr = NRG-1;
 			}else{
 				tl = t-1; tr = t+1;
 			}
@@ -21567,8 +21592,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 		}
 		
 		// calculate diversification rates on refined age grid
-		refined_diversification_rates.resize(NT);
-		for(long t=0; t<NT; ++t){
+		refined_diversification_rates.resize(NRG);
+		for(long t=0; t<NRG; ++t){
 			refined_diversification_rates[t] = refined_lambdas[t] - refined_mus[t];
 		}
 		
@@ -21582,6 +21607,12 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 		get_spline(age_grid, PDRs, splines_degree, coarse_PDR_coeff);
 
 		// refine time grid based on provided PDR
+		dvector max_time_steps(NG);
+		double turnover_rate;
+		for(long g=0; g<NG; ++g){
+			turnover_rate  		= anchor_lambda + max(abs(PDRs[g])+(got_mus ? abs(mus[g]) : 0.0), (g<NG-1 ? abs(PDRs[g+1])+(got_mus ? abs(mus[g+1]) : 0.0) : 0.0));
+			max_time_steps[g] 	= max(1e-8*age_span,min(0.1*age_span,(turnover_rate==0 ? INFTY_D : relative_dt/turnover_rate)));
+		}
 		dvector refined_PDR_coeff;
 		const double mean_turnover_rate = vector_abs_mean(PDRs) + (got_mus ? vector_abs_mean(mus) : 0.0) + anchor_lambda;
 		const double mean_abs_PDR = vector_abs_mean(PDRs);
@@ -21590,17 +21621,18 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 									coarse_PDR_coeff,
 									age_grid[0],
 									oldest_age,
-									max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),	// max_time_step
-									(mean_abs_PDR==0 ? INFTY_D : 0.01*mean_abs_PDR),						// max_value_step
-									0.01, 																	// max_relative_value_step
+									max_time_steps,										// max_time_steps
+									(mean_abs_PDR==0 ? INFTY_D : 0.01*mean_abs_PDR),	// max_value_step
+									0.01, 												// max_relative_value_step
+									1e9,												// max_refined_grid_size
 									refined_age_grid,
 									refined_PDR_coeff);
-		NT = refined_age_grid.size();
+		NRG = refined_age_grid.size();
 		Rcpp::checkUserInterrupt();
 		
 		// evaluate PDR on refined grid
-		refined_PDRs.resize(NT);
-		for(long t=0; t<NT; ++t){
+		refined_PDRs.resize(NRG);
+		for(long t=0; t<NRG; ++t){
 			refined_PDRs[t] = polynomial_value(splines_degree, &refined_PDR_coeff[t*(splines_degree+1)+0], refined_age_grid[t]);
 		}
 
@@ -21620,7 +21652,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 			// with initial condition:
 			//    lambda(anchor_age) = anchor_lambda
 			// where in this case P=PDR+mu and Q=-1
-			dvector Qcoeff(NT,-1);
+			dvector Qcoeff(NRG,-1);
 			solve_Bernoulli_ODE2(	refined_age_grid,	
 									splines_degree,			
 									refined_PDR_coeff+refined_mu_coeff,
@@ -21647,7 +21679,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 			//    lambda(anchor_age) = anchor_lambda
 			// where in this case P=PDR and Q=mu_over_lambda-1
 			dvector Qcoeff = refined_mu_over_lambda_coeff;
-			for(long t=0; t<NT; ++t){ Qcoeff[t*(splines_degree+1)+0] -= 1; }
+			for(long t=0; t<NRG; ++t){ Qcoeff[t*(splines_degree+1)+0] -= 1; }
 			solve_Bernoulli_ODE2(	refined_age_grid,	
 									splines_degree,			
 									refined_PDR_coeff,
@@ -21658,8 +21690,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 									refined_lambdas);			
 
 			// calculate mus on new grid
-			refined_mus.resize(NT);
-			for(long t=0, g=0; t<NT; ++t){
+			refined_mus.resize(NRG);
+			for(long t=0, g=0; t<NRG; ++t){
 				g = find_next_left_grid_point(age_grid, refined_age_grid[t], g); // determine age_grid point to the immediate left of refined_age_grid[t]
 				refined_mus[t] = polynomial_value(splines_degree, &coarse_mu_over_lambda_coeff[g*(splines_degree+1)+0], refined_age_grid[t]) * refined_lambdas[t];
 			}
@@ -21687,7 +21719,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	//   refined_mus & refined_mu_coeff & mu_degree
 	//   refined_diversification_rates & refined_diversification_coeff & diversification_degree
 	//   refined_PDRs
-	//   NT
+	//   NRG
 	
 	Rcpp::checkUserInterrupt();
 	
@@ -21710,16 +21742,16 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	quadratic_approximation_of_piecewise_exp_polynomial(refined_age_grid, Rdegree, Rcoeff, Ecoeff);
 
 	// calculate the deterministic total diversity N(t) = N(anchor_age)*exp(-R(t) + R(anchor_age))
-	std::vector<double> total_diversity(NT);
+	std::vector<double> total_diversity(NRG);
 	const double anchor_R = polynomial_value(Rdegree,&Rcoeff[anchor_g*(Rdegree+1)],anchor_age);
-	for(long t=0; t<NT; ++t){
+	for(long t=0; t<NRG; ++t){
 		total_diversity[t] = (anchor_LTT/anchor_rho) * exp(-R[t]+anchor_R);
 	}
 	
 	// calculate the product I(s):=exp(R(s))*lambda(s) as a piecewise polynomial
 	long Idegree;
 	std::vector<double> Icoeff; 
-	multiply_piecewise_polynomials(NT, Edegree,	Ecoeff, lambda_degree, refined_lambda_coeff, Idegree, Icoeff);
+	multiply_piecewise_polynomials(NRG, Edegree,	Ecoeff, lambda_degree, refined_lambda_coeff, Idegree, Icoeff);
 		
 	// calculate the antiderivative L(s):=int_{census_age}^s I(u) du, as a piecewise polynomial
 	const long Ldegree = Idegree+1;
@@ -21731,21 +21763,21 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	const double census_rho = anchor_rho/(exp(anchor_R) - anchor_rho*anchor_L);
 	
 	// calculate the deterministic shadow diversity
-	std::vector<double> shadow_diversity(NT);
-	for(long t=0; t<NT; ++t){
+	std::vector<double> shadow_diversity(NRG);
+	for(long t=0; t<NRG; ++t){
 		shadow_diversity[t] = total_diversity[t]*census_rho*census_lambda/refined_lambdas[t];
 	}
 	
 	// calculate the pulled normalized diversity
-	std::vector<double> PNDs(NT);
-	for(long t=0; t<NT; ++t){
+	std::vector<double> PNDs(NRG);
+	for(long t=0; t<NRG; ++t){
 		PNDs[t] = exp(-R[t]) * census_lambda/refined_lambdas[t];
 	}
 	
 	// calculate the probability of a lineage missing from the tree (i.e. not censused) at census_age, 
 	// So 1-Pmissing[t] is the probability that a lineage, which was extant at age t, perists until census_age and is censused
-	std::vector<double> Pmissing(NT);
-	for(long t=0; t<NT; ++t){
+	std::vector<double> Pmissing(NRG);
+	for(long t=0; t<NRG; ++t){
 		if(refined_age_grid[t]<census_age){
 			Pmissing[t] = 1-census_rho; // lineage is younger than the census_age, so its ancestor must have existed at census_age, hence it is censused at t with probability = cencus_rho
 		}else if(allow_unreal){
@@ -21757,8 +21789,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	
 	// calculate the probability of a lineage becoming extinct by census_age, Pextinct
 	// So 1-Pextinct[t] is the probability that a lineage, which was extant at age t, persisted until census_age (if census_age=<t) or had an ancestor at census_age (if census_age>t, in which case Pextinct=0)
-	std::vector<double> Pextinct(NT);
-	for(long t=0; t<NT; ++t){
+	std::vector<double> Pextinct(NRG);
+	for(long t=0; t<NRG; ++t){
 		if(refined_age_grid[t]<census_age){
 			Pextinct[t] = 0; // lineage is younger than census_age, so its ancestor must surely have existed at census_age
 		}else{
@@ -21767,8 +21799,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 	}
 		
 	// calculate the deterministic LTT of a hypothetical timetree that is sampled at census_age
-	std::vector<double> LTT(NT);
-	for(long t=0; t<NT; ++t){
+	std::vector<double> LTT(NRG);
+	for(long t=0; t<NRG; ++t){
 		LTT[t] = total_diversity[t] * (1-Pmissing[t]);
 	}
 		
@@ -21825,12 +21857,13 @@ Rcpp::List get_PSR_from_PDR_HBD_CPP(const double				age0,				// (INPUT) non-nega
 								coarse_PDR_coeff,
 								0,
 								oldest_age,
-								max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),	// max_time_step
+								std::vector<double>(1,max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate))),	// max_time_steps
 								(mean_abs_PDR==0 ? INFTY_D : 0.01*mean_abs_PDR),						// max_value_step
 								0.01, 																	// max_relative_value_step
+								1e9,																	// max_refined_grid_size
 								refined_age_grid,
 								refined_PDR_coeff);
-	const long NT = refined_age_grid.size();
+	const long NRG = refined_age_grid.size();
 	
 	
 	// calculate the antiderivative RP(u):=int_{age0}^u dx PDR(u)
@@ -21849,8 +21882,8 @@ Rcpp::List get_PSR_from_PDR_HBD_CPP(const double				age0,				// (INPUT) non-nega
 		
 	// calculate the pulled speciation rate
 	// PSR(t) = rholambda0 * exp(RP(t))/(1+rholambda0*LP(t))
-	dvector PSR(NT);
-	for(long t=0; t<NT; ++t){
+	dvector PSR(NRG);
+	for(long t=0; t<NRG; ++t){
 		PSR[t] = rholambda0 * exp(RP[t])/(1.0 + rholambda0 * LP[t]);
 	}
 	
@@ -21911,12 +21944,13 @@ Rcpp::List get_PSR_of_HBD_model_CPP(const double				age0,				// (INPUT) non-nega
 								coarse_diversification_coeff,
 								0,
 								oldest_age,
-								max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),				// max_time_step
+								std::vector<double>(1,max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate))),				// max_time_steps
 								(mean_abs_diversification_rate==0 ? INFTY_D : 0.01*mean_abs_diversification_rate),	// max_value_step
 								0.01, 																				// max_relative_value_step
+								1e9,																				// max_refined_grid_size
 								refined_age_grid,
 								refined_diversification_coeff);
-	const long NT = refined_age_grid.size();
+	const long NRG = refined_age_grid.size();
 		
 	// redefine lambda & mu splines on refined time grid
 	dvector refined_lambda_coeff, refined_lambdas, refined_mu_coeff, refined_mus;
@@ -21936,7 +21970,7 @@ Rcpp::List get_PSR_of_HBD_model_CPP(const double				age0,				// (INPUT) non-nega
 	// calculate the product Q(s):=E(s)*lambda(s) as a piecewise polynomial
 	long Qdegree;
 	dvector Qcoeff; 
-	multiply_piecewise_polynomials(NT, Edegree,	Ecoeff, lambda_degree, refined_lambda_coeff, Qdegree, Qcoeff);
+	multiply_piecewise_polynomials(NRG, Edegree,	Ecoeff, lambda_degree, refined_lambda_coeff, Qdegree, Qcoeff);
 		
 	// calculate the antiderivative L(t):=int_{age0}^t Q(u) du, as a piecewise polynomial
 	dvector L, Lcoeff;
@@ -21944,9 +21978,9 @@ Rcpp::List get_PSR_of_HBD_model_CPP(const double				age0,				// (INPUT) non-nega
 		
 	// calculate the pulled speciation rate
 	// PSR(t) = rho0 * lambda(t) * exp(R(t))/(1+rho0*L(t))
-	dvector PSR(NT);
+	dvector PSR(NRG);
 	double current_lambda;
-	for(long t=0; t<NT; ++t){
+	for(long t=0; t<NRG; ++t){
 		current_lambda = polynomial_value(lambda_degree,&refined_lambda_coeff[t*(lambda_degree+1)],refined_age_grid[t]);
 		PSR[t] = rho0 * current_lambda * exp(R[t])/(1.0 + rho0 * L[t]);
 	}
@@ -21979,6 +22013,7 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 	const long NB = branching_ages.size();
 	const double start_runtime 	= get_thread_monotonic_walltime_seconds();
 	const double age0 = 0;
+	const long NG = age_grid.size();
 		
 	// basic error checking
 	if((NB==0) || age_grid.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Not enough input data (zero branching ages and/or empty age-grid");
@@ -21996,18 +22031,24 @@ Rcpp::List get_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching
 	dvector coarse_abs_diversification_rates = abs(coarse_diversification_rates);
 	
 	// refine age_grid as needed
-	const double mean_turnover_rate = integrate_piecewise_linear(age_grid,lambdas,age0,oldest_age)/(oldest_age - age0) + integrate_piecewise_linear(age_grid,mus,age0,oldest_age)/(oldest_age - age0);
-	const double mean_abs_diversification_rate = integrate_piecewise_linear(age_grid,coarse_diversification_rates,age0,oldest_age)/(oldest_age - age0);
+	dvector max_time_steps(NG);
 	const double age_span = oldest_age - age0;
+	double turnover_rate;
+	for(long g=0; g<NG; ++g){
+		turnover_rate  		= max(abs(lambdas[g])+abs(mus[g]), (g<NG-1 ? abs(lambdas[g+1])+abs(mus[g+1]) : 0.0));
+		max_time_steps[g] 	= max(1e-8*age_span,min(0.1*age_span,(turnover_rate==0 ? INFTY_D : relative_dt/turnover_rate)));
+	}
+	const double mean_abs_diversification_rate = integrate_piecewise_linear(age_grid,coarse_diversification_rates,age0,oldest_age)/(oldest_age - age0);
 	dvector refined_diversification_coeff, refined_age_grid;
 	refine_piecewise_polynomial(diversification_degree,
 								age_grid,
 								coarse_diversification_coeff,
 								age0,
 								oldest_age,
-								max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_turnover_rate)),				// max_time_step
+								max_time_steps,																		// max_time_steps
 								(mean_abs_diversification_rate==0 ? INFTY_D : 0.01*mean_abs_diversification_rate),	// max_value_step
 								0.01, 																				// max_relative_value_step
+								1e9,																				// max_refined_grid_size
 								refined_age_grid,
 								refined_diversification_coeff);	
 	const long NRG = refined_age_grid.size();
@@ -22142,9 +22183,10 @@ Rcpp::List get_HBD_PDR_loglikelihood_CPP(	const std::vector<double>	&branching_a
 								coarse_PDR_coeff,
 								age0,
 								oldest_age,
-								max(1e-8*age_span,min(0.1*age_span,relative_dt/PDR_scale)),		// max_time_step
+								std::vector<double>(1,max(1e-8*age_span,min(0.1*age_span,relative_dt/PDR_scale))),		// max_time_steps
 								(PDR_scale==0 ? INFTY_D : 0.01*PDR_scale),						// max_value_step
 								0.01, 															// max_relative_value_step
+								1e9,															// max_refined_grid_size
 								refined_age_grid,
 								refined_PDR_coeff);
 	const long NRG = refined_age_grid.size();
@@ -23266,9 +23308,10 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 									PDR_coeff,
 									age_grid[0],
 									age_grid.back(),
-									max(1e-8*age_span,min(0.1*age_span,ODE_relative_dt/mean_abs_PDR)),	// max_time_step
+									std::vector<double>(1,max(1e-8*age_span,min(0.1*age_span,ODE_relative_dt/mean_abs_PDR))),	// max_time_steps
 									(mean_abs_PDR==0 ? INFTY_D : 0.01*mean_abs_PDR),					// max_value_step
 									0.01, 																// max_relative_value_step
+									1e9,																// max_refined_grid_size
 									refined_age_grid,
 									refined_PDR_coeff);
 		const long NRG = refined_age_grid.size();
@@ -24581,9 +24624,10 @@ void get_branching_ages_from_PSR_before_stem(	const dvector			&age_grid,			// (I
 								coarse_PSR_coeff,
 								start_age,
 								stem_age,
-								max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_abs_PSR)),	// max_time_step
+								std::vector<double>(1,max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_abs_PSR))),	// max_time_steps
 								(mean_abs_PSR==0 ? INFTY_D : 0.01*mean_abs_PSR),				// max_value_step
 								0.01, 															// max_relative_value_step
+								1e9,															// max_refined_grid_size
 								refined_age_grid,
 								refined_PSR_coeff);
 	const long NRG = refined_age_grid.size();
@@ -27080,9 +27124,10 @@ Rcpp::List simulate_deterministic_HBD_MSC_CPP(	const double				oldest_age,			// 
 								coarse_PSR_coeff,
 								age_grid[0],
 								oldest_age,
-								max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_abs_PSR)),	// max_time_step
+								std::vector<double>(1,max(1e-8*age_span,min(0.1*age_span,relative_dt/mean_abs_PSR))),	// max_time_steps
 								(mean_abs_PSR==0 ? INFTY_D : 0.01*mean_abs_PSR),	// max_value_step
 								0.01,												// max_relative_value_step
+								1e9,												// max_refined_grid_size
 								refined_age_grid,
 								refined_PSR_coeff);
 	const long NT = refined_age_grid.size();
@@ -27831,7 +27876,7 @@ public:
 				return log(omega/(2*tD*sin(omega))) - SQ(omega)/(4*tD);
 			}
 		}else if(tD<approx_max_tD){
-			// use approximation by [Gosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+			// use approximation by [Ghosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
 			if(omega<1e-10){
 				return logtD_to_log_approx_normalization(log(tD)) - log(2*tD) - SQ(omega)/(4*tD);
 			}else{
@@ -27839,17 +27884,17 @@ public:
 			}
 		}else{
 			// tD is sufficiently large, so use (truncated) Legendre series representation [Brillinger 2012. A particle migrating randomly on a sphere. Springer]
+			// Here we first compute the density minus 0.5, i.e. PD(x)-0.5, because for large tD the density is very close to 0.5, which leads to numerical rounding errors
 			double Pn2 = 1; // P_{n-2}
 			double Pn1 = x; // P_{n-1}
 			double Pn;
-			double PD = 1 + 3*x*exp(-2*tD); // first 2 terms in the series, i.e. for n=0 and n=1
+			double PD = 0.5*(1+3*x*exp(-2*tD)); // first 2 terms in the series, i.e. for n=0 and n=1
 			for(long n=2; n<N; ++n){
 				Pn   = (1.0/n) * ((2*n-1.0)*x*Pn1 - (n-1)*Pn2); // calculate value of n-th Legendre polynomial using Bonnet’s recursion formula
-				PD  += (2*n+1.0) * exp(-(n+1.0)*n*tD) * Pn; // add contribution of n-th Legendre polynomial to PD
+				PD  += 0.5 * (2*n+1.0) * exp(-(n+1.0)*n*tD) * Pn; // add contribution of n-th Legendre polynomial to PD
 				Pn2  = Pn1;
 				Pn1  = Pn;
 			}
-			PD *= 1.0/2;
 			return log(PD);
 		}
 	}
@@ -28043,6 +28088,10 @@ public:
 		include_transitions.assign(time_steps.size(),1);
 	}
 	
+	void set_log_diffusivity(const bool log_diffusivity_){
+		log_diffusivity = log_diffusivity_;
+	}
+	
 	// specify a new set of distances, while keeping everything else the same
 	// hence, the new distances_[] should have the same size as the internal existing distances[]
 	void change_distances(const dvector &distances_){
@@ -28056,10 +28105,6 @@ public:
 		new_phis   = new_phis_;
 	}
 	
-	// OLD CODE
-// 	void change_include_transitions(const std::vector<char> &include_transitions_){
-// 		include_transitions = include_transitions_;
-// 	}
 
 	// evaluate log-likelihood for the requested diffusivity, based on the internaly stored SBM transitions
 	double operator()(double diffusivity) const{
@@ -28338,7 +28383,7 @@ double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (
 			min_diffusivity = guess_diffusivity;
 			double LL1=guess_LL, LL2;
 			// keep decreasing min_diffusivity until LL starts decreasing
-			for(long i=0; i<20; ++i){
+			for(long i=0; i<50; ++i){
 				min_diffusivity /= 1.5;
 				LL2 = LL(log(min_diffusivity));
 				if(LL2<LL1) break;
@@ -28353,7 +28398,7 @@ double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (
 			max_diffusivity = guess_diffusivity;
 			double LL1=guess_LL, LL2;
 			// keep increasing max_diffusivity until LL starts decreasing
-			for(long i=0; i<20; ++i){
+			for(long i=0; i<50; ++i){
 				max_diffusivity *= 1.5;
 				LL2 = LL(log(max_diffusivity));
 				if(LL2<LL1) break;
@@ -28363,10 +28408,41 @@ double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (
 			max_diffusivity = min(max_diffusivity, guess_diffusivity*1e10);
 		}
 	}
-
+	
 	// use Golden ratio method to maximize the log-likelihood of observing the distances[] traversed during the time steps times[]
-	const double fit_diffusivity = exp(optimize_via_golden_ratio(LL, log(min_diffusivity), log(max_diffusivity), false, opt_epsilon, 0.0, max_iterations));
+	const double fit_diffusivity = exp(optimize_via_golden_ratio(LL, log(min_diffusivity), log(max_diffusivity), false, opt_epsilon, 0.0, max_iterations));	
 	return fit_diffusivity;
+}
+
+
+// estimate the one-sided statistical significance of a fitted diffusivity under the null model of a given hypothetical diffusivity
+double get_SBM_diffusivity_significance(double								fit_diffusivity,			// (INPUT) fitted diffusivity
+										double								hypothetical_diffusivity,	// (INPUT) hypothetical diffusivity, specifying the null model under which to evaluate the fitted diffusivity
+										const std::vector<double>			&time_steps,				// (INPUT) time steps of the independent contrasts
+										const double						radius,						// (INPUT) sphere radius
+										Spherical_Brownian_Motion_LL 		&LL,						// (INPUT) log-likelihood functor, already initialized to the provided times and transitions, mapping log(diffusivity) to log(likelihood)
+										const double						opt_epsilon,				// (INPUT) maximum error tolerance in the fitted diffusivity (on a log scale) when maximizing the log-likelihood
+										const long							max_iterations,				// (INPUT) maximum number of iterations during the optimization of the log-likelihood
+										double								min_diffusivity,			// (INPUT) optional lower bound for the diffusivity. May be NAN_D.
+										double								max_diffusivity,			// (INPUT) optional max_diffusivity bound for the diffusivity. May be NAN_D.
+										double 								Nsignificance){				// (INPUT) number of simulations & fits for estimating significance
+	const long NC = time_steps.size();
+	long Nfurther = 0;
+	dvector sim_distances(NC);
+	double guess_diffusivity, bfit_diffusivity;
+	for(long b=0; b<Nsignificance; ++b){
+		// simulate random geodesic distances based on fitted diffusivity
+		for(long p=0; p<NC; ++p){
+			sim_distances[p] = radius * draw_SBM_geodesic_angle_CPP(time_steps[p]*hypothetical_diffusivity/SQ(radius));
+		}
+		// fit diffusivity again using simulated data
+		LL.change_distances(sim_distances);
+		guess_diffusivity 	= SBM_planar_diffusivity_estimate(time_steps, sim_distances, vector<char>());
+		bfit_diffusivity 	= aux_fit_SBM_diffusivity(LL, opt_epsilon, max_iterations, guess_diffusivity, min_diffusivity, max_diffusivity);
+		if(((hypothetical_diffusivity<fit_diffusivity) && (bfit_diffusivity>=fit_diffusivity)) || ((hypothetical_diffusivity>fit_diffusivity) && (bfit_diffusivity<=fit_diffusivity))) ++Nfurther;
+		Rcpp::checkUserInterrupt();	
+	}
+	return double(Nfurther)/Nsignificance;
 }
 
 
@@ -28378,14 +28454,14 @@ double aux_fit_SBM_diffusivity(	const Spherical_Brownian_Motion_LL 	&LL,				// (
 Rcpp::List fit_SBM_diffusivity_from_transitions_CPP(const double				radius,				// (INPUT) radius of the sphere
 													const std::vector<double> 	&time_steps,		// (INPUT) 1D numeric array of length NC, listing time steps for which we have geodesic angles available
 													const std::vector<double> 	&distances,			// (INPUT) 1D numeric array of length NC, listing realized (observed) geodesic distances corresponding to the time_steps[] provided. These distances must be between 0 and pi*radius.
-													const double				max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10.
-													const long					max_Legendre_terms,	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100.
+													const double				max_error,			// (INPUT) positive number, max allowed error occurring from the cutoff of the first omitted term in the series when calculating transition densities. Typial values are 1e-4 to 1e-10. Only relevant if SBM_PD_functor is not provided.
+													const long					max_Legendre_terms,	// (INPUT) positive integer, max number of Legendre polynomial terms to include from the series when calculating transition densities. Typical values are 10-100. Only relevant if SBM_PD_functor is not provided.
 													const double				opt_epsilon,		// (INPUT) maximum error tolerance in the fitted diffusivity (on a log scale) when maximizing the log-likelihood
 													const long					max_iterations,		// (INPUT) maximum number of iterations during the optimization of the log-likelihood
 													double						min_diffusivity,	// (INPUT) optional lower bound for the diffusivity. May be NAN_D.
 													double						max_diffusivity,	// (INPUT) optional upper bound for the diffusivity. May be NAN_D.
 													const long					Nbootstraps,		// (INPUT) number of boostraps, e.g. for estimaitng standard errors. Set to 0 for no boostrapping.	
-													const Rcpp::List			&SBM_PD_functor){	// (INPUT) optional pre-calculated generic SBM probability density functor, i.e. as returned by the Rcpp function SBM_get_SBM_PD_functor_CPP. Note that this object only needs to be calculated once, and does not depend on the radius or the diffusivity.
+													const Rcpp::List			&SBM_PD_functor){		// (INPUT) optional pre-calculated generic SBM probability density functor, i.e. as returned by the Rcpp function SBM_get_SBM_PD_functor_CPP. Note that this object only needs to be calculated once, and does not depend on the radius or the diffusivity.
 													
 	const long NC = time_steps.size();
 
@@ -28425,12 +28501,37 @@ Rcpp::List fit_SBM_diffusivity_from_transitions_CPP(const double				radius,				/
 		}
 	}
 	
+	/* EXPERIMENTAL CODE: Alternative way of determining "confidence intervals"
+	// estimate P5 bounds if needed
+	dvector significances, hypothetical_diffusivities;
+	if(Nsignificance>0){
+		// scan upwards
+		double P=0.5;
+		double hypothetical_diffusivity = fit_diffusivity;
+		while(P>significance_until_P){
+			hypothetical_diffusivity *= 2;
+			P = get_SBM_diffusivity_significance(fit_diffusivity, hypothetical_diffusivity, time_steps, radius, LL, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nsignificance);
+			hypothetical_diffusivities.push_back(hypothetical_diffusivity);
+			significances.push_back(P);
+		}
+		// scan downwards
+		P=0.5;
+		hypothetical_diffusivity = fit_diffusivity;
+		while(P>significance_until_P){
+			hypothetical_diffusivity /= 2;
+			P = get_SBM_diffusivity_significance(fit_diffusivity, hypothetical_diffusivity, time_steps, radius, LL, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nsignificance);
+			hypothetical_diffusivities.push_back(hypothetical_diffusivity);
+			significances.push_back(P);
+		}
+	}
+	*/
+	
 	return Rcpp::List::create(	Rcpp::Named("success") 						= true,
 								Rcpp::Named("fit_diffusivity") 				= fit_diffusivity,
 								Rcpp::Named("fit_loglikelihood")			= fit_LL,
 								Rcpp::Named("bootstrap_fit_diffusivities")	= bootstrap_fit_diffusivities,
 								Rcpp::Named("bootstrap_fit_loglikelihoods")	= bootstrap_fit_LLs,// loglikelihoods of data generated by the fitted model during bootstraps, under the respective models fitted for the generated data
-								Rcpp::Named("bootstrap_loglikelihoods")		= bootstrap_LLs); // loglikelihoods of data generated by the fitted model during bootstraps, under the original fitted model
+								Rcpp::Named("bootstrap_loglikelihoods")		= bootstrap_LLs); 	// loglikelihoods of data generated by the fitted model during bootstraps, under the original fitted model
 }
 
 

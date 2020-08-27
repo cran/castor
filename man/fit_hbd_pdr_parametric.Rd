@@ -61,7 +61,7 @@ Function specifying the product \eqn{\rho\lambda_o} (sampling fraction times spe
 }
 \item{age_grid}{
 Numeric vector, specifying ages at which the \code{PDR} function should be evaluated. This age grid must be fine enough to capture the possible variation in the PDR over time, within the permissible parameter range. If of size 1, then the PDR is assumed to be time-independent.
-Listed ages must be strictly increasing, and must cover at least the full considered age interval (from 0 to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the PDR is assumed to be time-independent.
+Listed ages must be strictly increasing, and must cover at least the full considered age interval (from \code{age0} to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the PDR is assumed to be time-independent.
 }
 \item{condition}{
 Character, either "crown", "stem" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. If "auto", the condition is chosen according to the recommendations mentioned earlier.

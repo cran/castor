@@ -1198,4 +1198,11 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 }
 
 
+# convert a list to a vector using unlist, after converting NULLs to NAs
+# this function may be needed if your list contains NULLs, in which case unlist removes those entries from the returned vector
+unlist_with_nulls = function(L){
+	L[sapply(L, is.null)] = NA
+	return(unlist(L))
+}
+
 

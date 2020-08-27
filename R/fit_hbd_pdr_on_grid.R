@@ -139,6 +139,13 @@ fit_hbd_pdr_on_grid = function(	tree,
 	if(scale_rholambda0==0) scale_rholambda0 = log2(LTT0)/root_age;
 	param_scales = c(scale_PDR,scale_rholambda0);
 
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
+	
 
 	################################
 	# FITTING
@@ -169,11 +176,11 @@ fit_hbd_pdr_on_grid = function(	tree,
 												relative_dt			= relative_dt,
 												runtime_out_seconds	= max_model_runtime,
 												diff_PDR			= numeric(),
-												diff_PDR_degree		= 0);
-		if(!results$success) return(Inf);
-		LL = results$loglikelihood;
-		if(is.na(LL) || is.nan(LL)) return(Inf);
-		return(-LL);
+												diff_PDR_degree		= 0)
+		if(!results$success) return(Inf)
+		LL = results$loglikelihood
+		if(is.na(LL) || is.nan(LL)) return(Inf)
+		return(-LL)
 	}
 	
 
@@ -271,7 +278,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 	}
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
-	objective_values	= sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value);
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
 	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)));
 	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
 	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]

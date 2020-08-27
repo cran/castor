@@ -40,8 +40,7 @@ Logical, specifying whether to perform some basic checks on the validity of the 
 \details{
 For this function, the trait's states must be represented by integers within 1,..,Nstates, where Nstates is the total number of possible states. If the states are originally in some other format (e.g. characters or factors), you should map them to a set of integers 1,..,Nstates. The order of states (if relevant) should be reflected in their integer representation. For example, if your original states are "small", "medium" and "large" and \code{transition_costs=="sequential"}, it is advised to represent these states as integers 1,2,3. You can easily map any set of discrete states to integers using the function \code{\link{map_to_state_space}}.
 
-This function utilizes Sankoff's (1975) dynamic programming algorithm for determining the smallest number (or least costly if transition costs are uneven) of state changes along edges needed to reproduce the observed tip states.
-The function has asymptotic time complexity O(Ntips+Nnodes x Nstates).
+This function utilizes Sankoff's (1975) dynamic programming algorithm for determining the smallest number (or least costly if transition costs are uneven) of state changes along edges needed to reproduce the observed tip states. The function has asymptotic time complexity O(Ntips+Nnodes x Nstates).
 
 If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. If \code{edge_exponent} is 0, then edge lengths do not influence the result. If \code{edge_exponent!=0}, then all edges must have non-zero length. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). 
 
@@ -55,7 +54,10 @@ This function is meant for reconstructing ancestral states in all nodes of a tre
 A list with the following elements:
 \item{success}{Boolean, indicating whether ASR was successful. If \code{FALSE}, the remaining returned elements may be undefined.}
 \item{ancestral_likelihoods}{
-A 2D numeric matrix, listing the probability of each node being in each state. This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument or inferred from \code{tip_states}. The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the probability of the s-th state for the n-th node. Note that the name was chosen for compatibility with other ASR functions.
+A 2D numeric matrix, listing the probability of each node being in each state. This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument or inferred from \code{tip_states}. The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the probability of the s-th state for the n-th node. These probabilities are calculated based on \code{scenario_counts} (see below), assuming that every maximum parsimony scenario is equally likely. Note that the name was chosen for compatibility with other ASR functions.
+}
+\item{scenario_counts}{
+A 2D numeric matrix of size Nnodes x Nstates, listing for each node and each state the number of maximum parsimony scenarios in which the node was in the specific state. If only a single maximum parsimony scenario exists for the whole tree, then the sum of entries in each row will be one.
 }
 \item{total_cost}{Real number, specifying the total transition cost across the tree for the most parsimonious scenario. In the classical case where \code{transition_costs="all_equal"}, the \code{total_cost} equals the total number of state changes in the tree under the most parsimonious scenario.}
 }
