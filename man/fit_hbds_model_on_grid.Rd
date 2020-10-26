@@ -56,6 +56,7 @@ fit_hbds_model_on_grid( tree,
                         fit_control             = list(),
                         focal_param_values      = NULL,
                         verbose                 = FALSE,
+                        diagnostics             = FALSE,
                         verbose_prefix          = "")
 }
 \arguments{
@@ -207,6 +208,9 @@ Optional list, listing combinations of parameter values of particular interest a
 \item{verbose}{
 Logical, specifying whether to print progress reports and warnings to the screen. Note that errors always cause a return of the function (see return values \code{success} and \code{error}).
 }
+\item{diagnostics}{
+Logical, specifying whether to print detailed information (such as model likelihoods) at every iteration of the fitting routine. For debugging purposes mainly.
+}
 \item{verbose_prefix}{
 Character, specifying the line prefix for printing progress reports to the screen.
 }
@@ -216,7 +220,7 @@ Character, specifying the line prefix for printing progress reports to the scree
 \details{
 Warning: In the absence of concentrated sampling attempts (NCSA=0), and without well-justified a priori constraints on either \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and/or \eqn{\kappa}, it is generally impossible to reliably estimate \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} from timetrees alone. This routine (and any other software that claims to estimate \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} solely from timetrees) should thus be treated with great suspicion. Many epidemiological models make the (often reasonable assumption) that \eqn{\kappa=0}; note that even in this case, one generally can't co-estimate \eqn{\lambda}, \eqn{\mu} and \eqn{\psi} from the timetree alone.
 
-It is advised to provide as much information to the function \code{fit_hbds_model_on_grid} as possible, including reasonable lower and upper bounds (\code{min_lambda}, \code{max_lambda}, \code{min_mu}, \code{max_mu}, \code{min_psi}, \code{max_psi}, \code{min_kappa}, \code{max_kappa}) and reasonable parameter guesses. It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small. If strong lower and upper bounds are not available and fitting takes a long time to run, consider using the option \code{max_model_runtime} to limit how much time the fitting allows for each evaluation of the likelihood.
+It is advised to provide as much information to the function \code{fit_hbds_model_on_grid} as possible, including reasonable lower and upper bounds (\code{min_lambda}, \code{max_lambda}, \code{min_mu}, \code{max_mu}, \code{min_psi}, \code{max_psi}, \code{min_kappa}, \code{max_kappa}) and reasonable parameter guesses. It is also important that the \code{age_grid} is sufficiently fine to capture the expected major variations of \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} over time, but keep in mind the serious risk of overfitting when \code{age_grid} is too fine and/or the tree is too small. The \code{age_grid} does not need to be uniform, i.e., you may want to use a finer grid in regions where there's more data (tips) available. If strong lower and upper bounds are not available and fitting takes a long time to run, consider using the option \code{max_model_runtime} to limit how much time the fitting allows for each evaluation of the likelihood.
 
 Note that here "age" refers to time before present, i.e., age increases from tips to root and age 0 is present-day. CSAs are enumerated in the order of increasing age, i.e., from the present to the past. Similarly, the age grid specifies time points from the present towards the past.
 }
@@ -336,7 +340,6 @@ simul = generate_tree_hbds( max_time    = 5,
 tree     = simul$tree
 root_age = simul$root_age
 cat(sprintf("Tree has \%d tips\n",length(tree$tip.label)))
-
 
 # Define an age grid on which lambda_function & mu_function shall be fitted
 fit_age_grid = seq(from=0,to=root_age,length.out=3)

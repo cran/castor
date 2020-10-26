@@ -49,6 +49,10 @@ get_inhomogeneous_grid_1D_CPP <- function(Xstart, Xend, Ngrid, densityX, density
     .Call(`_castor_get_inhomogeneous_grid_1D_CPP`, Xstart, Xend, Ngrid, densityX, densityY, xepsilon)
 }
 
+monotonize_time_series_CPP <- function(values, increasing, prefer_later_data) {
+    .Call(`_castor_monotonize_time_series_CPP`, values, increasing, prefer_later_data)
+}
+
 get_Ornstein_Uhlenbeck_time_series_CPP <- function(times, start_value, stationary_mean, stationary_std, decay_rate) {
     .Call(`_castor_get_Ornstein_Uhlenbeck_time_series_CPP`, times, start_value, stationary_mean, stationary_std, decay_rate)
 }
@@ -137,12 +141,24 @@ get_distances_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, e
     .Call(`_castor_get_distances_between_clades_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, cladesA, cladesB, verbose, verbose_prefix)
 }
 
+count_transitions_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, clade_states, cladesA, cladesB) {
+    .Call(`_castor_count_transitions_between_clades_CPP`, Ntips, Nnodes, Nedges, tree_edge, clade_states, cladesA, cladesB)
+}
+
 count_clades_at_regular_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, degree, include_slopes) {
     .Call(`_castor_count_clades_at_regular_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, degree, include_slopes)
 }
 
 count_clades_at_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, times, degree) {
     .Call(`_castor_count_clades_at_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, times, degree)
+}
+
+get_LTT_BD_CPP <- function(birth_times, death_times, time_grid) {
+    .Call(`_castor_get_LTT_BD_CPP`, birth_times, death_times, time_grid)
+}
+
+tree_has_multifurcations_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
+    .Call(`_castor_tree_has_multifurcations_CPP`, Ntips, Nnodes, Nedges, tree_edge)
 }
 
 get_speciation_extinction_events_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, min_age, max_age, only_clades, omit_clades) {
@@ -333,6 +349,14 @@ ASR_with_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates
     .Call(`_castor_ASR_with_fixed_rates_Markov_model_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, eigenvalues, EVmatrix, inverse_EVmatrix, prior_probabilities_per_tip, root_prior_type, root_prior, include_ancestral_likelihoods, reroot, runtime_out_seconds, exponentiation_accuracy, max_polynomials, store_exponentials)
 }
 
+Mk_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, prior_probabilities_per_tip, root_prior_type, root_prior, oldest_age, runtime_out_seconds, exponentiation_accuracy, max_polynomials) {
+    .Call(`_castor_Mk_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, prior_probabilities_per_tip, root_prior_type, root_prior, oldest_age, runtime_out_seconds, exponentiation_accuracy, max_polynomials)
+}
+
+TR_Mk_loglikelihood_ICs_CPP <- function(Nstates, phylodistances, transitions, transition_matrix, runtime_out_seconds, exponentiation_accuracy, max_polynomials) {
+    .Call(`_castor_TR_Mk_loglikelihood_ICs_CPP`, Nstates, phylodistances, transitions, transition_matrix, runtime_out_seconds, exponentiation_accuracy, max_polynomials)
+}
+
 apply_fixed_rate_Markov_model_to_missing_clades_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, exponentiation_accuracy, max_polynomials, likelihoods_known, likelihoods, unknown_likelihoods_as_priors) {
     .Call(`_castor_apply_fixed_rate_Markov_model_to_missing_clades_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, exponentiation_accuracy, max_polynomials, likelihoods_known, likelihoods, unknown_likelihoods_as_priors)
 }
@@ -361,12 +385,12 @@ ASR_binomial_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, tip_states, revea
     .Call(`_castor_ASR_binomial_CPP`, Ntips, Nnodes, Nedges, tree_edge, tip_states, reveal_probs, state0_probs, min_revealed)
 }
 
-get_MuSSE_loglikelihood_classic_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior, runtime_out_seconds) {
-    .Call(`_castor_get_MuSSE_loglikelihood_classic_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior, runtime_out_seconds)
+get_MuSSE_loglikelihood_classic_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, sampling_rates, initial_D_per_tip, initial_E_per_state, root_prior, runtime_out_seconds) {
+    .Call(`_castor_get_MuSSE_loglikelihood_classic_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, sampling_rates, initial_D_per_tip, initial_E_per_state, root_prior, runtime_out_seconds)
 }
 
-get_MuSSE_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, oldest_age, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior_type, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds) {
-    .Call(`_castor_get_MuSSE_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, oldest_age, tree_edge, node_ages, transition_rates, speciation_rates, extinction_rates, initial_D_per_tip, initial_E_per_state, root_prior_type, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds)
+get_MuSSE_loglikelihood_CPP <- function(Ntips, Nnodes, Nedges, Nstates, oldest_age, tree_edge, clade_ages, transition_rates, speciation_rates, extinction_rates, sampling_rates, initial_D_per_tip, initial_E_per_state, root_prior_type, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds) {
+    .Call(`_castor_get_MuSSE_loglikelihood_CPP`, Ntips, Nnodes, Nedges, Nstates, oldest_age, tree_edge, clade_ages, transition_rates, speciation_rates, extinction_rates, sampling_rates, initial_D_per_tip, initial_E_per_state, root_prior_type, root_prior, root_conditioning, include_ancestral_likelihoods, include_warnings, max_condition_number, relative_ODE_step, E_value_step, D_temporal_resolution, runtime_out_seconds)
 }
 
 simulate_deterministic_HBD_model_CPP <- function(census_age, oldest_age, age_grid, lambdas, mus, mu_over_lambda, PDRs, anchor_age, anchor_rho, anchor_lambda, anchor_LTT, splines_degree, relative_dt, allow_unreal) {
@@ -401,8 +425,8 @@ simulate_deterministic_HBDS_CPP <- function(CSA_ages, CSA_probs, CSA_kappas, age
     .Call(`_castor_simulate_deterministic_HBDS_CPP`, CSA_ages, CSA_probs, CSA_kappas, age_grid, lambdas, mus, psis, kappas, splines_degree, age0, N0, LTT0, requested_ages, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
 }
 
-get_congruent_HBDS_CPP <- function(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, Reffs, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds) {
-    .Call(`_castor_get_congruent_HBDS_CPP`, CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, psis, mus, Reffs, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
+get_congruent_HBDS_CPP <- function(CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, lambdas, mus, psis, Reffs, removal_rates, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds) {
+    .Call(`_castor_get_congruent_HBDS_CPP`, CSA_ages, CSA_pulled_probs, CSA_PSRs, age_grid, PSRs, PDRs, lambda_psis, lambdas, mus, psis, Reffs, removal_rates, lambda0, splines_degree, ODE_relative_dt, ODE_relative_dy, runtime_out_seconds)
 }
 
 simulate_fixed_rates_Markov_model_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, transition_matrix, root_probabilities, include_tips, include_nodes, Nsimulations) {
@@ -453,12 +477,12 @@ get_branching_ages_from_LTT_CPP <- function(ages, LTT) {
     .Call(`_castor_get_branching_ages_from_LTT_CPP`, ages, LTT)
 }
 
-generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates) {
-    .Call(`_castor_generate_random_tree_BM_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_birth_times, include_death_times, include_rates)
+generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_event_times, include_rates) {
+    .Call(`_castor_generate_random_tree_BM_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_event_times, include_rates)
 }
 
-generate_random_tree_Mk_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, max_events, Nstates, start_state, state_birth_rates, state_death_rates, transition_matrix_A, transition_matrix_C, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times, include_rates) {
-    .Call(`_castor_generate_random_tree_Mk_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, max_events, Nstates, start_state, state_birth_rates, state_death_rates, transition_matrix_A, transition_matrix_C, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times, include_rates)
+generate_random_tree_Mk_rates_CPP <- function(max_tips, max_extant_tips, max_sampled_tips, max_time, max_time_since_equilibrium, max_events, Nstates, start_state, state_birth_rates, state_death_rates, state_sampling_rates, transition_matrix_A, transition_matrix_C, as_generations, no_full_extinction, include_extant, include_extinct, include_event_times, include_rates) {
+    .Call(`_castor_generate_random_tree_Mk_rates_CPP`, max_tips, max_extant_tips, max_sampled_tips, max_time, max_time_since_equilibrium, max_events, Nstates, start_state, state_birth_rates, state_death_rates, state_sampling_rates, transition_matrix_A, transition_matrix_C, as_generations, no_full_extinction, include_extant, include_extinct, include_event_times, include_rates)
 }
 
 generate_random_tree_tdSSE_CPP <- function(max_tips, max_time, max_events, Nstates, start_state, time_grid, state_birth_rates, state_death_rates, transition_matrix_A, transition_matrix_C, splines_degree, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times) {
@@ -535,5 +559,9 @@ fit_SBM_from_sampled_transitions_CPP <- function(radius, time_steps, old_thetas,
 
 ACF_spherical_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix) {
     .Call(`_castor_ACF_spherical_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix)
+}
+
+read_fasta_from_file_CPP <- function(fasta_path, include_headers, include_sequences) {
+    .Call(`_castor_read_fasta_from_file_CPP`, fasta_path, include_headers, include_sequences)
 }
 

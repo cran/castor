@@ -138,7 +138,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 				root 		= results$root+1)
 	class(tree) = "phylo";
 	attr(tree,"order") = "none";
-		
+
 	return(list(success				= TRUE,
 				tree				= tree,
 				root_time			= results$root_time,

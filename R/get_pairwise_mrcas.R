@@ -43,5 +43,11 @@ get_pairwise_mrcas = function(tree, A, B, check_input=TRUE){
 												cladesB			= B-1,
 												verbose			= FALSE,
 												verbose_prefix	= "");
+# 	mrcas = get_MRCAs_CPP(	Ntips			= Ntips,
+# 							Nnodes			= tree$Nnode,
+# 							Nedges			= nrow(tree$edge),
+# 							tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+# 							cladesA			= A-1,
+# 							cladesB			= B-1);
 	return(as.integer(mrcas+1));
 }

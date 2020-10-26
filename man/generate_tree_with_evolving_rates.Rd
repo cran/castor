@@ -14,11 +14,9 @@ generate_tree_with_evolving_rates(parameters           = list(),
                                   max_time_eq          = NULL,
                                   coalescent           = TRUE,
                                   as_generations       = FALSE,
-                                  Nsplits              = 2, 
                                   tip_basename         = "", 
                                   node_basename        = NULL,
-                                  include_birth_times  = FALSE,
-                                  include_death_times  = FALSE,
+                                  include_event_times  = FALSE,
                                   include_rates        = FALSE)
 
 }
@@ -47,20 +45,14 @@ Logical, specifying whether only the coalescent tree (i.e. the tree spanning the
 \item{as_generations}{
 Logical, specifying whether edge lengths should correspond to generations. If FALSE, then edge lengths correspond to time.
 }
-\item{Nsplits}{
-Integer greater than 1. Number of child-tips to generate at each diversification event. If set to 2, the generated tree will be bifurcating. If >2, the tree will be multifurcating.
-}
 \item{tip_basename}{
 Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then tip labels will be integers "1", "2" and so on.
 }
 \item{node_basename}{
 Character. Prefix to be used for node labels (e.g. "node."). If \code{NULL}, no node labels will be included in the tree.
 }
-\item{include_birth_times}{
-Logical. If \code{TRUE}, then the times of speciation events (in order of occurrence) will also be returned.
-}
-\item{include_death_times}{
-Logical. If \code{TRUE}, then the times of extinction events (in order of occurrence) will also be returned.
+\item{include_event_times}{
+Logical. If \code{TRUE}, then the times of speciation and extinction events (each in order of occurrence) will also be returned.
 }
 \item{include_rates}{
 Logical. If \code{TRUE}, then the bper-capita birth & death rates of all tips and nodes will also be returned.
@@ -69,7 +61,7 @@ Logical. If \code{TRUE}, then the bper-capita birth & death rates of all tips an
 
 
 \details{
-If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}. If \code{max_tips!=NULL} and \code{Nsplits>2}, then the last diversification even may generate fewer than \code{Nsplits} children, in order to keep the total number of tips within the specified limit.
+If \code{max_time==NULL}, then the returned tree will always contain \code{max_tips} tips. In particular, if at any moment during the simulation the tree only includes a single extant tip, the death rate is temporarily set to zero to prevent the complete extinction of the tree. If \code{max_tips==NULL}, then the simulation is ran as long as specified by \code{max_time}. If neither \code{max_time} nor \code{max_tips} is \code{NULL}, then the simulation halts as soon as the time exceeds \code{max_time} or the number of tips (extant tips if \code{coalescent} is \code{TRUE}) exceeds \code{max_tips}.
 
 If \code{rate_model=='BM'}, then per-capita birth rates (speciation rates) and per-capita death rates (extinction rates) evolve according to Brownian Motion, constrained to a finite interval via reflection. Note that speciation and extinction rates are only updated at branching points, i.e. during speciation events, while waiting times until speciation/extinction are based on rates at the previous branching point. The argument \code{parameters} should be a named list including one or more of the following elements:
 \itemize{
@@ -112,7 +104,7 @@ A named list with the following elements:
 Logical, indicating whether the simulation was successful. If \code{FALSE}, an additional element \code{error} (of type character) is included containing an explanation of the error; in that case the value of any of the other elements is undetermined.
 }
 \item{tree}{
-A rooted bifurcating (if \code{Nsplits==2}) or multifurcating (if \code{Nsplits>2}) tree of class "phylo", generated according to the specified birth/death model. 
+A rooted bifurcating tree of class "phylo", generated according to the specified birth/death model. 
 
 If \code{coalescent==TRUE} or if all death rates are zero, and only if \code{as_generations==FALSE}, then the tree will be ultrametric. If \code{as_generations==TRUE} and \code{coalescent==FALSE}, all edges will have unit length.
 }
@@ -127,16 +119,16 @@ Numeric, giving the final time at the end of the simulation. If \code{coalescent
 Numeric, giving the first time where the sign of (death rate - birth rate) changed from the beginning of the simulation, i.e. when speciation/extinction equilibrium was reached. May be infinite if the simulation stoped before reaching this point.
 }
 \item{Nbirths}{
-Total number of birth events (speciations) that occurred during tree growth. This may be lower than the total number of tips in the tree if death rates were non-zero and \code{coalescent==TRUE}, or if \code{Nsplits>2}.
+Total number of birth events (speciations) that occurred during tree growth. This may be lower than the total number of tips in the tree if death rates were non-zero and \code{coalescent==TRUE}.
 }
 \item{Ndeaths}{
 Total number of deaths (extinctions) that occurred during tree growth.
 }
 \item{birth_times}{
-Numeric vector, listing the times of speciation events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.
+Numeric vector, listing the times of speciation events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root. Only returned if \code{include_event_times==TRUE}.
 }
 \item{death_times}{
-Numeric vector, listing the times of extinction events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root.
+Numeric vector, listing the times of extinction events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root. Only returned if \code{include_event_times==TRUE}.
 }
 \item{birth_rates_pc}{
 Numeric vector, listing the per-capita birth rate of each tip and node in the tree. The length of an edge in the tree was thus drawn from an exponential distribution with rate equal to the per-capita birth rate of the child tip or node.

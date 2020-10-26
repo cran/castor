@@ -4,9 +4,9 @@
 Fit a discrete-state-dependent diversification model via maximum-likelihood.
 }
 \description{
-The Binary State Speciation and Extinction (BiSSE) model (Maddison et al. 2007) and its extension to Multiple State Speciation Extinction (MuSSE) models (FitzJohn et al. 2009, 2012), Hidden State Speciation Extinction (HiSSE) models (Beaulieu and O'meara, 2016) or Several Examined and Concealed States-dependent Speciation and Extinction (SecSSE) models (van Els et al. 2018), describe a Poissonian cladogenic process whose birth/death (speciation/extinction) rates depend on the states of an evolving discrete trait. Specifically, extant tips either go extinct or split continuously in time at Poissonian rates, and birth/death rates at each extant tip depend on the current state of the tip; lineages tansition stochastically between states acccording to a continuous-time Markov process with fixed transition rates.
+The Binary State Speciation and Extinction (BiSSE) model (Maddison et al. 2007) and its extension to Multiple State Speciation Extinction (MuSSE) models (FitzJohn et al. 2009, 2012), Hidden State Speciation Extinction (HiSSE) models (Beaulieu and O'meara, 2016) or Several Examined and Concealed States-dependent Speciation and Extinction (SecSSE) models (van Els et al. 2018), describe a Poissonian cladogenic process whose birth/death (speciation/extinction) rates depend on the states of an evolving discrete trait. Specifically, extant tips either go extinct or split continuously in time at Poissonian rates, and birth/death rates at each extant tip depend on the current state of the tip; lineages tansition stochastically between states acccording to a continuous-time Markov process with fixed transition rates. At the end of the simulation (i.e., at "present-day"), extant lineages are sampled according to some state-dependent probability ("sampling_fraction"), which may depend on proxy state. Optionally, tips may also be sampled continuously over time according to some Poissonian rate (which may depend on proxy state), in which case the resulting tree may not be ultrametric.
 
-This function takes as main input an ultrametric tree and a list of tip proxy states, and fits the parameters of a BiSSE/MuSSE/HiSSE/SecSSE model to the data via maximum-likelihood. Tips can have missing (unknown) proxy states, and the function can account for biases in species sampling and biases in the identification of proxy states. The likelihood is calculated using a mathematically equivalent, but computationally more efficient variant, of the classical postorder-traversal BiSSE/MuSSE/HiSSE/SecSSE algorithm, as described by Louca (2019). This function has been optimized for large phylogenetic trees, with a relatively small number of states (i.e. Nstates<<Ntips); its time complexity scales roughly linearly with Ntips.
+This function takes as main input a phylogenetic tree (ultrametric unless Poissonian sampling is included) and a list of tip proxy states, and fits the parameters of a BiSSE/MuSSE/HiSSE/SecSSE model to the data via maximum-likelihood. Tips can have missing (unknown) proxy states, and the function can account for biases in species sampling and biases in the identification of proxy states. The likelihood is calculated using a mathematically equivalent, but computationally more efficient variant, of the classical postorder-traversal BiSSE/MuSSE/HiSSE/SecSSE algorithm, as described by Louca (2019). This function has been optimized for large phylogenetic trees, with a relatively small number of states (i.e. Nstates<<Ntips); its time complexity scales roughly linearly with Ntips.
 }
 \usage{
 fit_musse(tree, 
@@ -18,6 +18,7 @@ fit_musse(tree,
           tip_priors            = NULL,
           sampling_fractions    = 1,
           reveal_fractions      = 1,
+          sampling_rates        = 0,
           transition_rate_model	= "ARD",
           birth_rate_model      = "ARD",
           death_rate_model      = "ARD",
@@ -46,12 +47,13 @@ fit_musse(tree,
           D_temporal_resolution = 100,
           max_model_runtime     = NULL,
           verbose               = TRUE,
+          diagnostics           = FALSE,
           verbose_prefix        = "")
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
 \item{tree}{
-Ultrametric phylogenetic tree of class "phylo", representing all or a subset of extant species.
+Phylogenetic tree of class "phylo", representing the evolutionary relationships between sampled species/lineages. Unless Poissonian sampling is included in the model (option \code{sampling_rates}), this tree should be ultrametric.
 }
 \item{Nstates}{
 Integer, specifying the number of possible discrete states a tip can have, influencing speciation/extinction rates. For example, if \code{Nstates==2} then this corresponds to the common Binary State Speciation and Extinction (BiSSE) model (Maddison et al., 2007). In the case of a HiSSE/SecSSE model, \code{Nstates} refers to the total number of diversification rate categories. For example, in the case of the HiSSE model described by Beaulieu and O'meara (2016), \code{Nstates=4}.
@@ -72,10 +74,13 @@ Integer vector of size Ntips, listing the proxy state at each tip, in the same o
 Numeric matrix of size Ntips x \code{Nstates} (or of size Ntips x \code{NPstates}), listing prior likelihoods of each state (or each proxy-state) at each tip. Can be provided as an alternative to \code{tip_pstates}. Thus, \code{tip_priors[i,s]} is the likelihood of observing the data if the tip \code{i} was at state \code{s} (or proxy-state \code{s}). Either \code{tip_pstates} or \code{tip_priors} must be non-NULL, but not both.
 }
 \item{sampling_fractions}{
-Integer vector of size \code{NPstates}, with values between 0 and 1, listing the sampling fractions of species depending on proxy-state. That is, \code{sampling_fractions[p]} is the probability that an extant species, having proxy state \code{p}, is included in the phylogeny. If all species are included in the tree with the same probability (i.e., independent of state), this can also be a single number. If \code{NULL} (default), all species are assumed to be included in the tree.
+Numeric vector of size \code{NPstates}, with values between 0 and 1, listing the sampling fractions of extant species depending on proxy-state. That is, \code{sampling_fractions[p]} is the probability that an extant species, having proxy state \code{p}, is included in the phylogeny at present-day. If all extant species are included in the tree with the same probability (i.e., independent of state), this can also be a single number. If \code{NULL} (default), all extant species are assumed to be included in the tree.
 }
 \item{reveal_fractions}{
-Integer vector of size \code{NPstates}, with values between 0 and 1, listing the probabilities of proxy-state identification depending on proxy-state. That is, \code{reveal_fractions[p]} is the probability that a species with proxy-state \code{p} will have a known ("revealed") state, conditional upon being included in the tree. This can be used to incorporate reveal biases for tips, depending on their proxy state. Can also be \code{NULL} or a single number (in which case reveal fractions are assumed to be independent of proxy-state). Note that only the relative values in \code{reveal_fractions} matter, for example \code{c(1,2,1)} has the same effect as \code{c(0.5,1,0.5)}, because \code{reveal_fractions} is normalized internally anyway.
+Numeric vector of size \code{NPstates}, with values between 0 and 1, listing the probabilities of proxy-state identification depending on proxy-state. That is, \code{reveal_fractions[p]} is the probability that a species with proxy-state \code{p} will have a known ("revealed") state, conditional upon being included in the tree. This can be used to incorporate reveal biases for tips, depending on their proxy state. Can also be \code{NULL} or a single number (in which case reveal fractions are assumed to be independent of proxy-state). Note that only the relative values in \code{reveal_fractions} matter, for example \code{c(1,2,1)} has the same effect as \code{c(0.5,1,0.5)}, because \code{reveal_fractions} is normalized internally anyway.
+}
+\item{sampling_rates}{
+Numeric vector of size \code{NPstates}, listing Poissonian per-lineage sampling rates over time. Hence, \code{sampling_rates[p]} is the rate at which lineages are sampled over time when they are in proxy state \code{p}. Can also be a single numeric, in which case sampling rates are the same for all proxy states. If \code{NULL}, Poissonian sampling is assumed to not occur. Note that earlier MuSSE/HiSSE models (e.g., by Beaulieu and O'Meara, 2016) do not include Poissonian sampling (i.e., all tips are assumed to have been sampled at present-day). Poissonian sampling through time is common in epidemiological models but uncommon in macroevolution models.
 }
 \item{transition_rate_model}{
 Either a character or a 2D integer matrix of size Nstates x Nstates, specifying the model for the transition rates between states. This option controls the parametric complexity of the state transition model, i.e. the number of independent rates and the correspondence between independent and dependent rates. If a character, then it must be one of "ER", "SYM", "ARD", "SUEDE" or "SRD", as used for Mk models (see the function \code{\link{asr_mk_model}} for details). For example, "ARD" (all rates different) specifies that all transition rates should be considered as independent parameters with potentially different values.
@@ -84,7 +89,7 @@ If an integer matrix, then it defines a custom parametric structure for the tran
 Entries on the diagonal are ignored, since the diagonal elements are always adjusted to ensure a valid Markov transition matrix. To construct a custom matrix with the proper structure, it may be convenient to first generate an "ARD" matrix using \code{\link{get_transition_index_matrix}}, and then modify individual entries to reduce the number of independent rates.
 }
 \item{birth_rate_model}{
-Either a character or an integer vector of length Nstates, specifying the model for the various birth (speciation) rates. This option controls the parametric complexity of the possible birth rates, i.e. the number of independent birth rates and the correspondence between independent and dependent birth rates. If a characteb, then it must be either "ER" (equal rates) or "ARD" (all rates different). If an integer vector, it must map each state to an indepedent birth-rate parameter (indexed 1,2,..). For example, the vector \code{c(1,2,1)} specifies that the birth-rates \eqn{\lambda_1} and \eqn{\lambda_3} must be the same, but \eqn{\lambda_2} is independent.
+Either a character or an integer vector of length Nstates, specifying the model for the various birth (speciation) rates. This option controls the parametric complexity of the possible birth rates, i.e. the number of independent birth rates and the correspondence between independent and dependent birth rates. If a character, then it must be either "ER" (equal rates) or "ARD" (all rates different). If an integer vector, it must map each state to an indepedent birth-rate parameter (indexed 1,2,..). For example, the vector \code{c(1,2,1)} specifies that the birth-rates \eqn{\lambda_1} and \eqn{\lambda_3} must be the same, but \eqn{\lambda_2} is independent.
 }
 \item{death_rate_model}{
 Either a character or an integer vector of length Nstates, specifying the model for the various death (extinction) rates. Similar to \code{birth_rate_model}.
@@ -170,6 +175,9 @@ If 0, no time limit is imposed.
 }
 \item{verbose}{
 Logical, specifying whether to print progress reports and warnings to the screen. In any case, fatal errors are always reported.
+}
+\item{diagnostics}{
+Logical, specifying whether to print detailed information (such as model likelihoods) at every iteration of the fitting routine. For debugging purposes mainly.
 }
 \item{verbose_prefix}{
 Character, specifying the line prefix for printing progress reports, warnings and errors to the screen.
@@ -277,9 +285,11 @@ R. G. FitzJohn (2012). Diversitree: comparative phylogenetic analyses of diversi
 
 J. M. Beaulieu and B. C. O'Meara (2016). Detecting hidden diversification shifts in models of trait-dependent speciation and extinction. Systematic Biology. 65:583-601.
 
+D. Kuehnert, T. Stadler, T. G. Vaughan, A. J. Drummond (2016). Phylodynamics with migration: A computational framework to quantify population structure from genomic data. Molecular Biology and Evolution. 33:2102-2116.
+
 P. van Els, R. S. Etiene, L. Herrera-Alsina (2018). Detecting the dependence of diversification on multiple traits from phylogenetic trees and trait data. Systematic Biology. syy057.
 
-S. L. Louca (2019). Modeling state-dependent diversification on large phylogenies. In review.
+S. Louca and M. W. Pennell (2020). A general and efficient algorithm for the likelihood of diversification and discrete-trait evolutionary models. Systematic Biology. 69:545-556.
 }
 
 \seealso{

@@ -12,11 +12,14 @@ fit_sbm_const(trees,
         tip_longitudes, 
         radius,
         phylodistance_matrixes  = NULL,
+        clade_states            = NULL,
         planar_approximation    = FALSE,
         only_basal_tip_pairs    = FALSE,
         only_distant_tip_pairs  = FALSE,
         min_MRCA_time           = 0,
         max_MRCA_age            = Inf,
+        no_state_transitions    = FALSE,
+        only_state              = NULL,
         min_diffusivity         = NULL,
         max_diffusivity         = NULL,
         Nbootstraps             = 0, 
@@ -40,6 +43,10 @@ Strictly positive numeric, specifying the radius of the sphere. For Earth, the m
 \item{phylodistance_matrixes}{
 Numeric matrix, or a list of numeric matrixes, listing phylogenetic distances between tips for each tree. If \code{trees} is a list of trees, then \code{phylodistance_matrixes} should be a list of the same length as \code{trees}, whose n-th element should be a numeric matrix comprising as many rows and columns as there are tips in the n-th tree; the entry \code{phylodistance_matrixes[[n]][i,j]} is the phylogenetic distance between tips i and j in tree n. If \code{trees} is a single tree, then \code{phylodistance_matrixes} can be a single numeric matrix. If \code{NULL} (default), phylogenetic distances between tips are calculated based on the provided trees, otherwise phylogenetic distances are taken from \code{phylodistance_matrixes}; in the latter case the trees are only used for the topology (determining tip pairs for independent contrasts), but not for calculating phylogenetic distances.
 }
+\item{clade_states}{
+Either NULL, or an integer vector of length Ntips+Nnodes, or a list of integer vectors, listing discrete states of every tip and node in the tree. If \code{trees} is a list of trees, then \code{clade_states} should be a list of vectors of the same length as \code{trees}, listing tip and node states for each of the input trees. For example, \code{clade_states[[2]][10]} specifies the state of the 10-th tip or node in the 2nd tree.
+States may be, for example, geographic regions, sub-types, discrete traits etc, and can be used to restrict independent contrasts to tip pairs within the same state (see option \code{no_state_transitions}). 
+}
 \item{planar_approximation}{
 Logical, specifying whether to estimate the diffusivity based on a planar approximation of the SBM model, i.e. by assuming that geographic distances between tips are as if tips are distributed on a 2D cartesian plane. This approximation is only accurate if geographical distances between tips are small compared to the sphere's radius.
 }
@@ -55,6 +62,12 @@ Numeric, specifying the minimum allowed time (distance from root) of the most re
 \item{max_MRCA_age}{
 Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
 }
+\item{no_state_transitions}{
+Logical, specifying whether to omit independent contrasts between tips whose shortest connecting paths include state transitions. If \code{TRUE}, only tips within the same state and with no transitions between them (as specified in \code{clade_states}) are compared. If \code{TRUE}, then \code{clade_states} must be provided.
+}
+\item{only_state}{
+Optional integer, specifying the state in which tip pairs (and their connecting ancestral nodes) must be in order to be considered. If specified, then \code{clade_states} must be provided.
+}
 \item{min_diffusivity}{
 Non-negative numeric, specifying the minimum possible diffusivity. If NULL, this is automatically chosen.
 }
@@ -68,7 +81,7 @@ Non-negative integer, specifying an optional number of parametric bootstraps to 
 Integer, optional number of simulations to perform for creating QQ plots of the theoretically expected distribution of geodistances vs. the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting. If <=0, no QQ plots will be calculated.
 }
 \item{SBM_PD_functor}{
-SBM probability density functor object. Used internally and for debugging purposes. Unless you know what you're doing, you should keep this \code{NULL}.
+SBM probability density functor object. Used internally for efficiency and for debugging purposes, and should be kept at its default value \code{NULL}.
 }
 \item{focal_diffusivities}{
 Optional numeric vector, listing diffusivities of particular interest and for which the log-likelihoods should be returned. This may be used e.g. for diagnostic purposes, e.g. to see how "sharp" the likelihood peak is at the maximum-likelihood estimate.
@@ -131,7 +144,7 @@ Only returned if \code{Nbootstraps>0}. A low consistency (e.g., <0.05) indicates
 Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the fitted model.
 }
 \item{SBM_PD_functor}{
-SBM probability density functor object. Used internally and for debugging purposes.
+SBM probability density functor object. Used internally for efficiency and for debugging purposes.
 }
 }
 
@@ -152,7 +165,8 @@ S. Louca (in review as of 2020). Phylogeographic estimation and simulation of gl
 \seealso{
 \code{\link{simulate_sbm}},
 \code{\link{fit_sbm_parametric}},
-\code{\link{fit_sbm_linear}}
+\code{\link{fit_sbm_linear}},
+\code{\link{fit_sbm_on_grid}}
 }
 
 \examples{

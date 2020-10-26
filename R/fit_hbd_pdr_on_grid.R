@@ -74,7 +74,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 		NG = 1
 	}else{
 		NG = length(age_grid)
-		if((!is.null(guess_PDR)) && (length(guess_PDR)!=1) && (length(guess_PDR)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed PDRs (%d); since an age grid of size %d was provided, you must either provide one or %d PDRs",length(guess_PDR),NG)));
+		if((!is.null(guess_PDR)) && (length(guess_PDR)!=1) && (length(guess_PDR)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed PDRs (%d); since an age grid of size %d was provided, you must either provide one or %d PDRs",length(guess_PDR),NG,NG)));
 		if((length(age_grid)>1) && (age_grid[NG]>oldest_age-1e-5*(age_grid[NG]-age_grid[NG-1]))) age_grid[NG] = max(age_grid[NG],oldest_age); # if age_grid "almost" covers oldest_age (i.e. up to rounding errors), then fix the remaining difference
 		if((length(age_grid)>1) && (age_grid[1]<1e-5*(age_grid[2]-age_grid[1]))) age_grid[1] = min(age_grid[1],0); # if age_grid "almost" covers present-day (i.e. up to rounding errors), then fix the remaining difference
 	}

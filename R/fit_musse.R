@@ -1,6 +1,7 @@
-# Fit MuSSE (Multiple State Speciation Extinction) model for a single evolving trait on a tree, based on the observed states at the tips
+# Fit MuSSE (Multiple State Speciation Extinction) model for a single evolving discrete trait on a tree, based on the observed states at the tips
 #    MuSSE is an extension of the BiSSE model by Maddison (2007), allowing for more than 2 states.
 #    The model can account for tips with unknown state as well as for sampling biases (species are included in the tree non-uniformly) and reveal biases (tips with known state are not uniformly chosen).
+#    This implementation also extends the classical MuSSE model to allow for Poissonian sampling through time, assuming that sampled tips are removed from the pool of extant tips.
 #
 # The function also supports an extension of MuSSE, called Hidden State Speciation and Extinction (HiSSE) model, which distinguishes between latent and observed ("proxy") states. [Beaulieu and Meara, 2016]
 #   Birth and death rates are determined by the latent states, and a transition matrix defines the Markov transition rates between latent states, but only proxy states are known/observed for the tips. 
@@ -17,6 +18,8 @@
 #   FitzJohn et al. (2009). Estimating trait-dependent speciation and extinction rates from incompletely resolved phylogenies. Systematic Biology. 58:595-611
 #   FitzJohn (2012). Diversitree: comparative phylogenetic analyses of diversification in R. Methods in Ecology and Evolution. 3:1084-1092
 #	Beaulieu and Meara (2016). Detecting hidden diversification shifts in models of trait-dependent speciation and extinction. Systematic Biology. 65:583-601
+#	Louca and Pennell (2020). A general and efficient algorithm for the likelihood of diversification and discrete-trait evolutionary models. Systematic Biology. 69:545-556
+#	Kuhnert, Stadler et al. (2016). Phylodynamics with migration: A computational framework to quantify population structure from genomic data. Molecular Biology and Evolution. 33:2102-2116
 #
 # Requirements:
 #   Tree can include multi- and mono-furcations.
@@ -29,8 +32,9 @@ fit_musse = function(	tree,
 						state_names				= NULL,			# optional 1D character vector of size Nstates, specifying a name/description for each state. This does not influence any of the calculations, and is merely used to add human-readable names (rather than integers) to the returned vectors/matrices.
 						tip_pstates				= NULL,			# 1D integer array of size Ntips, listing integers in 1:NPstates, specifying the proxy state at each tip. Can also be NULL. May include NA (unknown tip states).
 						tip_priors 				= NULL, 		# 2D numerical array of either size Ntips x Nstates or size Ntips x NPstates, listing the prior likelihood at each state (or proxy-state) at each tip. Specifically, tip_priors[i,s] is the likelihood of observing the data at tip i, if tip i had state (or proxy-state) s. Can be provided alternatively to tip_pstates.
-						sampling_fractions		= 1,			# optional numerical vector of size NPstates, indicating the sampling fractions (fraction of species included as tips in the tree) conditional upon each species' proxy state. This can be used to incorporate detection biases for species, depending on their proxy state. Can also be NULL or a single number (in which case sampling fractions are assumed to be independent of proxy state).
+						sampling_fractions		= 1,			# optional numerical vector of size NPstates, indicating the present-day sampling fractions (fraction of extant species included as tips in the tree) conditional upon each species' proxy state. This can be used to incorporate detection biases for species, depending on their proxy state. Can also be NULL or a single number (in which case sampling fractions are assumed to be independent of proxy state).
 						reveal_fractions		= 1,			# optional numerical vector of size NPstates, indicating the resolved fractions (fraction of tree-tips with revealed, i.e. non hidden, state) conditional upon each tip's proxy state. Hence, reveal_fractions[s] is the probability that a species with proxy state s will have revealed state, conditional upon being included in the tree. This can be used to incorporate reveal biases for tips, depending on their proxy state. Can also be NULL or a single number (in which case reveal fractions are assumed to be independent of proxy state).
+						sampling_rates			= 0,			# optional numerical vector of size NPstates, indicating the Poissonian lineage sampling rates, conditional upon each species' proxy state. This can be used to account for tips sampled continuously through time rather than at present-day. Can also be a single number (in which case Poissonian sampling rates are assumed to be independent of proxy state). Can also be NULL, in which case Poissonian sampling is assumed to not have occurred.
 						transition_rate_model	= "ARD",		# either "ER" or "SYM" or "ARD" or "SUEDE" or "SRD" or a 2D integer matrix of size Nstates x Nstates mapping entries of the transition matrix to a set of independent transition-rate parameters. The format and interpretation is the same as for index_matrix generated by the function get_transition_index_matrix(..).
 						birth_rate_model		= "ARD",		# either "ER" (equal rates) or "ARD" (all rates different) or an integer vector of length Nstates, mapping birth-rates to a set of indepedent birth-rate parameters (indices 1,2,..). For example, the model vector c(1,2,1) means that the birth-rates lambda1 & lambda3 must be the same, but lambda2 is independent.
 						death_rate_model		= "ARD",		# either "ER" (equal rates) or "ARD" (all rates different) or an integer vector of length Nstates, mapping death-rates to a set of indepedent death-rate parameters (indices 1,2,..). For example, the model vector c(1,2,1) means that the death-rates mu1 & mu3 must be the same, but mu2 is independent.
@@ -59,20 +63,22 @@ fit_musse = function(	tree,
 						D_temporal_resolution	= 100,			# (positive unitless number) relative resolution for interpolating Dmap over time. This is relative to the "typical" time scales at which Dmap varies. So a resolution of 10 means for every typical time scale there will be 10 interpolation points. Typical values are 1-100. A greater resolution increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
 						max_model_runtime		= NULL,			# maximum time (in seconds) to allocate for each evaluation of a model. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 						verbose					= TRUE,			# boolean, specifying whether to print informative messages
+						diagnostics				= FALSE,		# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
 						verbose_prefix			= ""){			# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
-    Ntips 					= length(tree$tip.label);
-    Nnodes 					= tree$Nnode;
-    Nedges 					= nrow(tree$edge);
-	loglikelihood 			= NULL; # value will be calculated as we go
-	ancestral_likelihoods 	= NULL; # values will be calculated as we go
-	return_value_on_failure = list(success=FALSE, Nstates = NULL, loglikelihood=NULL, parameters=NULL);
+    Ntips 					= length(tree$tip.label)
+    Nnodes 					= tree$Nnode
+    Nedges 					= nrow(tree$edge)
+	loglikelihood 			= NULL # value will be calculated as we go
+	ancestral_likelihoods 	= NULL # values will be calculated as we go, if needed
+	return_value_on_failure = list(success=FALSE, Nstates = NULL, loglikelihood=NULL, parameters=NULL)
 	has_sampling_fractions  = ((!is.null(sampling_fractions)) && (length(sampling_fractions)>0))
 	has_reveal_fractions  	= ((!is.null(reveal_fractions)) && (length(reveal_fractions)>1) && (!all(reveal_fractions<=0)) && (length(unique(reveal_fractions))>1))
+	has_sampling_rates  	= ((!is.null(sampling_rates)) && (length(sampling_rates)>0))
 	birth_rate_indices		= get_rate_index_vector(Nstates, birth_rate_model)$index_vector
 	death_rate_indices		= get_rate_index_vector(Nstates, death_rate_model)$index_vector
 	is_hisse_model			= !(is.null(NPstates) || (NPstates==0) || (NPstates==Nstates))
+	root_age 				= get_tree_span(tree)$max_distance
 	if(!is_hisse_model) NPstates = Nstates
-	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age
 			
 	# check validity of input variables, and determine known tips
@@ -114,7 +120,7 @@ fit_musse = function(	tree,
 	if((Nbootstraps>0) && (!is.null(Ntrials_per_bootstrap)) && (Ntrials_per_bootstrap<=0)) stop(sprintf("ERROR: Ntrials_per_bootstrap must be strictly positive, if bootstrapping is requested"))
 	if((!is.null(birth_rates)) && (length(birth_rates)!=1) && (length(birth_rates)!=Nstates)) stop(sprintf("ERROR: Invalid number of birth-rates; got %d, but expected 1 or %d (Nstates)",length(birth_rates),Nstates))
 	if((!is.null(death_rates)) && (length(death_rates)!=1) && (length(death_rates)!=Nstates)) stop(sprintf("ERROR: Invalid number of death-rates; got %d, but expected 1 or %d (Nstates)",length(death_rates),Nstates))
-	if(is.null(max_model_runtime)) max_model_runtime = 0;
+	if(is.null(max_model_runtime)) max_model_runtime = 0
 	if(!is.null(tip_pstates)){
 		if(!is.numeric(tip_pstates)) stop(sprintf("ERROR: tip_pstates must be integers"))
 		if(length(tip_pstates)==0) stop("ERROR: tip_pstates is non-NULL but empty")
@@ -159,7 +165,7 @@ fit_musse = function(	tree,
 	Nstates_per_pstate = sapply(1:NPstates, FUN=function(p) sum(proxy_map==p)) # number of states per proxy-state
 	states_per_pstate  = lapply(1:NPstates, FUN=function(p) which(proxy_map==p)) # states_per_pstate[p] is a 1D vector, listing the states represented by the proxy-state p
 		
-	# pre-process sampling_fractions & reveal_fractions
+	# pre-process sampling_fractions & reveal_fractions & sampling_rates
 	if(!has_sampling_fractions){
 		sampling_fractions = rep(1, times=NPstates) # sampling fractions missing, so assume that the phylogeny is complete
 	}else if(length(sampling_fractions)==1){
@@ -168,10 +174,10 @@ fit_musse = function(	tree,
 		stop(sprintf("ERROR: Expected 1 or %d sampling fractions, but got %d",NPstates,length(sampling_fractions)))
 	}
 	if(has_reveal_fractions){
-		# incorporate reveal fractions into initial conditions
 		if(length(reveal_fractions)!=NPstates) stop(sprintf("ERROR: Expected %d reveal fractions, but got %d",NPstates,length(reveal_fractions)))
 		if(any((Nknown_tips_per_pstate>0) & (reveal_fractions==0))) stop("ERROR: Reveal fractions for some states are zero, despite the presence of tips with that known state")
-		reveal_fractions = reveal_fractions*sum(Nknown_tips_per_pstate[Nknown_tips_per_pstate>0]/reveal_fractions[Nknown_tips_per_pstate>0])/Ntips # rescale reveal fractions to be consistent with the number of known tips in each state within the considered tree
+		# rescale reveal fractions to be consistent with the number of known tips in each state within the considered tree
+		reveal_fractions = reveal_fractions*sum(Nknown_tips_per_pstate[Nknown_tips_per_pstate>0]/reveal_fractions[Nknown_tips_per_pstate>0])/Ntips
 	}else{
 		# reveal fractions missing, so assume tips are revealed at the same probabilities (i.e. regardless of state)
 		if(!is.null(tip_pstates)){
@@ -180,18 +186,70 @@ fit_musse = function(	tree,
 			reveal_fractions = rep(Nknown_priors/Ntips, times=NPstates);
 		}
 	}
+	if(!has_sampling_rates){
+		sampling_rates = rep(0, times=NPstates) # sampling rates missing, so assume that Poissonian sampling did not occur
+	}else if(length(sampling_rates)==1){
+		sampling_rates = rep(sampling_rates[1], times=NPstates); # assume the same sampling rates for all proxy-states
+	}else if(length(sampling_rates)!=NPstates){
+		stop(sprintf("ERROR: Expected 1 or %d sampling rates, but got %d",NPstates,length(sampling_rates)))
+	}
+	if(all(sampling_fractions==0) && all(sampling_rates==0)) return(list(success=FALSE, error="At least one of sampling_fractions[] or sampling_rates[] must contain non-zeros"))
 	
-	# estimate number of extant species per state
-	#   For any given proxy state, the number of tips in the tree with that proxy state is: Nknown_tips_per_pstate[state]/reveal_fractions[state]
-	#   Hence, for any given proxy state, the number of extant species with that proxy state is: Nknown_tips_per_pstate[state]/(reveal_fractions[state]*sampling_fractions[state])
-	Nspecies_per_pstate = Nknown_tips_per_pstate; 
-	Nspecies_per_pstate[Nknown_tips_per_pstate>0] = Nknown_tips_per_pstate[Nknown_tips_per_pstate>0]/(reveal_fractions[Nknown_tips_per_pstate>0]*sampling_fractions[Nknown_tips_per_pstate>0]);
+	# determine Poissonian-sampled tips and extant tips (i.e. sampled at present-day)
+	# also determine number of extant tips per pstate (i.e., omitting Poissonian sampled tips)
+	if(all(sampling_rates==0)){
+		# no Poissonian sampling
+		Psampled_tips 	= integer(0)
+		extant_tips		= seq_len(Ntips)
+		NextantKnown_tips_per_pstate = Nknown_tips_per_pstate
+	}else if(all(sampling_fractions==0)){
+		# no present-day sampling
+		Psampled_tips 	= seq_len(Ntips)
+		extant_tips		= integer(0)
+		NextantKnown_tips_per_pstate = rep(0, times=NPstates)
+	}else{
+		# tips are probably a mix of Poissonian-sampled and present-day-sampled
+		tree_events 	= extract_HBDS_events_from_tree(tree, root_age = root_age, CSA_ages = 0, age_epsilon = root_age/1000)
+		Psampled_tips	= tree_events$concentrated_tips[[1]]
+		extant_tips		= get_complement(Ntips, Psampled_tips)
+		if(verbose) cat(sprintf("%sNote: Found %d Poissonian-sampled tips and %d present-day tips\n",verbose_prefix,length(Psampled_tips),length(extant_tips)))
+		if(!is.null(tip_pstates)){
+			known_extant_tips = get_intersection(Ntips,known_tips,extant_tips)
+			NextantKnown_tips_per_pstate = sapply(1:NPstates, function(p) sum(tip_pstates[known_extant_tips]==p));
+		}else{
+			known_extant_priors = get_intersection(Ntips,known_priors,extant_tips)
+			if(ncol(tip_priors)==NPstates){
+				NextantKnown_tips_per_pstate = colSums(tip_priors[known_extant_priors,]/rowSums(tip_priors[known_extant_priors,]))
+			}else{
+				NextantKnown_tips_per_state  = colSums(tip_priors[known_extant_priors,]/rowSums(tip_priors[known_extant_priors,]))
+				NextantKnown_tips_per_pstate = sapply(1:NPstates, FUN=function(p) sum(NextantKnown_tips_per_state[proxy_map==p]))
+			}
 
-	# calculate overall rarefaction of the tree, i.e. fraction of extant species included in the tree
-	overall_rarefaction = Ntips/sum(Nspecies_per_pstate)	
+		}
+	}
+	
+	
+	# Estimate proportions of species per pstate
+	# Also calculate overall present-day rarefaction of the tree, i.e. fraction of extant species included in the tree
+	if(sum(NextantKnown_tips_per_pstate)>0){
+		# Some tips are extant, i.e. sampled at present-day. Use these to estimate species proportions per pstate
+		#   For any given proxy state, the number of tips in the tree with that proxy state is: NextantKnown_tips_per_pstate[state]/reveal_fractions[state]
+		#   Hence, for any given proxy state, the number of extant species with that proxy state is: NextantKnown_tips_per_pstate[state]/(reveal_fractions[state]*sampling_fractions[state])
+		NextantSpecies_per_pstate = NextantKnown_tips_per_pstate; 
+		NextantSpecies_per_pstate[NextantKnown_tips_per_pstate>0] = NextantKnown_tips_per_pstate[NextantKnown_tips_per_pstate>0]/(reveal_fractions[NextantKnown_tips_per_pstate>0]*sampling_fractions[NextantKnown_tips_per_pstate>0]);
+		overall_rarefaction = length(extant_tips)/sum(NextantSpecies_per_pstate)	
+		species_proportions_per_pstate = NextantSpecies_per_pstate/sum(NextantSpecies_per_pstate)
+	}else{
+		# no extant known tips available, i.e., all known tips are Poissonian-sampled; so use Poisson-sampled known tips instead
+		overall_rarefaction = 1 # no real information available for estimating this, since there's no extant known tips in the tree
+		Nspecies_per_pstate = Nknown_tips_per_pstate; 
+		Nspecies_per_pstate[Nknown_tips_per_pstate>0] = Nknown_tips_per_pstate[Nknown_tips_per_pstate>0]/(reveal_fractions[Nknown_tips_per_pstate>0]*sampling_rates[Nknown_tips_per_pstate>0]);
+		species_proportions_per_pstate = Nspecies_per_pstate/sum(Nspecies_per_pstate)
+	}
+
 	
 	# if some model parameters were passed as NaN or NULL, replace with NAs
-	# also, if some birth/death rates were passed as single scalars, multiply to Nstates
+	# also, if some birth/death/sampling rates were passed as single scalars, multiply to Nstates
 	if((!is.null(birth_rates)) && (length(birth_rates)==1)) birth_rates = rep(birth_rates,Nstates)
 	if((!is.null(death_rates)) && (length(death_rates)==1)) death_rates = rep(death_rates,Nstates)
 	if(!is.null(transition_matrix)) transition_matrix[is.nan(transition_matrix)] = NA
@@ -201,7 +259,7 @@ fit_musse = function(	tree,
 	if(!is.null(death_rates))	death_rates[is.nan(death_rates)] = NA
 	else death_rates = rep(NA, Nstates)
 	
-    # figure out prior distribution for root if needed
+    # figure out probability distribution for root if needed
     if(root_prior[1]=="auto"){
     	if(oldest_age>=(1+1e-10)*root_age){
     		root_prior = "likelihoods"
@@ -215,7 +273,7 @@ fit_musse = function(	tree,
     }else if(root_prior[1]=="empirical"){
     	# if is_hisse_model, then the empirical probability of each proxy-state is subdivided equally among all states represented by that proxy state
     	root_prior_type = "custom"
-		root_prior_probabilities = ((Nspecies_per_pstate/sum(Nspecies_per_pstate))/Nstates_per_pstate)[proxy_map];
+		root_prior_probabilities = (species_proportions_per_pstate/Nstates_per_pstate)[proxy_map];
 	}else if(root_prior[1]=="likelihoods"){
 		# root prior will be set to the computed state-likelihoods at the root, and thus depend on the particular model parameters. 
     	root_prior_type = "likelihoods"
@@ -237,25 +295,52 @@ fit_musse = function(	tree,
 		root_prior_probabilities = root_prior
 	}
 	
-	# define initial conditions for E & D, depending on sampling fractions & reveal fractions
+	# define initial conditions for E & D (tip_priors), depending on sampling fractions & reveal fractions
 	if(is.null(tip_priors)){
-		if(verbose) cat(sprintf("%sPreparing tip priors..\n",verbose_prefix))
+		if(verbose) cat(sprintf("%sPreparing tip priors based on tip pstates..\n",verbose_prefix))
 		tip_priors = matrix(0, nrow=Ntips, ncol=Nstates);
-		if(length(known_tips)>0){
-			# for each known tip i, with proxy-state p=tip_pstates[i], set: tip_priors[i,states_per_pstate[p]] = sampling_fractions[p] * reveal_fractions[p]
-			known_tip_pstates 	  = tip_pstates[known_tips]
-			Nstates_per_known_tip = Nstates_per_pstate[known_tip_pstates]
-			tip_priors[cbind(rep(known_tips,times=Nstates_per_known_tip), unlist(states_per_pstate[known_tip_pstates]))] = rep(sampling_fractions[known_tip_pstates] * reveal_fractions[known_tip_pstates], times=Nstates_per_known_tip)
+		if(Nknown_tips>0){
+			if(length(Psampled_tips)>0){
+				# for each known Psampled tip i, with proxy-state p=tip_pstates[i], set: tip_priors[i,states_per_pstate[p]] = sampling_rates[p] * reveal_fractions[p]
+				known_Psampled_tips				= get_intersection(Ntips,known_tips,Psampled_tips)
+				known_Psampled_tip_pstates 	 	= tip_pstates[known_Psampled_tips]
+				Nstates_per_known_Psampled_tip 	= Nstates_per_pstate[known_Psampled_tip_pstates]
+				tip_priors[cbind(rep(known_Psampled_tips,times=Nstates_per_known_Psampled_tip), unlist(states_per_pstate[known_Psampled_tip_pstates]))] = rep(sampling_rates[known_Psampled_tip_pstates] * reveal_fractions[known_Psampled_tip_pstates], times=Nstates_per_known_Psampled_tip)
+			}
+			if(length(extant_tips)>0){
+				# for each known extant tip i, with proxy-state p=tip_pstates[i], set: tip_priors[i,states_per_pstate[p]] = sampling_fractions[p] * reveal_fractions[p]
+				known_extant_tips				= get_intersection(Ntips,known_tips,extant_tips)
+				known_extant_tip_pstates 	 	= tip_pstates[known_extant_tips]
+				Nstates_per_known_extant_tip 	= Nstates_per_pstate[known_extant_tip_pstates]
+				tip_priors[cbind(rep(known_extant_tips,times=Nstates_per_known_extant_tip), unlist(states_per_pstate[known_extant_tip_pstates]))] = rep(sampling_fractions[known_extant_tip_pstates] * reveal_fractions[known_extant_tip_pstates], times=Nstates_per_known_extant_tip)
+			}
 		}
 		if(length(unknown_tips)>0){
-			likelihood_per_pstate = sampling_fractions*(1-reveal_fractions)
-			tip_priors[unknown_tips,] = matrix(rep(likelihood_per_pstate[proxy_map],times=length(unknown_tips)),nrow=length(unknown_tips),ncol=Nstates,byrow=TRUE)
+			if(length(Psampled_tips)>0){
+				unknown_Psampled_tips 				= get_intersection(Ntips,unknown_tips,Psampled_tips)
+				likelihood_per_pstate 				= sampling_rates*(1-reveal_fractions)
+				tip_priors[unknown_Psampled_tips,] 	= matrix(rep(likelihood_per_pstate[proxy_map],times=length(unknown_Psampled_tips)),nrow=length(unknown_Psampled_tips),ncol=Nstates,byrow=TRUE)
+			}
+			if(length(extant_tips)>0){
+				unknown_extant_tips				 = get_intersection(Ntips,unknown_tips,extant_tips)
+				likelihood_per_pstate 			 = sampling_fractions*(1-reveal_fractions)
+				tip_priors[unknown_extant_tips,] = matrix(rep(likelihood_per_pstate[proxy_map],times=length(unknown_extant_tips)),nrow=length(unknown_extant_tips),ncol=Nstates,byrow=TRUE)
+			}
 		}
 	}else{
 		if(length(unknown_priors)>0){
+			if(verbose) cat(sprintf("%sSetting unspecified priors to default..\n",verbose_prefix))
 			# some tips have unspecified priors, so set to default
-			likelihood_per_pstate = sampling_fractions*(1-reveal_fractions)
-			tip_priors[unknown_priors,] = matrix(rep(likelihood_per_pstate[proxy_map],times=length(unknown_priors)),nrow=length(unknown_priors),ncol=NPstates,byrow=TRUE)	
+			if(length(Psampled_tips)>0){
+				unknown_Psampled_priors					= get_intersection(Ntips,unknown_priors,Psampled_tips)
+				likelihood_per_pstate					= sampling_rates*(1-reveal_fractions)
+				tip_priors[unknown_Psampled_priors,] 	= matrix(rep(likelihood_per_pstate[proxy_map],times=length(unknown_Psampled_priors)),nrow=length(unknown_Psampled_priors),ncol=NPstates,byrow=TRUE)	
+			}
+			if(length(extant_tips)>0){
+				unknown_extant_priors 				= get_intersection(Ntips,unknown_priors,extant_tips)
+				likelihood_per_pstate 				= sampling_fractions*(1-reveal_fractions)
+				tip_priors[unknown_extant_priors,] 	= matrix(rep(likelihood_per_pstate[proxy_map],times=length(unknown_extant_priors)),nrow=length(unknown_extant_priors),ncol=NPstates,byrow=TRUE)	
+			}
 		}
 		if(ncol(tip_priors)==NPstates){
 			# tip_priors are given as Ntips x NPstates, so reformat to make sure they are of dimensions Ntips x Nstates
@@ -291,83 +376,140 @@ fit_musse = function(	tree,
 	if(is.null(first_guess)) first_guess = list();
 	if((!is.null(first_guess$birth_rates)) && (length(first_guess$birth_rates)==1)) first_guess$birth_rates = rep(first_guess$birth_rates,Nstates)
 	if((!is.null(first_guess$death_rates)) && (length(first_guess$death_rates)==1)) first_guess$death_rates = rep(first_guess$death_rates,Nstates)
-	first_guess_compr = compress_musse_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
+	first_guess_compr = compress_musse_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
 	first_guess_compr[!is.na(provided_param_values)] = provided_param_values[!is.na(provided_param_values)] # incorporate fixed values into start values
 	first_guess_compr = pmin(pmax(first_guess_compr, param_mins), param_maxs) # make sure provisionary start params are within bounds
 	first_guess = uncompress_musse_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
-	if(any(is.na(first_guess$birth_rates)) || any(is.na(first_guess$death_rates))){
-		# some birth_rates and/or some death_rates are non-fixed and have unknown start values, so guesstimate by fitting a birth-death model
+	if(all(is.na(first_guess$birth_rates)) || all(is.na(first_guess$death_rates))){
+		# Either all birth_rates and/or all death_rates are non-fixed and have unknown start values, so guesstimate by fitting a birth-death-sampling model
 		if(verbose) cat(sprintf("%sGuesstimating start speciation/extinction rates..\n",verbose_prefix))
-		if(!all(is.na(first_guess$birth_rates))) start_birth_rate_factor = mean(first_guess$birth_rates, na.rm=TRUE)
-		else start_birth_rate_factor = NULL
-		if(!all(is.na(first_guess$death_rates))) start_death_rate_factor = mean(first_guess$death_rates, na.rm=TRUE)
-		else start_death_rate_factor = NULL
-		if(!all(is.na(birth_rates))) birth_rate_factor = mean(birth_rates, na.rm=TRUE)
-		else birth_rate_factor = NULL
-		if(!all(is.na(death_rates))) death_rate_factor = mean(death_rates, na.rm=TRUE)
-		else death_rate_factor = NULL
+		if(!all(is.na(first_guess$birth_rates))) hbds_guess_lambda = mean(first_guess$birth_rates, na.rm=TRUE)
+		else hbds_guess_lambda = NULL
+		if(!all(is.na(first_guess$death_rates))) hbds_guess_mu = mean(first_guess$death_rates, na.rm=TRUE)
+		else hbds_guess_mu = NULL
+		if(!all(is.na(birth_rates))) hbds_fixed_lambda = mean(birth_rates, na.rm=TRUE)
+		else hbds_fixed_lambda = NULL
+		if(!all(is.na(death_rates))) hbds_fixed_mu = mean(death_rates, na.rm=TRUE)
+		else hbds_fixed_mu = NULL
 		
-		fit = fit_tree_model(	tree, 
-								parameters			= list(birth_rate_intercept=0, birth_rate_factor=birth_rate_factor, birth_rate_exponent=1, death_rate_intercept=0, death_rate_factor=death_rate_factor, death_rate_exponent=1, rarefaction=overall_rarefaction, resolution=0),	# UNFINISHED. IF SOME RATES ARE AVAILABLE, PROVIDE THEM
-								first_guess 		= list(birth_rate_factor=start_birth_rate_factor, death_rate_factor=start_death_rate_factor),
-								min_age				= 0,
-								max_age	 			= 0,
-								age_centile			= NULL,
-								Ntrials				= max(1,Ntrials/5),
-								Nthreads			= Nthreads,
-								coalescent			= TRUE,
-								discovery_fraction	= NULL,
-								fit_control			= list(iter.max=optim_max_iterations, rel.tol=optim_rel_tol),
-								min_R2				= 0.5,
-								min_wR2				= 0.5,
-								grid_size			= 100,
-								max_model_runtime	= max_model_runtime,
-								objective			= 'MRD');
-		if(fit$success){
-			# fitting succeeded, so use fitted speciation/extinction parameters
-			first_guess$birth_rates[is.na(first_guess$birth_rates)] = fit$parameters$birth_rate_factor
-			first_guess$death_rates[is.na(first_guess$death_rates)] = fit$parameters$death_rate_factor
+		if(all(sampling_rates==0)){
+			# faster implementation when Poissonian sampling is zero
+			fit = fit_tree_model(	tree, 
+									parameters			= list(birth_rate_intercept=0, birth_rate_factor=hbds_fixed_lambda, birth_rate_exponent=1, death_rate_intercept=0, death_rate_factor=hbds_fixed_mu, death_rate_exponent=1, rarefaction=overall_rarefaction, resolution=0),
+									first_guess 		= list(birth_rate_factor=hbds_guess_lambda, death_rate_factor=hbds_guess_mu),
+									min_age				= 0,
+									max_age	 			= 0,
+									age_centile			= NULL,
+									Ntrials				= max(1,Ntrials/5),
+									Nthreads			= Nthreads,
+									coalescent			= TRUE,
+									discovery_fraction	= NULL,
+									fit_control			= list(iter.max=optim_max_iterations, rel.tol=optim_rel_tol),
+									min_R2				= 0.5,
+									min_wR2				= 0.5,
+									grid_size			= 100,
+									max_model_runtime	= max_model_runtime,
+									objective			= 'MRD');
+			if(fit$success){
+				# fitting succeeded, so use fitted speciation/extinction parameters
+				first_guess$birth_rates[is.na(first_guess$birth_rates)] = fit$parameters$birth_rate_factor
+				first_guess$death_rates[is.na(first_guess$death_rates)] = fit$parameters$death_rate_factor
+			}else{
+				# fitting failed, so use the birth-death-model start params as a last resort (these are probably reasonable by order of magnitude)
+				first_guess$birth_rates[is.na(first_guess$birth_rates)] = fit$start_parameters$birth_rate_factor
+				first_guess$death_rates[is.na(first_guess$death_rates)] = fit$start_parameters$death_rate_factor		
+			}
 		}else{
-			# fitting failed, so use the birth-death-model start params as a last resort (these are probably reasonable by order of magnitude)
-			first_guess$birth_rates[is.na(first_guess$birth_rates)] = fit$start_parameters$birth_rate_factor
-			first_guess$death_rates[is.na(first_guess$death_rates)] = fit$start_parameters$death_rate_factor		
+			fit = fit_hbds_model_on_grid(	tree, 
+											oldest_age				= oldest_age,
+											age_grid				= NULL,	# fit a constant-rates model, i.e. with a single grid point
+											CSA_ages				= 0,
+											guess_lambda			= hbds_guess_lambda,
+											guess_mu				= hbds_guess_mu,
+											fixed_lambda			= hbds_fixed_lambda,
+											fixed_mu				= hbds_fixed_mu,
+											fixed_psi				= mean(sampling_rates),
+											fixed_kappa				= 0,
+											fixed_CSA_probs			= overall_rarefaction,
+											fixed_CSA_kappas		= 0,
+											condition				= "auto",
+											ODE_relative_dt			= 0.001,
+											ODE_relative_dy			= 1e-3,
+											Ntrials					= max(1,Ntrials/5),
+											max_start_attempts		= 10,
+											Nthreads				= Nthreads,
+											max_model_runtime		= max_model_runtime,
+											verbose					= FALSE,
+											diagnostics				= diagnostics,
+											verbose_prefix			= paste0(verbose_prefix,"  "))
+			if(fit$success){
+				# fitting succeeded, so use fitted speciation/extinction parameters
+				first_guess$birth_rates[is.na(first_guess$birth_rates)] = fit$param_fitted$lambda
+				first_guess$death_rates[is.na(first_guess$death_rates)] = fit$param_fitted$mu
+			}else{
+				# fitting failed, so use the birth-death-sampling-model start params as a last resort (these are probably reasonable by order of magnitude)
+				first_guess$birth_rates[is.na(first_guess$birth_rates)] = fit$param_guess$lambda
+				first_guess$death_rates[is.na(first_guess$death_rates)] = fit$param_guess$mu		
+			}
+		}
+	}else{
+		if(any(is.na(first_guess$birth_rates))){
+			# some but not all guess birth rates are specified
+			first_guess$birth_rates[is.na(first_guess$birth_rates)] = mean(first_guess$birth_rates, na.rm=TRUE)
+		}
+		if(any(is.na(first_guess$death_rates))){
+			# some but not all guess death rates are specified
+			first_guess$death_rates[is.na(first_guess$death_rates)] = mean(first_guess$death_rates, na.rm=TRUE)
 		}
 	}
 	if(any(is.na(first_guess$transition_matrix))){
 		# some transition rates are non-fixed and have unknown start values, so guesstimate by fitting an Mk model
-		if(verbose) cat(sprintf("%sGuesstimating start trait transition rates (Q)..\n",verbose_prefix))
-		guessQ = guesstimate_Mk_transition_rates_via_max_parsimony_ASR(tree,tip_states=NULL,tip_priors=tip_priors,Nstates=Nstates)
+		if(verbose) cat(sprintf("%sGuesstimating transition rate scale based on independent contrasts..\n",verbose_prefix))
+		guessQ = guesstimate_Mk_rate_via_independent_contrasts(tree, Nstates=Nstates, tip_states=NULL, tip_priors=tip_priors, allow_ties=TRUE)
 		if(guessQ$success){
-			# max-parsimony guesstimate succeeded
-			first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = guessQ$Q[is.na(first_guess$transition_matrix)]
+			guessQ$Q = matrix(guessQ$rate, nrow=Nstates, ncol=Nstates)
 		}else{
-			# max-parsimony guesstimate failed, so resort to fitting an Mk model
-			fit = hsp_mk_model(	tree, 
-								tip_states				= NULL,
-								Nstates 				= Nstates,
-								tip_priors 				= tip_priors,
-								rate_model 				= transition_rate_model,
-								transition_matrix		= NULL,
-								include_likelihoods 	= FALSE,
-								root_prior 				= (if((root_prior=="flat") || (root_prior=="empirical")) root_prior else "flat"),
-								Ntrials 				= max(1,Ntrials/5),
-								optim_max_iterations	= optim_max_iterations,
-								optim_rel_tol			= optim_rel_tol,
-								store_exponentials 		= FALSE,
-								check_input 			= TRUE,
-								Nthreads 				= Nthreads)
+			if(verbose) cat(sprintf("%s  WARNING: Independent-contrasts guesstimate of Q failed: %s\n",verbose_prefix,guessQ$error))
+		}
+		if(!guessQ$success){
+			if(verbose) cat(sprintf("%sIndependent-contrasts guesstimate of Q failed, so guesstimating via max-parsimony..\n",verbose_prefix))
+			guessQ = guesstimate_Mk_transition_rates_via_max_parsimony_ASR(tree, tip_states=NULL, tip_priors=tip_priors, Nstates=Nstates, transition_costs = "all_equal", allow_ties=TRUE)
+			if((!guessQ$success) && verbose) cat(sprintf("%s  WARNING: Max-parsimony guesstimate of Q failed: %s\n",verbose_prefix,guessQ$error))
+		}
+		if(!guessQ$success){
+			if(verbose) cat(sprintf("%sMax-parsimony guesstimate of Q failed, so fitting Mk model..\n",verbose_prefix))
+			fit = fit_mk(	tree,
+							Nstates					= Nstates,
+							tip_states				= NULL,
+							tip_priors 				= tip_priors,
+							rate_model 				= transition_rate_model,
+							root_prior 				= (if((root_prior=="flat") || (root_prior=="empirical")) root_prior else "flat"),
+							oldest_ages				= oldest_age,
+							Ntrials 				= max(1,Ntrials/5),
+							max_model_runtime		= max_model_runtime,
+							check_input 			= TRUE,
+							Nthreads 				= Nthreads,
+							Nbootstraps				= 0,
+							optim_max_iterations	= optim_max_iterations,
+							optim_rel_tol			= optim_rel_tol,
+							verbose					= FALSE,
+							verbose_prefix			= paste0(verbose_prefix,"  "))
 			if(fit$success){
-				# fitting succeeded, so use fitted transition rates
-				first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = fit$transition_matrix[is.na(first_guess$transition_matrix)]
+				# fitting succeeded
+				guessQ = list(success=TRUE, Q=fit$transition_matrix)
 			}else{
 				# fitting failed, so use a rough guesstimate based on the number of tips
-				first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = Nstates/((if(is.null(tree$edge.length)) 1 else mean(tree$edge.length))*log(Nknown_tips)/log(2.0))
+				guessQ = list(success=TRUE, rate = Nstates/((if(is.null(tree$edge.length)) 1 else mean(tree$edge.length))*log(Nknown_tips)/log(2.0)))
+				guessQ$Q = matrix(guessQ$rate, nrow=Nstates, ncol=Nstates)
 			}
 		}
+		# adopt guesstimated transition rates. Note that the guesstimated Q may not be a fully valid transition rate matrix, for example the rowSums may not be 0
+		first_guess$transition_matrix[is.na(first_guess$transition_matrix)] = guessQ$Q[is.na(first_guess$transition_matrix)]
 		# make sure first-guess transition matrix is a valid transition matrix
-		diag(first_guess$transition_matrix) = -rowSums(first_guess$transition_matrix);
+		diag(first_guess$transition_matrix) = 0
+		diag(first_guess$transition_matrix) = -rowSums(first_guess$transition_matrix)
 	}
-	first_guess_compr = compress_musse_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
+	first_guess_compr = compress_musse_params(first_guess$transition_matrix, first_guess$birth_rates, first_guess$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
 	first_guess_compr = pmin(pmax(first_guess_compr, param_mins), param_maxs) # make sure finalized start params are within bounds
 	first_guess 	  = uncompress_musse_params(first_guess_compr, Nstates, transition_indices, birth_rate_indices, death_rate_indices, state_names)
 	return_value_on_failure$start_parameters = first_guess
@@ -377,8 +519,9 @@ fit_musse = function(	tree,
 
 	if(verbose) cat(sprintf("%sPreparing fitting of full model..\n",verbose_prefix))
 
-	# pre-calculate node ages, used in loglikelihood function
-	node_ages = get_all_node_depths(tree);			
+	# pre-calculate clade ages, used in loglikelihood function
+	clade_ages = root_age - castor::get_all_distances_to_root(tree)
+	node_ages  = clade_ages[(Ntips+1):(Ntips+Nnodes)]
 			
 	# determine typical parameter scales
 	param_scales = lapply(first_guess,function(x) abs(x))
@@ -400,14 +543,14 @@ fit_musse = function(	tree,
 		# all transition rate scales are zero, so set transition rates equal to mean birth-rate
 		param_scales$transition_matrix = matrix(mean(param_scales$birth_rates), nrow=Nstates, ncol=Nstates)
 	}else{
-		# some (but not all) transition rate scales are zero, so determine scale based on mean transition-rate scale
+		# some (but not all) transition rate scales are zero, so determine scale based on mean absolute transition-rate scale
 		param_scales$transition_matrix[param_scales$transition_matrix==0] = 0.1*mean(param_scales$transition_matrix)
 	}
-	param_scales = compress_musse_params(param_scales$transition_matrix, param_scales$birth_rates, param_scales$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices);
-						
+	param_scales = compress_musse_params(param_scales$transition_matrix, param_scales$birth_rates, param_scales$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
+							
 	# define objective function to be minimized (negated log-likelihood)
 	# the input to the objective function must be scaled and free (non-fixed) independent parametes
-	objective_function = function(fparam_values){
+	objective_function = function(fparam_values, trial){
 		# # reverse parameter transformation. fparam_values are shifted with regards to their lower bounds, i.e. the true parameter values are: SQ(fparam_values)+param_mins
 		if(any(is.nan(fparam_values)) || any(is.infinite(fparam_values))) return(if(optim_algorithm == "optim") 1e100 else Inf)
 		fparam_values 	= unscale_params(fparam_values, param_scales[fitted_params], param_mins[fitted_params])
@@ -420,10 +563,11 @@ fit_musse = function(	tree,
 												Nstates							= Nstates,
 												oldest_age						= oldest_age,
 												tree_edge 						= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based,
-												node_ages 						= node_ages,
+												clade_ages 						= clade_ages,
 												transition_rates 				= as.vector(t(param_values$transition_matrix)),	# flatten in row-major format
 												speciation_rates 				= param_values$birth_rates,
 												extinction_rates 				= param_values$death_rates,
+												sampling_rates 					= sampling_rates[proxy_map],
 												initial_D_per_tip 				= as.vector(t(tip_priors)), 		# flatten in row-major format
 												initial_E_per_state				= initial_extinction_probabilities,
 												root_prior_type					= root_prior_type,
@@ -436,8 +580,12 @@ fit_musse = function(	tree,
 												E_value_step					= E_value_step,
 												D_temporal_resolution			= D_temporal_resolution,
 												runtime_out_seconds				= max_model_runtime)
-							}, error = function(e){ list(loglikelihood=NaN, success=FALSE) })
+							}, error = function(e){ list(loglikelihood=NaN, success=FALSE, error="Unknown runtime exception") })
 		loglikelihood = if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) (if(optim_algorithm == "optim") -1e100 else -Inf) else results$loglikelihood
+		if(diagnostics){
+			if(results$success){ cat(sprintf("%s  Trial %d: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,trial,loglikelihood,results$runtime)) }
+			else{ cat(sprintf("%s  Trial %d: Model evaluation failed: %s\n",verbose_prefix,trial,results$error)) }
+		}
 		return(-loglikelihood);
 	}
 
@@ -450,8 +598,8 @@ fit_musse = function(	tree,
 		initial_param_values = if(trial==1) first_guess_compr else get_random_params(defaults=first_guess_compr, lower_bounds=param_mins, upper_bounds=param_maxs, scales=param_scales, orders_of_magnitude=max(1,min(6,log2(10.0)*sqrt(Ntrials))))
 		scaled_initial_param_values = scale_params(initial_param_values,param_scales,param_mins)
 		if(optim_algorithm == "optim"){
-			fit = stats::optim(	scaled_initial_param_values[fitted_params], 
-								objective_function, 
+			fit = stats::optim(	par		= scaled_initial_param_values[fitted_params], 
+								fn		= function(pars){ objective_function(pars, trial) }, 
 								method 	= "L-BFGS-B", 
 								lower 	= scaled_param_mins[fitted_params],
 								upper 	= scaled_param_maxs[fitted_params],
@@ -461,18 +609,18 @@ fit_musse = function(	tree,
 			Niterations		= NA
 			converged 		= (fit$convergence==0)
 		}else if(optim_algorithm == "nlminb"){
-			fit = stats::nlminb(scaled_initial_param_values[fitted_params], 
-								objective_function, 
-								lower 	= scaled_param_mins[fitted_params], 
-								upper 	= scaled_param_maxs[fitted_params],
-								control = list(iter.max = optim_max_iterations, eval.max = optim_max_evaluations, rel.tol = optim_rel_tol))
+			fit = stats::nlminb(start		= scaled_initial_param_values[fitted_params], 
+								objective	= function(pars){ objective_function(pars, trial) }, 
+								lower 		= scaled_param_mins[fitted_params], 
+								upper 		= scaled_param_maxs[fitted_params],
+								control 	= list(iter.max = optim_max_iterations, eval.max = optim_max_evaluations, rel.tol = optim_rel_tol))
 			LL 				= -fit$objective;
 			Nevaluations 	= fit$evaluations[1]
 			Niterations		= fit$iterations
 			converged		= (fit$convergence==0)
 		}else if(optim_algorithm == "subplex"){
 			fit = nloptr::nloptr(	x0 		= scaled_initial_param_values[fitted_params], 
-									eval_f 	= objective_function, 
+									eval_f 	= function(pars){ objective_function(pars, trial) },
 									lb 		= scaled_param_mins[fitted_params], 
 									ub 		= scaled_param_maxs[fitted_params], 
 									opts 	= list(algorithm = "NLOPT_LN_SBPLX", maxeval = optim_max_evaluations, ftol_rel = optim_rel_tol))
@@ -482,7 +630,7 @@ fit_musse = function(	tree,
             converged 		= (fit$status==0)
             fit$par 		= fit$solution
 			#fit = subplex::subplex(par = initial_param_values[fitted_params], 
-			#						fn = objective_function, 
+			#						fn = function(pars){ objective_function(pars, trial) },
 			#						control = list(maxit=optim_max_iterations, reltol = optim_rel_tol, parscale=0.1), 
 			#						hessian = FALSE)
 			#LL 				= -fit$value
@@ -490,6 +638,7 @@ fit_musse = function(	tree,
 			#converged 		= (fit$convergence>=0)
 		}
 		if(is.null(LL)){ LL = NaN; converged = FALSE; }
+		if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
 		return(list(LL=LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit));
 	}
 	
@@ -566,10 +715,11 @@ fit_musse = function(	tree,
 										Nstates							= Nstates,
 										oldest_age						= oldest_age,
 										tree_edge 						= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based,
-										node_ages 						= node_ages,
+										clade_ages 						= clade_ages,
 										transition_rates 				= as.vector(t(best_param_values$transition_matrix)),	# flatten in row-major format
 										speciation_rates 				= best_param_values$birth_rates,
 										extinction_rates 				= best_param_values$death_rates,
+										sampling_rates 					= sampling_rates,
 										initial_D_per_tip 				= as.vector(t(tip_priors)), 		# flatten in row-major format
 										initial_E_per_state				= initial_extinction_probabilities,
 										root_prior_type					= root_prior_type,
@@ -584,9 +734,9 @@ fit_musse = function(	tree,
 										runtime_out_seconds				= max_model_runtime);
 	if(!final$success){
 		return_value_on_failure$error = sprintf("Evaluation at %s failed: %s",point_name,final$error)
-		return(return_value_on_failure);
+		return(return_value_on_failure)
 	}
-	loglikelihood = final$loglikelihood;
+	loglikelihood = final$loglikelihood
 	if(include_ancestral_likelihoods){
 		ancestral_likelihoods = matrix(final$ancestral_likelihoods, ncol=Nstates, byrow=TRUE, dimnames=list(tree$tip.label,NULL)) # unflatten
 		if(oldest_age<root_age) ancestral_likelihoods[node_ages>oldest_age,] = NA; # state likelihoods are not calculated for nodes older than oldest_age
@@ -610,12 +760,14 @@ fit_musse = function(	tree,
 										NPstates 				= NPstates,
 										proxy_map 				= proxy_map,
 										parameters 				= best_param_values,
-										max_tips 				= Ntips/overall_rarefaction,
+										max_extant_tips 		= (if(length(Psampled_tips)<=length(extant_tips)) Ntips/overall_rarefaction else NULL),
+										max_Psampled_tips		= (if(length(Psampled_tips)>length(extant_tips)) length(Psampled_tips) else NULL),
 										sampling_fractions		= sampling_fractions,
 										reveal_fractions		= reveal_fractions,
+										sampling_rates			= sampling_rates,
 										coalescent 				= TRUE,
 										no_full_extinction		= TRUE,	
-										include_labels			= FALSE);
+										include_labels			= FALSE)
 			# fit MuSSE model to simulated tree
 			# use "true" parameters as first_guess
 			fit = fit_musse(tree					= simulation$tree, 
@@ -625,6 +777,7 @@ fit_musse = function(	tree,
 							tip_pstates				= (if(is_hisse_model) simulation$tip_proxy_states else simulation$tip_states),
 							sampling_fractions		= sampling_fractions,
 							reveal_fractions		= reveal_fractions,
+							sampling_rates			= sampling_rates,
 							transition_rate_model	= transition_rate_model,
 							birth_rate_model		= birth_rate_model,
 							death_rate_model		= death_rate_model,
@@ -652,6 +805,7 @@ fit_musse = function(	tree,
 							D_temporal_resolution	= D_temporal_resolution,
 							max_model_runtime		= max_model_runtime,
 							verbose					= verbose,
+							diagnostics				= diagnostics,
 							verbose_prefix			= paste0(verbose_prefix,"    "))
 			if(!fit$success){
 				if(verbose) cat(sprintf("%s  WARNING: Fitting failed for this bootstrap\n",verbose_prefix))
@@ -759,19 +913,19 @@ uncompress_musse_params = function(params, Nstates, transition_indices, birth_ra
 }
 
 
-# return flattened list of model parameter values (transition matrix, birth rates, death rates)
+# return flattened list of model parameter values (transition matrix, birth rates, death rates, sampling rates)
 # matrices are flattened in row-major format
 flatten_musse_params = function(params, Nstates){
 	flattened = c(as.vector(t(params$transition_matrix)), params$birth_rates, params$death_rates)
 	return(flattened)
 }
 
-# return unflattened list of model parameters (transition matrix, birth rates, death rates)
+# return unflattened list of model parameters (transition matrix, birth rates, death rates, sampling rates)
 # this is the reverse of flatten_musse_params(..)
 unflatten_musse_params = function(params_flat, Nstates, state_names){
 	unflattened = list(	transition_matrix 	= matrix(params_flat[1:(Nstates*Nstates)], ncol=Nstates, nrow=Nstates, byrow=TRUE, dimnames=list(state_names,state_names)),
-						birth_rates			= setNames(params_flat[((Nstates*Nstates)+1):((Nstates*Nstates)+Nstates)], state_names),
-						death_rates			= setNames(params_flat[((Nstates*Nstates)+Nstates+1):((Nstates*Nstates)+(2*Nstates))], state_names))
+						birth_rates			= setNames(params_flat[((Nstates*Nstates)+(0*Nstates)+1):((Nstates*Nstates)+(1*Nstates))], state_names),
+						death_rates			= setNames(params_flat[((Nstates*Nstates)+(1*Nstates)+1):((Nstates*Nstates)+(2*Nstates))], state_names))
 	return(unflattened)
 }
 

@@ -1,5 +1,6 @@
 # replace multifurcations with multiple bifurcations in a phylogenetic tree
-# Note that monofurcations are kept
+# Note that monofurcations are kept.
+# All tips and nodes in the input tree retain their original indices, however the returned tree may include additional nodes and edges. Edge indices may change.
 multifurcations_to_bifurcations = function(	tree, 
 											dummy_edge_length	= 0, 
 											new_node_basename	= "node.", 

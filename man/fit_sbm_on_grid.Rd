@@ -1,13 +1,13 @@
-\name{fit_sbm_linear}
-\alias{fit_sbm_linear}
+\name{fit_sbm_on_grid}
+\alias{fit_sbm_on_grid}
 \title{
-Fit a Spherical Brownian Motion model with linearly varying diffusivity on a tree.
+Fit a Spherical Brownian Motion model with piecewise-linear diffusivity on a tree.
 }
 \description{
-Given a rooted phylogenetic tree and geographic coordinates (latitudes & longitudes) for its tips, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012), assuming that the diffusivity varies linearly over time. Estimation is done via maximum-likelihood and using independent contrasts between sister lineages. This function is designed to estimate the diffusivity over time, by fitting two parameters defining the diffusivity as a linear function of time. For fitting more general functional forms see \code{\link{fit_sbm_parametric}}.
+Given a rooted phylogenetic tree and geographic coordinates (latitudes & longitudes) for its tips, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model with time-dependent diffusivity for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012). Estimation is done via maximum-likelihood and using independent contrasts between sister lineages. This function is designed to estimate the diffusivity over time, approximated as a piecewise linear profile, by fitting the diffusivity on a discrete set of time points. The user thus provides a set of time points (\code{time_grid}), and \code{fit_sbm_on_grid} estimates the diffusivity on each time point, while assuming that the diffusivity varies linearly between time points.
 }
 \usage{
-fit_sbm_linear(tree, 
+fit_sbm_on_grid(tree, 
               tip_latitudes,
               tip_longitudes,
               radius,
@@ -19,13 +19,14 @@ fit_sbm_linear(tree,
               max_MRCA_age          = Inf,
               no_state_transitions  = FALSE,
               only_state            = NULL,
-              time1                 = 0,
-              time2                 = NULL,
+              time_grid             = 0,
+              guess_diffusivity     = NULL,
+              min_diffusivity       = NULL,
+              max_diffusivity       = Inf,
               Ntrials               = 1,
               Nthreads              = 1,
               Nbootstraps           = 0,
               Ntrials_per_bootstrap = NULL,
-              Nsignificance         = 0,
               NQQ                   = 0,
               fit_control           = list(),
               SBM_PD_functor        = NULL,
@@ -69,11 +70,17 @@ Logical, specifying whether to omit independent contrasts between tips whose sho
 \item{only_state}{
 Optional integer, specifying the state in which tip pairs (and their connecting ancestral nodes) must be in order to be considered. If specified, then \code{clade_states} must be provided.
 }
-\item{time1}{
-Optional numeric, specifying the first time point at which to estimate the diffusivity. By default this is set to root (i.e., time 0).
+\item{time_grid}{
+Numeric vector, specifying discrete time points (counted since the root) at which the \code{diffusivity} should be fitted; between these time points the diffusivity is assumed to vary linearly. This time grid should be fine enough to sufficiently capture the variation in the diffusivity over time, but must not be too big to avoid overfitting. If \code{NULL} or of size 1, then the diffusivity is assumed to be time-independent. Listed times must be strictly increasing, and should cover at least the full considered time interval (from 0 to the maximum distance of any tip from the root); otherwise, constant extrapolation is used to cover missing times. Note that time is measured in the same units as the tree's edge lengths.
 }
-\item{time2}{
-Optional numeric, specifying the first time point at which to estimate the diffusivity. By default this is set to the present day (i.e., the maximum distance of any tip from the root).
+\item{guess_diffusivity}{
+Optional numeric vector, specifying a first guess for the diffusivity. Either of size 1 (the same first guess for all time points), or of the same length as \code{time_grid} (different first guess for each time point, \code{NA} are replaced with an automatically chosen first guess). If \code{NULL}, the first guess is chosen automatically.
+}
+\item{min_diffusivity}{
+Optional numeric vector, specifying lower bounds for the fitted diffusivity. Either of size 1 (the same lower bound is assumed for all time points), or of the same length as \code{time_grid} (different lower bound for each time point, \code{NA} are replaced with an automatically chosen lower bound). If \code{NULL}, lower bounds are chosen automatically. 
+}
+\item{max_diffusivity}{
+Optional numeric vector, specifying upper bounds for the fitted diffusivity. Either of size 1 (the same upper bound is assumed for all time points), or of the same length as \code{time_grid} (different upper bound for each time point, \code{NA} are replaced with infinity). If \code{NULL}, no upper bound is imposed.
 }
 \item{Ntrials}{
 Integer, specifying the number of independent fitting trials to perform, each starting from a random choice of model parameters. Increasing \code{Ntrials} reduces the risk of reaching a non-global local maximum in the fitting objective.
@@ -87,9 +94,6 @@ Integer, specifying the number of parametric bootstraps to perform for estimatin
 \item{Ntrials_per_bootstrap}{
 Integer, specifying the number of fitting trials to perform for each bootstrap sampling. If \code{NULL}, this is set equal to \code{max(1,Ntrials)}. Decreasing \code{Ntrials_per_bootstrap} will reduce computation time, at the expense of potentially inflating the estimated confidence intervals; in some cases (e.g., for very large trees) this may be useful if fitting takes a long time and confidence intervals are very narrow anyway. Only relevant if \code{Nbootstraps>0}.
 }
-\item{Nsignificance}{
-Integer, specifying the number of simulations to perform under a const-diffusivity model for assessing the statistical significance of the fitted slope. Set to 0 to not calculate the significance of the slope.
-}
 \item{NQQ}{
 Integer, optional number of simulations to perform for creating QQ plots of the theoretically expected distribution of geodistances vs. the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting. If <=0, no QQ plots will be calculated.
 }
@@ -100,7 +104,7 @@ Integer, optional number of simulations to perform for creating QQ plots of the 
 SBM probability density functor object. Used internally for efficiency and for debugging purposes, and should be kept at its default value \code{NULL}.
 }
 \item{verbose}{
-Logical, specifying whether to print progress reports and warnings to the screen.
+Logical, specifying whether to print progress reports and warnings to the screen. Note that errors always cause a return of the function (see return values \code{success} and \code{error}).
 }
 \item{verbose_prefix}{
 Character, specifying the line prefix for printing progress reports to the screen.
@@ -109,13 +113,11 @@ Character, specifying the line prefix for printing progress reports to the scree
 
 
 \details{
-This function is essentially a wrapper for the more general function \code{\link{fit_sbm_parametric}}, with the addition that it can estimate the statistical significance of the fitted linear slope. 
+This function is designed to estimate the diffusivity profile over time, approximated by a piecewise linear function. Fitting is done by maximizing the likelihood of observing the given tip coordinates under the SBM model. Internally, this function uses \code{\link{fit_sbm_parametric}}.
 
-The statistical significance of the slope is the probability that a constant-diffusivity SBM model would generate data that would yield a fitted linear slope equal to or greater than the one fitted to the original data; the significance is estimated by simulating \code{Nsignificance} constant-diffusivity models and then fitting a linear-diffusivity model. The constant diffusivity assumed in these simulations is the maximum-likelihood diffusivity fitted internally using \code{\link{fit_sbm_const}}.
+It is generally advised to provide as much information to the function \code{fit_sbm_on_grid} as possible, including reasonable lower and upper bounds (\code{min_diffusivity} and \code{max_diffusivity}). It is important that the \code{time_grid} is sufficiently fine to capture the variation of the true diffusivity over time, since the likelihood is calculated under the assumption that the diffusivity varies linearly between grid points. However, depending on the size of the tree, the grid size must not be too large, since otherwise overfitting becomes very likely. The \code{time_grid} does not need to be uniform, i.e., you may want to use a finer grid in regions where there's more data (tips) available.
 
-Note that estimation of diffusivity at older times is only possible if the timetree includes extinct tips or tips sampled at older times (e.g., as is often the case in viral phylogenies). If tips are only sampled once at present-day, i.e. the timetree is ultrametric, reliable diffusivity estimates can only be achieved near present times.
-
-For short expected transition distances this function uses the approximation formula by Ghosh et al. (2012) to calculate the probability density of geographical transitions along edges. For longer expected transition distances the function uses a truncated approximation of the series representation of SBM transition densities (Perrin 1928).
+Note that estimation of diffusivity at older times is only possible if the timetree includes extinct tips or tips sampled at older times (e.g., as is often the case in viral phylogenies). If tips are only sampled once at present-day, i.e. the timetree is ultrametric, reliable diffusivity estimates can only be achieved near present times. If the tree is ultrametric, you should consider using \code{\link{fit_sbm_const}} instead.
 
 If \code{edge.length} is missing from one of the input trees, each edge in the tree is assumed to have length 1. The tree may include multifurcations as well as monofurcations, however multifurcations are internally expanded into bifurcations by adding dummy nodes.
 }
@@ -132,20 +134,35 @@ The maximized fitting objective. Currently, only maximum-likelihood estimation i
 \item{objective_name}{
 The name of the objective that was maximized during fitting. Currently, only maximum-likelihood estimation is implemented, and hence this will always be ``loglikelihood''.
 }
-\item{times}{
-Numeric vector of size 2, listing the two time points at which the diffusivity was estimated (\code{time1} and \code{time2}).
+\item{time_grid}{
+Numeric vector, the time-grid on which the diffusivity was fitted.
 }
-\item{diffusivities}{
-Numeric vector of size 2, listing the fitted diffusivity at \code{time1} and \code{time2}. The fitted model assumes that the diffusivity varied linearly between those two time points.
+\item{diffusivity}{
+Numeric vector of size Ngrid (length of \code{time_grid}), listing the fitted diffusivities at the various time-grid points.
 }
 \item{loglikelihood}{
-The log-likelihood of the fitted linear model for the given data.
+The log-likelihood of the fitted model for the given data.
 }
 \item{NFP}{
-Integer, number of fitted (i.e., non-fixed) model parameters. Will always be 2.
+Integer, number of fitted (i.e., non-fixed) model parameters.
 }
 \item{Ncontrasts}{
 Integer, number of independent contrasts used for fitting.
+}
+\item{phylodistances}{
+Numeric vector of length Ncontrasts, listing phylogenetic (patristic) distances of the independent contrasts.
+}
+\item{geodistances}{
+Numeric vector of length Ncontrasts, listing geographic (great circle) distances of the independent contrasts.
+}
+\item{child_times1}{
+Numeric vector of length Ncontrasts, listing the times (distance from root) of the first tip in each independent contrast.
+}
+\item{child_times2}{
+Numeric vector of length Ncontrasts, listing the times (distance from root) of the second tip in each independent contrast.
+}
+\item{MRCA_times}{
+Numeric vector of length Ncontrasts, listing the times (distance from root) of the MRCA of the two tips in each independent contrast.
 }
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
@@ -178,25 +195,25 @@ Integer vector of size \code{Ntrials}, listing the number of iterations needed f
 Integer vector of size \code{Ntrials}, listing the number of likelihood evaluations needed for each fitting trial.
 }
 \item{standard_errors}{
-Numeric vector of size 2, estimated standard error of the fitted diffusivity at the root and present, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+Numeric vector of size NP, estimated standard error of the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{medians}{
+Numeric vector of size NP, median the estimated parameters across parametric bootstraps. Only returned if \code{Nbootstraps>0}.
 }
 \item{CI50lower}{
-Numeric vector of size 2, lower bound of the 50\% confidence interval (25-75\% percentile) for the fitted diffusivity at the root and present, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+Numeric vector of size NP, lower bound of the 50\% confidence interval (25-75\% percentile) for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{CI50upper}{
-Numeric vector of size 2, upper bound of the 50\% confidence interval for the fitted diffusivity at the root and present, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+Numeric vector of size NP, upper bound of the 50\% confidence interval for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{CI95lower}{
-Numeric vector of size 2, lower bound of the 95\% confidence interval (2.5-97.5\% percentile) for the fitted diffusivity at the root and present, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+Numeric vector of size NP, lower bound of the 95\% confidence interval (2.5-97.5\% percentile) for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{CI95upper}{
-Numeric vector of size 2, upper bound of the 95\% confidence interval for the fitted diffusivity at the root and present, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+Numeric vector of size NP, upper bound of the 95\% confidence interval for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{consistency}{
-Numeric between 0 and 1, estimated consistency of the data with the fitted model. See the documentation of \code{\link{fit_sbm_const}} for an explanation. Only returned if \code{Nbootstraps>0}.
-}
-\item{significance}{
-Numeric between 0 and 1, estimate statistical significance of the fitted linear slope. Only returned if \code{Nsignificance>0}.
+Numeric between 0 and 1, estimated consistency of the data with the fitted model. See the documentation of \code{\link{fit_sbm_const}} for an explanation.
 }
 \item{QQplot}{
 Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the fitted model.
@@ -220,45 +237,50 @@ A. Ghosh, J. Samuel, S. Sinha (2012). A Gaussian for diffusion on the sphere. Eu
 \code{\link{simulate_sbm}},
 \code{\link{fit_sbm_const}},
 \code{\link{fit_sbm_parametric}},
-\code{\link{fit_sbm_on_grid}}
+\code{\link{fit_sbm_linear}}
 }
 
 \examples{
 \dontrun{
 # generate a random tree, keeping extinct lineages
 tree_params = list(birth_rate_factor=1, death_rate_factor=0.95)
-tree = generate_random_tree(tree_params,max_tips=1000,coalescent=FALSE)$tree
+tree = generate_random_tree(tree_params,max_tips=2000,coalescent=FALSE)$tree
 
 # calculate max distance of any tip from the root
 max_time = get_tree_span(tree)$max_distance
 
 # simulate time-dependent SBM on the tree
-# we assume that diffusivity varies linearly with time
-# in this example we measure distances in Earth radii
+# using a diffusivity that varies roughly exponentially with time
+# In this example we measure distances in Earth radii
 radius = 1
-diffusivity_functor = function(times, params){
-    return(params[1] + (times/max_time)*(params[2]-params[1]))
-}
-true_params = c(1, 2)
-time_grid   = seq(0,max_time,length.out=2)
-simulation  = simulate_sbm(tree,
-                    radius = radius, 
-                    diffusivity = diffusivity_functor(time_grid,true_params), 
-                    time_grid = time_grid)
+fine_time_grid = seq(from=0, to=max_time, length.out=10)
+fine_D = 0.01 + 0.03*exp(-2*fine_time_grid/max_time)
+simul = simulate_sbm(tree, 
+                     radius     = radius, 
+                     diffusivity= fine_D, 
+                     time_grid  = fine_time_grid)
 
-# fit time-independent SBM to get a rough estimate
-fit_const = fit_sbm_const(tree,simulation$tip_latitudes,simulation$tip_longitudes,radius=radius)
-
-# fit SBM model with linearly varying diffusivity
-fit = fit_sbm_linear(tree,
-            simulation$tip_latitudes,
-            simulation$tip_longitudes,
-            radius = radius,
-            Ntrials = 10)
+# fit time-dependent SBM on a time-grid of size 4
+fit = fit_sbm_on_grid(tree,
+            simul$tip_latitudes,
+            simul$tip_longitudes,
+            radius    = radius,
+            time_grid = seq(from=0,to=max_time,length.out=4),
+            Nthreads  = 3,  # use 3 CPUs
+            Ntrials   = 30) # avoid local optima through multiple trials
     
-# compare fitted & true params
-print(true_params)
-print(fit$diffusivities)
+# visually compare fitted & true params
+plot(x      = fine_time_grid,
+     y      = fine_D,
+     type   = 'l',
+     col    = 'black',
+     xlab   = 'time',
+     ylab   = 'D',
+     ylim   = c(0,max(fine_D)))
+lines(x     = fit$time_grid,
+      y     = fit$diffusivity,
+      type  = 'l',
+      col   = 'blue')
 }
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the

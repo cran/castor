@@ -8,11 +8,14 @@ fit_sbm_parametric = function(	tree,
 								param_guess,						# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
 								diffusivity,						# function handle, mapping time & model_parameters to the current diffusivity, (time,param_values) --> diffusivity. Must be defined for all times in [0:root_age] and for all parameters within the imposed bounds. Must be vectorized in the time argument, i.e. return a vector the same size as time[].
 								time_grid				= NULL,		# numeric vector of size NG>=1, listing times in ascending order, on which the diffusivity functional should be evaluated. This time grid must be fine enough to capture the possible variation in diffusivity() over time. If NULL or of length 1, then the diffusivity is assumed to be time-independent. This grid should cover the interval [0,root_age]; otherwise the diffusivity will be extrapolated as a constant where needed.
+								clade_states			= NULL,		# optional, either an integer vector of length Ntips+Nnodes (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), specifying the discrete "state" of each tip and node in each tree. This can be used to limit independent contrasts to tip pairs whose total number of state-transitions (along their shortest path) is zero.
 								planar_approximation	= FALSE,	# logical, specifying whether the estimation formula should be based on a planar approximation of Earth's surface, i.e. geodesic angles are converted to distances and then those are treated as if they were Euclideanon a 2D plane. This approximation substantially increases the speed of computations.
 								only_basal_tip_pairs	= FALSE,	# logical, specifying whether only immediate sister tips should be considered, i.e. tip pairs with at most 2 edges between the two tips
 								only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 								min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
 								max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+								no_state_transitions	= FALSE,	# if TRUE, only tip pairs without state transitions along their shortest paths are considered. In particular, only tips in the same state are considered. Requires that clade_states[] is provided.
+								only_state				= NULL,		# optional integer, specifying the state in which tip pairs (and their connecting ancestors) must be in order to be considered. Requires that clade_states[] is provided.
 								param_min				= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
 								param_max				= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
 								param_scale				= NULL,		# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
@@ -27,23 +30,28 @@ fit_sbm_parametric = function(	tree,
 								focal_param_values		= NULL,		# optional 2D numeric matrix with NP columns and an arbitrary number of rows, specifying parameter combinations of particular interest for which the loglikelihood should be calculated for. Can be used e.g. to explore the shape of the loglikelihood function.
 								verbose					= FALSE,	# boolean, specifying whether to print informative messages
 								verbose_prefix			= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
+	Ntips = length(tree$tip.label)
 	# basic input error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
 	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
-	root_age = get_tree_span(tree)$max_distance
+	root_age 			= get_tree_span(tree)$max_distance
 	max_start_attempts 	= max(1,max_start_attempts)
 	Ntrials 			= max(1,Ntrials)
 	Nthreads 			= max(1,Nthreads)
-	if(min_MRCA_time<0) min_MRCA_time = 0
 	if((!is.null(time_grid)) && (time_grid[1]>tail(time_grid,1))) time_grid = rev(time_grid); # avoid common errors where time_grid is in reverse order
 	Ntrials = pmax(1,Ntrials)
 	if(is.null(time_grid)) time_grid = 0;
-	if((class(tip_latitudes)=="list") && (length(tip_latitudes)==length(tree$tip.label))){
+	if(("list" %in% class(tip_latitudes)) && (length(tip_latitudes)==Ntips)){
 		tip_latitudes = unlist(tip_latitudes)
 	}
-	if((class(tip_latitudes)=="list") && (length(tip_longitudes)==length(tree$tip.label))){
+	if(("list" %in% class(tip_latitudes)) && (length(tip_longitudes)==Ntips)){
 		tip_longitudes = unlist(tip_longitudes)
 	}
+	if((!is.null(clade_states)) && ("list" %in% class(clade_states)) && (length(clade_states)==Ntips+tree$Nnode)){
+		clade_states = unlist(clade_states)
+	}
+	if((!is.null(only_state)) && is.null(clade_states)) return(list(success=FALSE, error="Missing clade_states[], needed when only_state is specified"))
+	if(no_state_transitions && is.null(clade_states)) return(list(success=FALSE, error="Missing clade_states[], needed when no_state_transitions=TRUE"))
 	if(is.null(Nbootstraps) || is.na(Nbootstraps) || (Nbootstraps<0)) Nbootstraps = 0;
 	
 	# sanitize input params (reformat if needed)
@@ -71,54 +79,20 @@ fit_sbm_parametric = function(	tree,
 	# EXTRACT INDEPENDENT CONTRASTS FOR FITTING
 	
 	if(verbose) cat(sprintf("%sExtracting independent contrasts from tree..\n",verbose_prefix))
-
-	# make sure tree does not have multifurcations
-	tree = multifurcations_to_bifurcations(tree)$tree
-		
-	# extract independent pairs of sister tips
-	tip_pairs = extract_independent_sister_tips(tree)
-	if(only_basal_tip_pairs){
-		# calculate number of nodes between tip pairs
-		edge_counts = get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], as_edge_counts=TRUE, check_input=FALSE)
-		# only keep tip pairs with at most 2 edges connecting them
-		keep_pairs 	= which(edge_counts<=2)
-		tip_pairs 	= tip_pairs[keep_pairs,,drop=FALSE]
-	}
-	
-	# calculate MRCAs
-	MRCAs = get_pairwise_mrcas(tree, tip_pairs[,1], tip_pairs[,2], check_input=FALSE)
-	
-	# calculate clade times
-	clade_times = castor::get_all_distances_to_root(tree)
-	
-	# filter tip pairs if needed
-	if((min_MRCA_time>0) || (max_MRCA_age<Inf)){
-		tree_span 	= max(clade_times)
-		keep_pairs	= which((clade_times[MRCAs]>=min_MRCA_time) & (tree_span-clade_times[MRCAs]<=max_MRCA_age))
-		tip_pairs	= tip_pairs[keep_pairs,,drop=FALSE]
-		MRCAs		= MRCAs[keep_pairs]
-	}
-	if(nrow(tip_pairs)==0) return(list(success=FALSE, error="No valid tip pairs left for extracting independent contrasts"))
-		
-	# calculate phylogenetic divergences and geodesic distances between sister tips
-	phylodistances 	= get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], check_input=FALSE)
-	geodistances 	= radius * sapply(1:nrow(tip_pairs), FUN=function(p) geodesic_angle(tip_latitudes[tip_pairs[p,1]],tip_longitudes[tip_pairs[p,1]],tip_latitudes[tip_pairs[p,2]],tip_longitudes[tip_pairs[p,2]]))
-
-	# omit tip pairs with zero phylogenetic distance, because in that case the likelihood density is pathological
-	# also omit tip pairs located at the same geographic location, if requested
-	keep_pair	 	= (phylodistances>0)
-	if(only_distant_tip_pairs) keep_pair = keep_pair & (geodistances>0)
-	tip_pairs		= tip_pairs[keep_pair,,drop=FALSE]
-	MRCAs			= MRCAs[keep_pair]
-	phylodistances 	= phylodistances[keep_pair]
-	geodistances 	= geodistances[keep_pair]
-	NC 				= length(phylodistances)
-	if(NC==0) return(list(success=FALSE, error="No valid tip pairs left for extracting independent contrasts"))
-
-	# determine MRCA and tip times
-	MRCA_times = clade_times[MRCAs]
-	tip_times1 = clade_times[tip_pairs[,1]]
-	tip_times2 = clade_times[tip_pairs[,2]]
+	ICs = get_SBM_independent_contrasts(tree					= tree,
+										tip_latitudes			= tip_latitudes,
+										tip_longitudes			= tip_longitudes,
+										radius					= radius,
+										clade_states			= clade_states,
+										planar_approximation	= planar_approximation,
+										only_basal_tip_pairs	= only_basal_tip_pairs,
+										only_distant_tip_pairs	= only_distant_tip_pairs,
+										min_MRCA_time			= min_MRCA_time,
+										max_MRCA_age			= max_MRCA_age,
+										no_state_transitions	= no_state_transitions,
+										only_state				= only_state)
+	if(!ICs$success) return(list(success=FALSE, error=ICs$error))
+	NC = ICs$NC
 
 	################################
 	# FITTING
@@ -126,7 +100,7 @@ fit_sbm_parametric = function(	tree,
 	# pre-calculate SBM probability density functor for efficiency
 	if(is.null(SBM_PD_functor)){
 		if(verbose) cat(sprintf("%sPre-computing SBM probability density functor..\n",verbose_prefix))
-		SBM_PD_functor = SBM_get_SBM_PD_functor_CPP(max_error = 1e-7, max_Legendre_terms = 200)
+		SBM_PD_functor = SBM_get_SBM_PD_functor_CPP(max_error = 1e-8, max_Legendre_terms = 200)
 	}
 	
 	# objective function: negated log-likelihood
@@ -146,10 +120,10 @@ fit_sbm_parametric = function(	tree,
 			input_diffusivities	= diffusivities
 		}
 		results = TSBM_LL_of_transitions_CPP(	radius			= radius,
-												MRCA_times		= MRCA_times,
-												child_times1	= tip_times1,
-												child_times2	= tip_times2,
-												distances		= geodistances,
+												MRCA_times		= ICs$MRCA_times,
+												child_times1	= ICs$child_times1,
+												child_times2	= ICs$child_times2,
+												distances		= ICs$geodistances,
 												time_grid		= input_time_grid,
 												diffusivities	= input_diffusivities,
 												splines_degree	= 1,
@@ -265,11 +239,13 @@ fit_sbm_parametric = function(	tree,
 										param_values			= param_values,
 										diffusivity				= diffusivity,
 										time_grid				= time_grid,
+										clade_states			= clade_states,
 										planar_approximation	= planar_approximation,
 										only_basal_tip_pairs	= only_basal_tip_pairs,
 										only_distant_tip_pairs	= only_distant_tip_pairs,
 										min_MRCA_time			= min_MRCA_time,
 										max_MRCA_age			= max_MRCA_age,
+										no_state_transitions	= no_state_transitions,
 										param_guess				= param_guess,
 										param_min				= param_min,
 										param_max				= param_max,
@@ -311,10 +287,10 @@ fit_sbm_parametric = function(	tree,
 		for(q in 1:NQQ){
 			sim = castor::simulate_sbm(	tree = tree, radius = radius, diffusivity = diffusivity(time_grid, fitted_param_values), time_grid = time_grid, splines_degree = 1, root_latitude = NULL, root_longitude = NULL)
 			if(!sim$success) return(list(success=FALSE, error=sprintf("Calculation of QQ failed at simulation %d: Could not simulate SBM for the fitted model: %s",q,sim$error), param_fitted=fitted_param_values, loglikelihood=loglikelihood, NFP=NFP, Ncontrasts=NC));
-			sim_geodistances[(q-1)*NC + c(1:NC)] = radius * geodesic_angles(sim$tip_latitudes[tip_pairs[,1]],sim$tip_longitudes[tip_pairs[,1]],sim$tip_latitudes[tip_pairs[,2]],sim$tip_longitudes[tip_pairs[,2]])
+			sim_geodistances[(q-1)*NC + c(1:NC)] = radius * geodesic_angles(sim$tip_latitudes[ICs$tip_pairs[,1]],sim$tip_longitudes[ICs$tip_pairs[,1]],sim$tip_latitudes[ICs$tip_pairs[,2]],sim$tip_longitudes[ICs$tip_pairs[,2]])
 		}
 		probs  = c(1:NC)/NC
-		QQplot = cbind(quantile(geodistances, probs=probs, na.rm=TRUE, type=8), quantile(sim_geodistances, probs=probs, na.rm=TRUE, type=8))
+		QQplot = cbind(quantile(ICs$geodistances, probs=probs, na.rm=TRUE, type=8), quantile(sim_geodistances, probs=probs, na.rm=TRUE, type=8))
 	}
 	
 	####################################
@@ -327,8 +303,11 @@ fit_sbm_parametric = function(	tree,
 				loglikelihood			= loglikelihood,
 				NFP						= NFP,
 				Ncontrasts				= NC,
-				phylodistances			= phylodistances,
-				geodistances			= geodistances,
+				phylodistances			= ICs$phylodistances,
+				geodistances			= ICs$geodistances,
+				child_times1			= ICs$child_times1,
+				child_times2			= ICs$child_times2,
+				MRCA_times				= ICs$MRCA_times,
 				AIC						= 2*NFP - 2*loglikelihood,
 				BIC						= log(NC)*NFP - 2*loglikelihood,
 				converged				= fits[[best]]$converged,
@@ -348,7 +327,8 @@ fit_sbm_parametric = function(	tree,
 				CI95lower				= (if(Nbootstraps>0) setNames(CI95lower, param_names) else NULL),
 				CI95upper				= (if(Nbootstraps>0) setNames(CI95upper, param_names) else NULL),
 				consistency				= (if(Nbootstraps>0) consistency else NULL),
-				QQplot					= (if(NQQ>0) QQplot else NULL)))
+				QQplot					= (if(NQQ>0) QQplot else NULL),
+				SBM_PD_functor			= SBM_PD_functor))
 
 }
 

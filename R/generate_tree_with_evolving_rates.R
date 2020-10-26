@@ -10,11 +10,9 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 											 max_time_eq			= NULL,
 											 coalescent 			= TRUE,
 											 as_generations			= FALSE,	# if FALSE, then edge lengths correspond to time. If TRUE, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
-											 Nsplits				= 2,	 	# number of children generated at each diversification event. If set to 2, a bifurcating tree is generated. If >2, the tree will be multifurcating.
 											 tip_basename			= "",		# basename for tips (e.g. "tip."). 
 											 node_basename			= NULL,		# basename for nodes (e.g. "node."). If NULL, then nodes will not have any labels.
-											 include_birth_times	= FALSE,
-											 include_death_times	= FALSE,
+											 include_event_times	= FALSE,
 											 include_rates			= FALSE){
 	if(is.null(max_tips) && is.null(max_time) && is.null(max_time_eq)) stop("ERROR: At least one of max_tips and/or max_time and/or max_time_eq must be non-NULL")
 	discrete_state_model = (rate_model=="Mk")
@@ -73,13 +71,14 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													root_birth_rate_pc			= parameters$root_birth_rate_pc,
 													root_death_rate_pc			= parameters$root_death_rate_pc,
 													coalescent					= coalescent,
-													Nsplits						= Nsplits,
+													Nsplits						= 2,
 													as_generations				= as_generations,
-													include_birth_times			= include_birth_times,
-													include_death_times			= include_death_times,
+													include_event_times			= include_event_times,
 													include_rates				= include_rates);
 	}else{
 		results = generate_random_tree_Mk_rates_CPP(max_tips					= (if(is.null(max_tips)) -1 else max_tips),
+													max_extant_tips				= -1,
+													max_sampled_tips			= -1,
 													max_time					= (if(is.null(max_time)) -1 else max_time),
 													max_time_since_equilibrium	= (if(is.null(max_time_eq)) -1 else max_time_eq),
 													max_events					= -1,
@@ -87,18 +86,19 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													start_state					= max(1,min(parameters$Nstates, parameters$start_state)) - 1,
 													state_birth_rates			= parameters$state_birth_rates, 
 													state_death_rates			= parameters$state_death_rates,
+													state_sampling_rates		= rep(0,times=parameters$Nstates),
 													transition_matrix_A			= as.vector(t(parameters$transition_matrix)), # flatten in row-major format
 													transition_matrix_C			= numeric(), # no cladogenic transitions included in this model
-													coalescent					= coalescent,
-													Nsplits						= Nsplits,
 													as_generations				= as_generations,
 													no_full_extinction			= TRUE,
-													include_birth_times			= include_birth_times,
-													include_death_times			= include_death_times,
+													include_extant				= TRUE,
+													include_extinct				= (!coalescent),
+													include_event_times			= include_event_times,
 													include_rates				= include_rates);
 	
 	}
 	if(!results$success) return(list(success=FALSE, error=results$error)); # something went wrong
+	results	= flatten_list_first_level(results) # flatten 1st-level list structure
 	Ntips	= results$Ntips
 	Nnodes 	= results$Nnodes
 	tree = list(Nnode 		= Nnodes,
@@ -107,8 +107,12 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 				edge 		= matrix(results$tree_edge,ncol=2,byrow=TRUE) + 1L,
 				edge.length = results$edge_length,
 				root 		= results$root+1L)
-	class(tree) = "phylo";
-	attr(tree,"order") = "none";
+	class(tree) = "phylo"
+	attr(tree,"order") = "none"
+	clade_states = results$clade_states
+	root_time = results$root_time
+	birth_rates_pc = results$birth_rates_pc
+	death_rates_pc = results$death_rates_pc
 	
 	
 	# rarefy if needed
@@ -122,31 +126,31 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		rarefaction = castor::get_subtree_with_tips(tree, only_tips=keep_tips, omit_tips=FALSE, collapse_monofurcations=TRUE)
 		tree 		= rarefaction$subtree
 		Nrarefied 	= Ntips - length(tree$tip.label)
-		results$root_time = results$root_time + rarefaction$root_shift; # update root time, in case root has changed
+		root_time = root_time + rarefaction$root_shift; # update root time, in case root has changed
 		if(include_rates){
-			results$birth_rates_pc	= c(results$birth_rates_pc[rarefaction$new2old_tip],results$birth_rates_pc[Ntips+rarefaction$new2old_node])
-			results$death_rates_pc	= c(results$death_rates_pc[rarefaction$new2old_tip],results$death_rates_pc[Ntips+rarefaction$new2old_node])
+			birth_rates_pc	= c(birth_rates_pc[rarefaction$new2old_tip],birth_rates_pc[Ntips+rarefaction$new2old_node])
+			death_rates_pc	= c(death_rates_pc[rarefaction$new2old_tip],death_rates_pc[Ntips+rarefaction$new2old_node])
 		}
 		Ntips 	= length(tree$tip.label)
-		Nnodes 	= results$Nnodes
-		if(!is.null(results$clade_states)) results$clade_states = results$clade_states[rarefaction$new2old_tip]
+		Nnodes 	= tree$Nnode
+		if(!is.null(clade_states)) clade_states = clade_states[rarefaction$new2old_tip]
 	}
 	
 	return(list(success				= TRUE,
 				tree				= tree,
-				root_time			= results$root_time,
+				root_time			= root_time,
 				final_time			= results$final_time,
 				equilibrium_time	= results$equilibrium_time,
 				Nbirths		 		= sum(results$Nbirths),
 				Ndeaths				= sum(results$Ndeaths),
 				Nrarefied			= Nrarefied, # number of tips removed via rarefaction at the end
-				states				= (if(is.null(results$clade_states) || (!discrete_state_model)) NULL else results$clade_states+1L), # only relevant for discrete-state rate models
+				states				= (if(is.null(clade_states) || (!discrete_state_model)) NULL else clade_states+1L), # only relevant for discrete-state rate models
 				start_state			= (if(discrete_state_model) parameters$start_state else NULL), # only relevant for discrete-state rate models
 				root_birth_rate_pc	= (if(discrete_state_model) NULL else parameters$root_birth_rate_pc),
 				root_death_rate_pc	= (if(discrete_state_model) NULL else parameters$root_death_rate_pc),
-				birth_times			= (if(include_birth_times) results$birth_times else NULL),
-				death_times			= (if(include_death_times) results$death_times else NULL),
-				birth_rates_pc		= (if(include_rates) results$birth_rates_pc else NULL),
-				death_rates_pc		= (if(include_rates) results$death_rates_pc else NULL)));
+				birth_times			= (if(include_event_times) results$birth_times else NULL),
+				death_times			= (if(include_event_times) results$death_times else NULL),
+				birth_rates_pc		= (if(include_rates) birth_rates_pc else NULL),
+				death_rates_pc		= (if(include_rates) death_rates_pc else NULL)));
 	
 }

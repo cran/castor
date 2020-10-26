@@ -13,24 +13,31 @@ fit_mk( trees,
         tip_priors              = NULL,
         rate_model              = "ER",
         root_prior              = "auto",
+        oldest_ages             = NULL,
+        guess_transition_matrix = NULL,
         Ntrials                 = 1,
         max_model_runtime       = NULL,
         optim_algorithm         = "nlminb",
         optim_max_iterations    = 200,
         optim_rel_tol           = 1e-8,
         check_input             = TRUE,
-        Nthreads                = 1)
+        Nthreads                = 1,
+        Nbootstraps             = 0,	
+        Ntrials_per_bootstrap   = NULL,
+        verbose                 = FALSE,
+        verbose_prefix          = "")
+        
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
 \item{trees}{
-Either a single phylogenetic tree of class "phylo", or a list of phylogenetic trees. Edge lengths should correspond to (or be interpretable analogous) to time.
+Either a single phylogenetic tree of class "phylo", or a list of phylogenetic trees. Edge lengths should correspond (or be analogous) to time. The trees don't need to be ultrametric.
 }
 \item{Nstates}{
 Integer, specifying the number of possible discrete states that the trait can have.
 }
 \item{tip_states}{
-Either an integer vector of size Ntips (only permitted if trees[] is a single tree) or a list containing Ntrees such integer vectors (if trees[] is a list of trees), listing the state of each tip in each tree. Note that tip_states cannot include NAs or NaNs; if the states of some tips are uncertain, you should use the option \code{tip_priors} instead. Can also be \code{NULL}, in which case tip_priors must be provided.
+Either an integer vector of size Ntips (only permitted if trees[] is a single tree) or a list containing Ntrees such integer vectors (if trees[] is a list of trees), listing the state of each tip in each tree. Note that tip_states cannot include NAs or NaNs; if the states of some tips are uncertain, you should use the option \code{tip_priors} instead. Can also be \code{NULL}, in which case \code{tip_priors} must be provided.
 }
 \item{tip_priors}{
 Either a numeric matrix of size Ntips x Nstates (only permitted if trees[] is a single tree), or a list containing Ntrees such matrixes (if trees[] is a list of trees), listing the likelihood of each state at each tip in each tree. Can also be \code{NULL}, in which case \code{tip_states} must be provided. Hence, \code{tip_priors[t][i,s]} is the likelihood of the observed state of tip i in tree t, if the tip's true state was in state s. For example, if you know for certain that a tip is in state k, then set \code{tip_priors[t][i,s]=1} for s=k and \code{tip_priors[t][i,s]=0} for all other s.
@@ -41,11 +48,17 @@ Rate model to be used for the transition rate matrix. Can be "ER" (all rates equ
 \item{root_prior}{
 Prior probability distribution of the root's states, used to calculate the model's overall likelihood from the root's marginal ancestral state likelihoods. Can be "\code{flat}" (all states equal), "\code{empirical}" (empirical probability distribution of states across the tree's tips), "\code{stationary}" (stationary probability distribution of the transition matrix), "\code{likelihoods}" (use the root's state likelihoods as prior), "\code{max_likelihood}" (put all weight onto the state with maximum likelihood) or ``\code{auto}'' (will be chosen automatically based on some internal logic). If "\code{stationary}" and \code{transition_matrix==NULL}, then a transition matrix is first fitted using a flat root prior, and then used to calculate the stationary distribution. \code{root_prior} can also be a non-negative numeric vector of size Nstates and with total sum equal to 1.
 }
-\item{max_model_runtime}{
-Optional positive numeric, specifying the maximum time (in seconds) allowed for a single evaluation of the likelihood function. If a specific Mk model takes longer than this threshold to evaluate, then its likelihood is set to -Inf. This option can be used to avoid badly parameterized models during fitting and can thus reduce fitting time. If NULL or <=0, this option is ignored.
+\item{oldest_ages}{
+Optional numeric or numeric vector of size Ntrees, specifying the oldest age (time before present) for each tree to consider when fitting the Mk model. If \code{NULL}, the entire trees are considered from the present all the way to their root. If non-\code{NULL}, then each tree is ``cut'' at the corresponding oldest age, yielding multiple subtrees, each of which is assumed to be an independent realization of the Mk process. If \code{oldest_ages} is a single numeric, then all trees are cut at the same oldest age. This option may be useful if temporal variation is suspected in the Mk rates, and only data near the present are to be used for fitting to avoid violating the assumptions of a constant-rates Mk model.
+}
+\item{guess_transition_matrix}{
+Optional 2D numeric matrix, specifying a reasonable first guess for the transition rate matrix. May contain \code{NA}. May also be \code{NULL}, in which case a reasonable first guess is automatically generated.
 }
 \item{Ntrials}{
 Number of trials (starting points) for fitting the transition rate matrix. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.
+}
+\item{max_model_runtime}{
+Optional positive numeric, specifying the maximum time (in seconds) allowed for a single evaluation of the likelihood function. If a specific Mk model takes longer than this threshold to evaluate, then its likelihood is set to -Inf. This option can be used to avoid badly parameterized models during fitting and can thus reduce fitting time. If NULL or <=0, this option is ignored.
 }
 \item{optim_algorithm}{
 Either "optim" or "nlminb", specifying which optimization algorithm to use for maximum-likelihood estimation of the transition matrix.
@@ -61,6 +74,18 @@ Logical, specifying whether to perform some basic checks on the validity of the 
 }
 \item{Nthreads}{
 Number of parallel threads to use for running multiple fitting trials simultaneously. This only makes sense if your computer has multiple cores/CPUs and if \code{Ntrials>1}. This option is ignored on Windows, because Windows does not support forking.
+}
+\item{Nbootstraps}{
+Integer, specifying the number of parametric bootstraps to perform for estimating standard errors and confidence intervals of estimated rate parameters. Set to 0 for no bootstrapping.
+}
+\item{Ntrials_per_bootstrap}{
+Integer, specifying the number of fitting trials to perform for each bootstrap sampling. If \code{NULL}, this is set equal to \code{max(1,Ntrials)}. Decreasing \code{Ntrials_per_bootstrap} will reduce computation time, at the expense of potentially inflating the estimated confidence intervals; in some cases (e.g., for very large trees) this may be useful if fitting takes a long time and confidence intervals are very narrow anyway. Only relevant if \code{Nbootstraps>0}.
+}
+\item{verbose}{
+Logical, specifying whether to print progress reports and warnings to the screen.
+}
+\item{verbose_prefix}{
+Character, specifying the line prefix for printing progress reports to the screen.
 }
 }
 
@@ -102,6 +127,24 @@ Integer, the number of evaluations of the likelihood function required to reach 
 }
 \item{converged}{
 Logical, indicating whether the fitting algorithm converged. Note that \code{fit_Mk} may return successfully even if convergence was not achieved; if this happens, the fitted transition matrix may not be reasonable. In that case it is recommended to change the optimization options, for example increasing \code{optim_max_iterations}.
+}
+\item{guess_rate}{
+Numeric, the initial guess used for the average transition rate, prior to fitting.
+}
+\item{standard_errors}{
+Numeric matrix of size Nstates x Nstates, estimated standard error of the fitted transition rates, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI50lower}{
+Numeric matrix of size Nstates x Nstates, lower bounds of the 50\% confidence intervals (25-75\% percentile) for the fitted transition rates, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI50upper}{
+Numeric matrix of size Nstates x Nstates, upper bounds of the 50\% confidence intervals for the fitted transition rates, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI95lower}{
+Numeric matrix of size Nstates x Nstates, lower bounds of the 95\% confidence intervals (2.5-97.5\% percentile) for the fitted transition rates, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI95upper}{
+Numeric matrix of size Nstates x Nstates, upper bounds of the 95\% confidence intervals for the fitted transition rates, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 }
 

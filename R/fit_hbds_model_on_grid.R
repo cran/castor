@@ -50,6 +50,7 @@ fit_hbds_model_on_grid = function(	tree,
 									fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 									focal_param_values		= NULL,		# optional list, each element of which is a named list containing lambda, mu, psi, kappa, CSA_probs and CSA_kappas of particular interest and for which to calculate the loglikelihood. Can be used e.g. to explore the shape of the loglikelihood function.
 									verbose					= FALSE,	# boolean, specifying whether to print informative messages
+									diagnostics				= FALSE,		# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
 									verbose_prefix			= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
 	# basic error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
@@ -188,8 +189,6 @@ fit_hbds_model_on_grid = function(	tree,
 	#################################
 	# PREPARE PARAMETERS TO BE FITTED
 
-
-	
 	# guess reasonable start params, if not provided
 	default_guess_lambda				= (1/root_age) * sum(1/stats::approx(x=LTT$ages, y=LTT$lineages, xout=tree_events$branching_ages, yleft=0, yright=1)$y, na.rm=TRUE) # a good approximation for the pulled speciation rate is 1/root_age * sum_b 1/LTT(i-th branching_age)
 	default_guess_mu 					= default_guess_lambda/10
@@ -311,7 +310,7 @@ fit_hbds_model_on_grid = function(	tree,
 	
 	# objective function: negated log-likelihood
 	# input argument is either the full set of parameters, or the subset of fitted parameters rescaled according to param_scales
-	objective_function = function(fparam_values=NULL, param_values=NULL){
+	objective_function = function(fparam_values, param_values, trial){
 		if(is.null(param_values)){
 			param_values_flat = expand_free_fitted_params(fparam_values);
 			if(any(is.nan(param_values_flat)) || any(is.infinite(param_values_flat))) return(Inf); # catch weird cases where params become NaN
@@ -356,19 +355,21 @@ fit_hbds_model_on_grid = function(	tree,
 													relative_ODE_step				= ODE_relative_dt,
 													E_value_step					= ODE_relative_dy,
 													runtime_out_seconds				= max_model_runtime)
-		if(!results$success) return(Inf);
-		LL = results$loglikelihood;
-		if(is.na(LL) || is.nan(LL) || is.infinite(LL)) return(Inf);
-		return(-LL);
+		loglikelihood = if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) -Inf else results$loglikelihood
+		if(diagnostics && (trial>=0)){
+			if(results$success){ cat(sprintf("%s  Trial %d: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,trial,loglikelihood,results$runtime)) }
+			else{ cat(sprintf("%s  Trial %d: Model evaluation failed: %s\n",verbose_prefix,trial,results$error)) }
+		}
+		return(-loglikelihood)
 	}
 	
 	# calculate loglikelihood for initial guess
 	if(Nfree>0){
 		guess_fparam_values = sapply(1:Nfree, FUN = function(frp) guess_param_values_flat[fitted_params[free2fitted[[frp]][1]]])
-		guess_loglikelihood = -objective_function(fparam_values=guess_fparam_values/fparam_scales)
+		guess_loglikelihood = -objective_function(fparam_values=guess_fparam_values/fparam_scales, param_values=NULL, trial=0)
 	}else{
 		guess_fparam_values = numeric(0)
-		guess_loglikelihood = -objective_function(fparam_values=numeric(0))
+		guess_loglikelihood = -objective_function(fparam_values=numeric(0), param_values=NULL, trial=0)
 	}
 	
 	# calculate loglikelihood for focal param values
@@ -377,7 +378,7 @@ fit_hbds_model_on_grid = function(	tree,
 		focal_loglikelihoods = numeric(length(focal_param_values))
 		for(f in 1:length(focal_loglikelihoods)){
 			if(is.null(focal_param_values[[f]]$lambda)) return(list(success=FALSE, error=sprintf("Badly formatted input focal_param_values[%d]: Expected a named list containing lambda, mu, psi, kappa, CSA_probs and CSA_kappas",f)))
-			focal_loglikelihoods[f] = -objective_function(param_values=focal_param_values[[f]])
+			focal_loglikelihoods[f] = -objective_function(fparam_values=NULL, param_values=focal_param_values[[f]], trial=-1)
 		}
 	}else{
 		focal_loglikelihoods = NULL
@@ -403,17 +404,24 @@ fit_hbds_model_on_grid = function(	tree,
 													orders_of_magnitude=4)
 			}
 			# check if start values yield NaN
-			start_objective = objective_function(fparam_values=start_values/fparam_scales);
+			start_objective = objective_function(fparam_values=start_values/fparam_scales, param_values=NULL, trial=trial);
 			Nstart_attempts = Nstart_attempts + 1
 			if(is.finite(start_objective)) break;
 		}
 		# run fit
-		fit = stats::nlminb(start_values/fparam_scales, 
-							objective	= objective_function, 
-							lower		= lower_bounds/fparam_scales, 
-							upper		= upper_bounds/fparam_scales, 
-							control		= fit_control)
-		return(list(objective_value=fit$objective, fparam_values = fit$par, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1], Nstart_attempts=Nstart_attempts, start_objective=start_objective));
+		if(is.finite(start_objective)){
+			fit = stats::nlminb(start_values/fparam_scales, 
+								objective	= function(pars) objective_function(fparam_values=pars, param_values=NULL, trial=trial), 
+								lower		= lower_bounds/fparam_scales, 
+								upper		= upper_bounds/fparam_scales, 
+								control		= fit_control)
+			results = list(objective_value=fit$objective, fparam_values = fit$par, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1], Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
+			if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, Niterations %d, Nevaluations %d, converged = %d\n",verbose_prefix,trial,-results$objective_value, results$Niterations, results$Nevaluations, results$converged))
+		}else{
+			results = list(objective_value=NA, fparam_values = NA, converged=FALSE, Niterations=0, Nevaluations=0, Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
+			if(diagnostics) cat(sprintf("%s  Trial %d: Start objective is non-finite. Skipping trial\n",verbose_prefix,trial))
+		}
+		return(results)
 	}
 	
 	################################
@@ -537,6 +545,7 @@ fit_hbds_model_on_grid = function(	tree,
 											fit_control				= fit_control,
 											focal_param_values		= list(fitted_param_values),
 											verbose					= verbose,
+											diagnostics				= diagnostics,
 											verbose_prefix			= paste0(verbose_prefix,"    "))
 			if(!fit$success){
 				if(verbose) cat(sprintf("%s  WARNING: Fitting failed for this bootstrap: %s\n",verbose_prefix,fit$error))

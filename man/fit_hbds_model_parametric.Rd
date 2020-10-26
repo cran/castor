@@ -36,6 +36,7 @@ fit_hbds_model_parametric(tree,
                           fit_control           = list(),
                           focal_param_values    = NULL,
                           verbose               = FALSE,
+                          diagnostics           = FALSE,
                           verbose_prefix        = "")
 }
 \arguments{
@@ -125,6 +126,9 @@ Optional numeric matrix having NP columns and an arbitrary number of rows, listi
 }
 \item{verbose}{
 Logical, specifying whether to print progress reports and warnings to the screen. Note that errors always cause a return of the function (see return values \code{success} and \code{error}).
+}
+\item{diagnostics}{
+Logical, specifying whether to print detailed information (such as model likelihoods) at every iteration of the fitting routine. For debugging purposes mainly.
 }
 \item{verbose_prefix}{
 Character, specifying the line prefix for printing progress reports to the screen.

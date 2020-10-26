@@ -117,6 +117,12 @@ Numeric vector of size NG, listing the product of the continuous sampling rate a
 \item{Reff}{
 Numeric vector of size NG, listing the effective reproduction ratio (\eqn{R_e=\lambda/(\mu+\psi(1-\kappa))}) at the ages given in \code{ages[]}.
 }
+\item{removal_rate}{
+Numeric vector of size NG, listing the total removal rate (\eqn{\mu+\psi}), also known as ``become uninfectious rate'', at the ages given in \code{ages[]}.
+}
+\item{sampling_proportion}{
+Numeric vector of size NG, listing the instantaneous sampling proportion (\eqn{\psi/(\mu+\psi)}) at the ages given in \code{ages[]}.
+}
 \item{CSA_pulled_probs}{
 Numeric vector of size NG, listing the pulled concentrated sampling probabilities, \eqn{\tilde{\rho}_k=\rho_k/(1-E)}.
 }

@@ -4,7 +4,7 @@
 Fit a time-dependent Spherical Brownian Motion model on a tree.
 }
 \description{
-Given a rooted phylogenetic tree and geographic coordinates (latitudes & longitudes) for its tips, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model with time-dependent diffsivity for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012). Estimation is done via maximum-likelihood and using independent contrasts between sister lineages. This function is designed to estimate the diffusivity over time, by fitting a finite number of parameters defining the diffusivity as a function of time. The user thus provides the general functional form of the diffusivity that depends on time and NP parameters, and \code{fit_sbm_parametric} estimates each of the free parameters.
+Given a rooted phylogenetic tree and geographic coordinates (latitudes & longitudes) for its tips, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model with time-dependent diffusivity for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012). Estimation is done via maximum-likelihood and using independent contrasts between sister lineages. This function is designed to estimate the diffusivity over time, by fitting a finite number of parameters defining the diffusivity as a function of time. The user thus provides the general functional form of the diffusivity that depends on time and NP parameters, and \code{fit_sbm_parametric} estimates each of the free parameters.
 }
 \usage{
 fit_sbm_parametric(tree, 
@@ -15,11 +15,14 @@ fit_sbm_parametric(tree,
               param_guess,
               diffusivity,
               time_grid             = NULL,
+              clade_states          = NULL,
               planar_approximation  = FALSE,
               only_basal_tip_pairs  = FALSE,
               only_distant_tip_pairs= FALSE,
               min_MRCA_time         = 0,
               max_MRCA_age          = Inf,
+              no_state_transitions  = FALSE,
+              only_state            = NULL,
               param_min             = -Inf,
               param_max             = +Inf,
               param_scale           = NULL,
@@ -61,6 +64,9 @@ Function specifying the diffusivity at any given time (time since the root) and 
 Numeric vector, specifying times (counted since the root) at which the \code{diffusivity} function should be evaluated. This time grid must be fine enough to capture the possible variation in the diffusivity over time, within the permissible parameter range. If of size 1, then the diffusivity is assumed to be time-independent.
 Listed times must be strictly increasing, and should cover at least the full considered time interval (from 0 to the maximum distance of any tip from the root); otherwise, constant extrapolation is used to cover missing times. Can also be \code{NULL} or a vector of size 1, in which case the diffusivity is assumed to be time-independent. Note that time is measured in the same units as the tree's edge lengths.
 }
+\item{clade_states}{
+Optional integer vector of length Ntips+Nnodes, listing discrete states of every tip and node in the tree. The order of entries must match the order of tips and nodes in the tree. States may be, for example, geographic regions, sub-types, discrete traits etc, and can be used to restrict independent contrasts to tip pairs within the same state (see option \code{no_state_transitions}).
+}
 \item{planar_approximation}{
 Logical, specifying whether to estimate the diffusivity based on a planar approximation of the SBM model, i.e. by assuming that geographic distances between tips are as if tips are distributed on a 2D cartesian plane. This approximation is only accurate if geographical distances between tips are small compared to the sphere's radius.
 }
@@ -75,6 +81,12 @@ Numeric, specifying the minimum allowed time (distance from root) of the most re
 }
 \item{max_MRCA_age}{
 Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
+}
+\item{no_state_transitions}{
+Logical, specifying whether to omit independent contrasts between tips whose shortest connecting paths include state transitions. If \code{TRUE}, only tips within the same state and with no transitions between them (as specified in \code{clade_states}) are compared.
+}
+\item{only_state}{
+Optional integer, specifying the state in which tip pairs (and their connecting ancestral nodes) must be in order to be considered. If specified, then \code{clade_states} must be provided.
 }
 \item{param_min}{
 Optional numeric vector of size NP, specifying lower bounds for model parameters. If of size 1, the same lower bound is applied to all parameters. Use \code{-Inf} to omit a lower bound for a parameter. If \code{NULL}, no lower bounds are applied. For fixed parameters, lower bounds are ignored.
@@ -107,7 +119,7 @@ Integer, optional number of simulations to perform for creating QQ plots of the 
  Named list containing options for the \code{nlminb} optimization routine, such as \code{iter.max}, \code{eval.max} or \code{rel.tol}. For a complete list of options and default values see the documentation of \code{nlminb} in the \code{stats} package.
 }
 \item{SBM_PD_functor}{
-SBM probability density functor object. Used internally and for debugging purposes, and should be kept at its default value \code{NULL}.
+SBM probability density functor object. Used internally for efficiency and for debugging purposes, and should be kept at its default value \code{NULL}.
 }
 \item{focal_param_values}{
 Optional numeric matrix having NP columns and an arbitrary number of rows, listing combinations of parameter values of particular interest and for which the log-likelihoods should be returned. This may be used e.g. for diagnostic purposes, e.g. to examine the shape of the likelihood function.
@@ -156,6 +168,21 @@ Integer, number of fitted (i.e., non-fixed) model parameters.
 }
 \item{Ncontrasts}{
 Integer, number of independent contrasts used for fitting.
+}
+\item{phylodistances}{
+Numeric vector of length Ncontrasts, listing phylogenetic (patristic) distances of the independent contrasts.
+}
+\item{geodistances}{
+Numeric vector of length Ncontrasts, listing geographic (great circle) distances of the independent contrasts.
+}
+\item{child_times1}{
+Numeric vector of length Ncontrasts, listing the times (distance from root) of the first tip in each independent contrast.
+}
+\item{child_times2}{
+Numeric vector of length Ncontrasts, listing the times (distance from root) of the second tip in each independent contrast.
+}
+\item{MRCA_times}{
+Numeric vector of length Ncontrasts, listing the times (distance from root) of the MRCA of the two tips in each independent contrast.
 }
 \item{AIC}{
 The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
@@ -216,6 +243,9 @@ Numeric between 0 and 1, estimated consistency of the data with the fitted model
 }
 \item{QQplot}{
 Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the fitted model.
+}
+\item{SBM_PD_functor}{
+SBM probability density functor object. Used internally for efficiency and for debugging purposes.
 }
 }
 

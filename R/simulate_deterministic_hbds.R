@@ -143,6 +143,7 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 				psi_kappa			= simulation$psi_kappa,
 				Reff				= simulation$Reff, # effective reproduction ratio
 				removal_rate		= simulation$mu+simulation$psi, # removal rate = mu+psi
+				sampling_proportion = simulation$psi/(simulation$mu + simulation$psi),
 				CSA_pulled_probs 	= simulation$CSA_pulled_probs, # pulled_rho_k := rho_k/(1-Pmissing)
 				CSA_psis			= simulation$CSA_psis,
 				CSA_PSRs			= simulation$CSA_PSRs)) # PSRs exactly at the concentrated sampling attempts
