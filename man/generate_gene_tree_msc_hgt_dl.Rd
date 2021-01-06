@@ -23,6 +23,7 @@ generate_gene_tree_msc_hgt_dl( species_tree,
                         HGT_source_by_locus         = FALSE,
                         HGT_only_to_empty_clades    = FALSE,
                         no_loss_before_time         = 0,
+                        max_runtime                 = NULL,
                         include_event_times         = TRUE)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -76,6 +77,9 @@ Logical, specifying whether HGT transfers only occur into clades with no current
 \item{no_loss_before_time}{
 Numeric, optional time since the root during which no gene losses shall occur (even if \code{loss_rate>0}). This option can be used to reduce the probability of an early extinction of the entire gene tree, by giving the gene tree some "startup time" to spread into various species lineages. If zero, gene losses are possible right from the start of the simulation.
 }
+\item{max_runtime}{
+Numeric, optional maximum computation time (in seconds) to allow for the simulation. Use this to avoid occasional explosions of runtimes, for example due to very large generated trees. Aborted simulations will return with the flag \code{success=FALSE} (i.e., no tree is returned at all).
+}
 \item{include_event_times}{
 Logical, specifying whether the times of HGT, duplication and loss events should be returned as well. If these are not needed, then set \code{include_event_times=FALSE} for efficiency.
 }
@@ -99,6 +103,9 @@ The generated locus timetree, of class "phylo". The locus tree describes the gen
 }
 \item{locus_type}{
 Character vector of length NLtips + NLnodes (where NLtips and NLnodes are the number of tips and nodes in the locus tree, respectively), specifying the type/origin of each tip and node in the locus tree. For nodes, type 'h' corresponds to an HGT event, type 'd' to a duplication event, and type 's' to a speciation event. For tips, type 'l' represents a loss event, and type 't' a terminal locus (i.e., coinciding with a species tip). For example, if the input species tree was an ultrametric tree representing only extant species, then the locus tree tips of type 't' are the loci that could potentially be sampled from those extant species.
+}
+\item{locus2clade}{
+Integer vector of length NLtips + NLnodes, with values in NStips+NSnodes, specifying for every locus tip or node the correspondng "host" species tip or node.
 }
 \item{HGT_times}{
 Numeric vector, listing HGT event times (counted since the root) in ascending order. Only included if \code{include_event_times==TRUE}.

@@ -166,17 +166,17 @@ fit_hbd_pdr_on_grid = function(	tree,
 			input_age_grid 	= age_grid;
 			input_PDRs 		= PDRs
 		}
-		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												rholambda0 			= rholambda0,
-												age_grid 			= input_age_grid,
-												PDRs 				= input_PDRs,
-												splines_degree		= splines_degree,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime,
-												diff_PDR			= numeric(),
-												diff_PDR_degree		= 0)
+		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+											oldest_age			= oldest_age,
+											rholambda0 			= rholambda0,
+											age_grid 			= input_age_grid,
+											PDRs 				= input_PDRs,
+											splines_degree		= splines_degree,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime,
+											diff_PDR			= numeric(),
+											diff_PDR_degree		= 0)
 		if(!results$success) return(Inf)
 		LL = results$loglikelihood
 		if(is.na(LL) || is.nan(LL)) return(Inf)
@@ -207,7 +207,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 			diff_PDR_all = derivatives_of_grid_curve_CPP(Xgrid=age_grid, Ygrid=PDRs) # yields a 3D array of size (2*NG)*NG*2, flattened in layer-row-major format, representing the derivatives of the PDR w.r.t. the grid ages and the PDR values on the grid points
 			diff_PDR = unlist(lapply(fitted_grid_params, FUN=function(p) diff_PDR_all[((NG+p-1)*NG*(diff_PDR_degree+1) + 1):((NG+p-1)*NG*(diff_PDR_degree+1) + NG*(diff_PDR_degree+1))])) # extract only differentials along fitted parameters. Note that the first NG differentials are always omitted, because they correspond to the grid ages themselves, which are held constant in this case.
 		}
-		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
 												oldest_age			= oldest_age,
 												rholambda0 			= rholambda0,
 												age_grid 			= input_age_grid,

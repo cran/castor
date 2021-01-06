@@ -8,7 +8,7 @@ fit_hbds_model_parametric = function(tree,
 									param_max				= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
 									param_scale				= NULL,		# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
 									root_age 				= NULL,		# optional numeric, the age of the root. Can be used to define a time offset, e.g. if the last tip was not actually sampled at the present. If NULL, this will be calculated from the tree and it will be assumed that the last tip was sampled at the present
-									oldest_age				= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
+									oldest_age				= NULL,		# either a numeric specifying the oldest age to consider in the likelihood. Can be NULL, in which case this is set to the root age.
 									lambda					= 0,		# function handle, mapping age & model_parameters to the current speciation rate, (age,param_values) --> lambda. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[]. Can also be a single numeric.
 									mu						= 0,		# function handle, mapping age & model_parameters to the current extinction rate, (age,param_values) --> mu. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[]. Can also be a single numeric.
 									psi						= 0,		# function handle, mapping age & model_parameters to the current continuous (Poissonian) sampling rate, (age,param_values) --> psi. Must be defined for all ages in [0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[]. Can also be a single numeric.
@@ -30,7 +30,7 @@ fit_hbds_model_parametric = function(tree,
 									fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 									focal_param_values		= NULL,		# optional 2D numeric matrix with NP columns and an arbitrary number of rows, specifying parameter combinations of particular interest for which the loglikelihood should be calculated for. Can be used e.g. to explore the shape of the loglikelihood function.
 									verbose					= FALSE,	# boolean, specifying whether to print informative messages
-									diagnostics				= FALSE,		# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
+									diagnostics				= FALSE,	# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
 									verbose_prefix			= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
 	# basic input error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
@@ -206,22 +206,22 @@ fit_hbds_model_parametric = function(tree,
 													relative_ODE_step				= ODE_relative_dt,
 													E_value_step					= ODE_relative_dy,
 													runtime_out_seconds				= max_model_runtime)
-		loglikelihood = if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) -Inf else results$loglikelihood
+		loglikelihood = if((!results$success) || (!is.finite(results$loglikelihood))) -Inf else results$loglikelihood
 		if(diagnostics){
-			if(results$success){ cat(sprintf("%s  Trial %d: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,trial,loglikelihood,results$runtime)) }
-			else{ cat(sprintf("%s  Trial %d: Model evaluation failed: %s\n",verbose_prefix,trial,results$error)) }
+			if(results$success){ cat(sprintf("%s  Trial %s: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,as.character(trial),loglikelihood,results$runtime)) }
+			else{ cat(sprintf("%s  Trial %s: Model evaluation failed: %s\n",verbose_prefix,as.character(trial),results$error)) }
 		}
 		return(-loglikelihood);
 	}
 	
 	# calculate loglikelihood for initial guess
-	guess_loglikelihood = -objective_function(param_guess[fitted_params]/param_scale[fitted_params])
+	guess_loglikelihood = -objective_function(param_guess[fitted_params]/param_scale[fitted_params], trial=0)
 	
 	# calculate loglikelihood for focal param values
 	if((!is.null(focal_param_values)) && (nrow(focal_param_values)>0)){
 		if(ncol(focal_param_values)!=NP) return(list(success=FALSE, error=sprintf("focal_param_values has %d columns, but expected exactly %d columns (=number of parameters)",ncol(focal_param_values),NP)))
 		if(verbose) cat(sprintf("%sComputing loglikelihoods for focal param values..\n",verbose_prefix))
-		focal_loglikelihoods = sapply(1:nrow(focal_param_values), FUN=function(r) -objective_function(focal_param_values[r,fitted_params]/param_scale[fitted_params]))
+		focal_loglikelihoods = sapply(1:nrow(focal_param_values), FUN=function(r) -objective_function(focal_param_values[r,fitted_params]/param_scale[fitted_params], trial="focal"))
 	}else{
 		focal_loglikelihoods = NULL
 	}		
@@ -241,14 +241,14 @@ fit_hbds_model_parametric = function(tree,
 				start_values = get_random_params(defaults=param_guess[fitted_params], lower_bounds=lower_bounds, upper_bounds=upper_bounds, scales=scales, orders_of_magnitude=4)
 			}
 			# check if start values yield NaN
-			start_objective = objective_function(start_values/scales);
+			start_objective = objective_function(start_values/scales, trial)
 			Nstart_attempts = Nstart_attempts + 1
 			if(is.finite(start_objective)) break;
 		}
-		# run fit
+		# run fit with chose start_values
 		if(is.finite(start_objective)){
 			fit = stats::nlminb(start		= start_values/scales, 
-								objective	= function(pars){ objective_function(pars, trial) }, 
+								objective	= function(pars){ objective_function(pars, trial) },
 								lower		= lower_bounds/scales, 
 								upper		= upper_bounds/scales, 
 								control		= fit_control)

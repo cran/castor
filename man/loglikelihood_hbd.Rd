@@ -8,18 +8,19 @@ Given a rooted ultrametric timetree, and a homogenous birth-death (HBD) model, i
 }
 \usage{
 loglikelihood_hbd(tree, 
-                  oldest_age      = NULL,
-                  age0            = 0,
-                  rho0            = NULL,
-                  rholambda0      = NULL,
-                  age_grid        = NULL,
-                  lambda          = NULL,
-                  mu              = NULL,
-                  PDR             = NULL,
-                  PSR             = NULL,
-                  splines_degree  = 1,
-                  condition       = "auto",
-                  relative_dt     = 1e-3)
+                  oldest_age        = NULL,
+                  age0              = 0,
+                  rho0              = NULL,
+                  rholambda0        = NULL,
+                  age_grid          = NULL,
+                  lambda            = NULL,
+                  mu                = NULL,
+                  PDR               = NULL,
+                  PSR               = NULL,
+                  splines_degree    = 1,
+                  condition         = "auto",
+                  max_model_runtime = -1,
+                  relative_dt       = 1e-3)
 }
 \arguments{
 \item{tree}{
@@ -57,6 +58,9 @@ Integer, either 0,1,2 or 3, specifying the polynomial degree of the provided \co
 }
 \item{condition}{
 Character, either "crown", "stem", "auto" or "none" (the last one is only available if \code{lambda} and \code{mu} are given), specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is usually not recommended and is only available when \code{lambda} and \code{mu} are provided. If "auto", the condition is chosen according to the recommendations mentioned earlier.
+}
+\item{max_model_runtime}{
+Numeric, maximum allowed runtime (in seconds) for evaluating the likelihood. If the likelihood calculation takes longer than this (appoximate) threshold, it halts and returns with an error. If negative (default), this option is ignored.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.

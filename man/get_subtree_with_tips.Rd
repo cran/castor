@@ -60,6 +60,12 @@ Integer vector of length Nnodes_kept (=number of nodes in the extracted subtree)
 
 For example, \code{new2old_node[1]} is the index that the first node of the subtree had within the original tree. In particular, \code{tree$node.label[new2old_node]} will be equal to \code{subtree$node.label} (if node labels are available).
 }
+\item{old2new_tip}{
+Integer vector of length Ntips, with values in 1,..,Ntips_kept, mapping tip indices of the original tree to tip indices in the subtree (a value of 0 is used whenever a tip is absent in the subtree). This is essentially the inverse of the mapping \code{new2old_tip}.
+}
+\item{old2new_node}{
+Integer vector of length Nnodes, with values in 1,..,Nnodes_kept, mapping node indices of the original tree to node indices in the subtree (a value of 0 is used whenever a node is absent in the subtree). This is essentially the inverse of the mapping \code{new2old_node}.
+}
 }
 
 \author{Stilianos Louca}

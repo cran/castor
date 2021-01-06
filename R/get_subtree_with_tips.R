@@ -33,9 +33,13 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 	
 	if(length(tips_to_keep)==Ntips){
 		# special case: keeping full tree
-		return(list(subtree=tree, new2old_tip=(1:Ntips), new2old_node=(1:Nnodes), root_shift=0));
+		subtree 		= tree
+		root_shift 		= 0
+		new2old_clade 	= seq_len(Ntips+Nnodes)
+		old2new_clade 	= seq_len(Ntips+Nnodes)
+		Ntips_kept 		= Ntips
+		Nnodes_kept 	= Nnodes
 	}else{
-	
 		# extract subtree
 		results = get_subtree_with_specific_tips_CPP(	Ntips					= Ntips,
 														Nnodes					= Nnodes,
@@ -48,6 +52,7 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 		Ntips_kept  	= results$Ntips_kept
 		Nnodes_kept 	= results$Nnodes_kept
 		new2old_clade 	= results$new2old_clade + 1 # switch to 1-based indices
+		root_shift		= results$root_shift
 		subtree = list(	Nnode 		= Nnodes_kept,
 						tip.label 	= (if(is.null(tree$tip.label)) NULL else tree$tip.label[new2old_clade[1:Ntips_kept]]),
 						node.label 	= (if(is.null(tree$node.label)) NULL else tree$node.label[new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips]),
@@ -55,13 +60,20 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 						edge.length = results$new_edge_length,
 						root 		= results$new_root+1L,
 						root.edge	= (if(force_keep_root && (!is.null(tree$root.edge))) tree$root.edge else NULL));
-		class(subtree) = "phylo";
-		attr(subtree,"order") = "none";
-
-		return(list(subtree			= subtree, 
-					root_shift		= results$root_shift, # distance between old & new root (will always be non-negative)
-					new2old_clade	= new2old_clade,
-					new2old_tip		= new2old_clade[1:Ntips_kept], 
-					new2old_node	= new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips));
+		class(subtree) = "phylo"
+		attr(subtree,"order") = "none"
+		
+		# calculate the inverse mapping old-->new clade. Some entries might be 0, i.e. for old clades that were lost.
+		old2new_clade = numeric(Ntips+Nnodes)
+		old2new_clade[new2old_clade] = seq_len(Ntips_kept+Nnodes_kept)
 	}
+	
+	return(list(subtree			= subtree, 
+				root_shift		= root_shift, # distance between old & new root (will always be non-negative)
+				new2old_clade	= new2old_clade,
+				new2old_tip		= new2old_clade[1:Ntips_kept], 
+				new2old_node	= new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips,
+				old2new_clade	= old2new_clade,
+				old2new_tip		= old2new_clade[1:Ntips],
+				old2new_node	= old2new_clade[(Ntips+1):(Ntips+Nnodes)]-Ntips_kept));
 }

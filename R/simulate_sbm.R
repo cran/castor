@@ -6,8 +6,8 @@ simulate_sbm = function(	tree,
 							splines_degree	= 1,		# integer, either 1 or 2 or 3, specifying the splines degree assumed for the diffusivity on the time_grid
 							root_latitude	= NULL, 	# latitude of the tree root, in decimal degrees. If NULL, it will be chosen randomly.
 							root_longitude	= NULL){	# longitude of the tree root, in decimal degrees. If NULL, it will be chosen randomly.
-	Ntips   	= length(tree$tip.label)					
-	Nnodes  	= tree$Nnode
+	Ntips	= length(tree$tip.label)					
+	Nnodes	= tree$Nnode
 	
 	# basic error checking
 	if(!("numeric" %in% class(diffusivity))) return(list(success=FALSE, error="Expected numeric vector for diffusivity"))
@@ -33,13 +33,13 @@ simulate_sbm = function(	tree,
 	if(is.null(root_latitude) && is.null(root_longitude)){
 		# randomly choose root latitude & longitude
 		root_longitude = runif(1, min=-180, max=180)
-		root_latitude  = asin(2*runif(1, min=0, max=1)-1) # randomly drawn latitude = arcsin(2*U-1), where U is uniformly distributed in [0,1]
+		root_latitude  = (180/pi) * asin(2*runif(1, min=0, max=1)-1) # randomly drawn latitude = arcsin(2*U-1), where U is uniformly distributed in [0,1]
 	}else if(is.null(root_longitude)){
 		# root latitude is given, so randomly choose root longitude
 		root_longitude = runif(1, min=-180, max=180)
 	}else if(is.null(root_latitude)){
 		# root longitude is given, so randomly choose root latitude
-		root_latitude = asin(2*runif(1, min=0, max=1)-1) # randomly drawn latitude = arcsin(2*U-1), where U is uniformly distributed in [0,1]
+		root_latitude = (180/pi) * asin(2*runif(1, min=0, max=1)-1) # randomly drawn latitude = arcsin(2*U-1), where U is uniformly distributed in [0,1]
 	}
 	
 	if(NT==1){
@@ -52,7 +52,7 @@ simulate_sbm = function(	tree,
 											radius		= radius,
 											diffusivity	= diffusivity,
 											root_theta	= pi*root_latitude/180,
-											root_phi	= pi*root_longitude/180);
+											root_phi	= pi*root_longitude/180)
 	}else{
 		# simulate time-variable SBM
 		results = simulate_TSBM_on_tree_CPP(Ntips			= Ntips,
@@ -65,7 +65,7 @@ simulate_sbm = function(	tree,
 											diffusivities	= diffusivity,
 											splines_degree	= splines_degree,
 											root_theta		= pi*root_latitude/180,
-											root_phi		= pi*root_longitude/180);
+											root_phi		= pi*root_longitude/180)
 		
 	}
 	return(list(success			= TRUE,

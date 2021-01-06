@@ -4,10 +4,12 @@
 # The simulation is halted as soon as Ntips>=max_tips (if max_tips>0) and/or time>=max_time (if max_time>0) and/or time>=max_time_eq+equilibrium_time (if max_time_eq>=0)
 generate_random_tree = function( parameters					= list(), 	# named list of model parameters. For entries and default values see the main function body below
 								 max_tips					= NULL, 
+								 max_extant_tips			= NULL,
 								 max_time					= NULL,
 								 max_time_eq				= NULL,
 								 coalescent 				= TRUE,
 								 as_generations				= FALSE,	# if FALSE, then edge lengths correspond to time. If TRUE, then edge lengths correspond to generations (hence if coalescent==false, all edges will have unit length).
+								 no_full_extinction			= TRUE,		# if true, then extinction of the entire tree is prevented. This is done by temporarily disabling extinctions when the number of extant tips is 1.
 								 Nsplits					= 2,	 	# number of children generated at each diversification event. If set to 2, a bifurcating tree is generated. If >2, the tree will be multifurcating.
 								 added_rates_times			= NULL,		# numeric vector of size NAR, or empty or NULL
 								 added_birth_rates_pc 		= NULL,		# numeric vector of size NAR, or empty or NULL
@@ -18,7 +20,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 								 edge_basename				= NULL,		# basename for edge (e.g. "edge."). If NULL, then edges will not have any labels.
 								 include_birth_times		= FALSE,
 								 include_death_times		= FALSE){
-	if(is.null(max_tips) && is.null(max_time) && is.null(max_time_eq)) return(list(success=FALSE, error="ERROR: At least one of max_tips and/or max_time and/or max_time_eq must be non-NULL"));
+	if(is.null(max_tips) && is.null(max_time) && is.null(max_time_eq) && is.null(max_extant_tips)) return(list(success=FALSE, error="ERROR: At least one of max_tips and/or max_extant_tips and/or max_time and/or max_time_eq must be non-NULL"));
 	
 	# set default model parameters
 	if(is.null(parameters$birth_rate_intercept)) 	parameters$birth_rate_intercept = 0;
@@ -35,6 +37,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 	if((!is.null(added_death_rates_pc)) && (length(added_rates_times)!=length(added_death_rates_pc))) stop(sprintf("Number of added death_rates_pc (%d) differs from number of added_rate_times (%d).",length(added_death_rates_pc),length(added_rates_times)));
 
 	results = generate_random_tree_CPP(	max_tips					= (if(is.null(max_tips)) -1 else max_tips),
+										max_extant_tips				= (if(is.null(max_extant_tips)) -1 else max_extant_tips),
 										max_time					= (if(is.null(max_time)) -1 else max_time),
 										max_time_since_equilibrium	= (if(is.null(max_time_eq)) -1 else max_time_eq),
 										birth_rate_intercept 		= parameters$birth_rate_intercept, 
@@ -50,6 +53,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 										coalescent					= coalescent,
 										Nsplits						= Nsplits,
 										as_generations				= as_generations,
+										no_full_extinction			= no_full_extinction,
 										include_birth_times			= include_birth_times,
 										include_death_times			= include_death_times)
 	if(!results$success) return(list(success=FALSE, error=results$error)); # something went wrong

@@ -104,7 +104,7 @@ Non-negative numeric, in units of time, specfying the age radius around a concen
 Integer, specifying the number of independent fitting trials to perform, each starting from a random choice of model parameters. Increasing \code{Ntrials} reduces the risk of reaching a non-global local maximum in the fitting objective.
 }
 \item{max_start_attempts}{
-Integer, specifying the number of times to attempt finding a valid start point (per trial) before giving up on that trial. Randomly choosen extreme start parameters may occasionally result in Inf/undefined likelihoods, so this option allows the algorithm to keep looking for valid starting points.
+Integer, specifying the number of times to attempt finding a valid start point (per trial) before giving up on that trial. Randomly chosen extreme start parameters may occasionally result in Inf/undefined likelihoods, so this option allows the algorithm to keep looking for valid starting points.
 }
 \item{Nthreads}{
 Integer, specifying the number of parallel threads to use for performing multiple fitting trials simultaneously. This should generally not exceed the number of available CPUs on your machine. Parallel computing is not available on the Windows platform.
@@ -229,7 +229,7 @@ Numeric vector of size NP, lower bound of the 95\% confidence interval (2.5-97.5
 Numeric vector of size NP, upper bound of the 95\% confidence interval for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }
 \item{consistency}{
-Numeric between 0 and 1, estimated consistency of the data with the fitted model. See the documentation of \code{\link{fit_hbds_model_on_grid}} for an explanation.
+Numeric between 0 and 1, estimated consistency of the data with the fitted model (Lindholm et al. 2019). See the documentation of \code{\link{fit_hbds_model_on_grid}} for an explanation.
 }
 }
 
@@ -238,6 +238,8 @@ Numeric between 0 and 1, estimated consistency of the data with the fitted model
 
 \references{
 T. Stadler, D. Kuehnert, S. Bonhoeffer, A. J. Drummond (2013). Birth-death skyline plot reveals temporal changes of epidemic spread in HIV and hepatitis C virus (HCV). PNAS. 110:228-233.
+
+A. Lindholm, D. Zachariah, P. Stoica, T. B. Schoen (2019). Data consistency approach to model validation. IEEE Access. 7:59788-59796.
 }
 
 \seealso{

@@ -20,6 +20,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 								CSA_probs				= NULL,		# optional numeric vector listing concentrated sampling probabilities, corresponding to CSA_times[]
 								CSA_kappas				= NULL,		# optional numeric vector listing retention probabilities during concentrated sampling attempts, corresponding to CSA_times[]
 								no_full_extinction		= FALSE,	# if true, then extinction of the entire tree is prevented. This is done by temporarily disabling extinctions when the number of extant tips is 1.
+								max_runtime				= NULL,		# maximum time (in seconds) to allow for the computation; if the computation roughly exceeds this threshold, it is aborted. Use this as protection against badly parameterized models. If NULL or <=0, this option is ignored.
 								tip_basename			= "",		# basename for tips (e.g. "tip."). 
 								node_basename			= NULL,		# basename for nodes (e.g. "node."). If NULL, then nodes will not have any labels.
 								edge_basename			= NULL,		# basename for edge (e.g. "edge."). If NULL, then edges will not have any labels.
@@ -102,6 +103,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 		if(any(CSA_probs<0) || any(CSA_probs>1)) return(list(success=FALSE, error="CSA_probs must be true probabilities, and thus between 0 and 1"))
 		if(any(CSA_kappas<0) || any(CSA_kappas>1)) return(list(success=FALSE, error="CSA_kappas must be true probabilities, and thus between 0 and 1"))
 	}
+	if(is.null(max_runtime)) max_runtime = 0
 	
 	# generate tree
 	results = generate_random_tree_HBDS_CPP(max_sampled_tips		= (if(is.null(max_sampled_tips)) -1 else max_sampled_tips),
@@ -121,6 +123,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 											CSA_kappas				= (if(is.null(CSA_kappas)) numeric() else CSA_kappas),
 											as_generations			= as_generations,
 											no_full_extinction		= no_full_extinction,
+											runtime_out_seconds		= max_runtime,
 											include_extant			= include_extant,
 											include_extinct			= include_extinct,
 											include_birth_times		= include_birth_times,

@@ -6,7 +6,7 @@ get_adjacent_edges_per_edge = function(tree){
 													tree_edge	= as.vector(t(tree$edge)) - 1);
 	
 	# update indices from 0-based to 1-based
-	return(lapply(1:Nedges,FUN = function(edge) adjacents[[edge]]+1))
+	return(lapply(1:Nedges,FUN = function(edge){ adjacents[[edge]]+1 }))
 }
 
 
@@ -19,7 +19,7 @@ get_outgoing_edges_per_clade = function(tree){
 														tree_edge	= as.vector(t(tree$edge)) - 1);
 	
 	# update indices from 0-based to 1-based
-	return(lapply(1:Nclades,FUN = function(clade) outgoing_edges[[clade]]+1))
+	return(lapply(1:Nclades,FUN = function(clade){ outgoing_edges[[clade]]+1 }))
 }
 
 
@@ -31,7 +31,7 @@ get_incoming_edges_per_clade = function(tree){
 														tree_edge	= as.vector(t(tree$edge)) - 1);
 	
 	# update indices from 0-based to 1-based
-	return(lapply(1:Nclades,FUN = function(clade) incoming_edges[[clade]]+1))
+	return(lapply(1:Nclades,FUN = function(clade){ incoming_edges[[clade]]+1 }))
 }
 
 
@@ -44,7 +44,7 @@ get_paths_root_to_tips = function(tree){
 										tree_edge	= as.vector(t(tree$edge)) - 1);
 	
 	# update indices from 0-based to 1-based
-	return(lapply(1:Ntips,FUN = function(tip) paths[[tip]]+1))
+	return(lapply(1:Ntips,FUN = function(tip){ paths[[tip]]+1 }))
 }
 
 
@@ -627,39 +627,48 @@ get_PSR_of_HBD_model = function(oldest_age,					# oldest age until which to calc
 								splines_degree	= 1,		# either 1, 2 or 3, specifying the degree of the splines defined by the PDR on the age grid.
 								relative_dt		= 1e-3){	# numeric, maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 	# basic error checking
+	if(rho0<=0) return(list(success=FALSE, error=sprintf("rho must be strictly positive; instead, got %g",rho0)))
+	if(!(splines_degree %in% c(0,1,2,3))) return(list(success=FALSE, error=sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
 	if(is.null(age_grid) || (length(age_grid)<=1)){
-		if((!is.null(lambda)) && (length(lambda)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of lambda values (%d); since no age grid was provided, you must either provide a single (constant) lambda or none",length(lambda))))
-		if((!is.null(mu)) && (length(mu)!=1)) return(list(success = FALSE, error = sprintf("Invalid number of mu values (%d); since no age grid was provided, you must provide a single (constant) mu",length(mu))))
-		# create dummy age grid
-		NG 		 = 2;
-		age_grid = seq(from=0,to=1.01*oldest_age,length.out=NG)
-		if(!is.null(lambda)) lambda = rep(lambda,times=NG);
-		if(!is.null(mu)) mu = rep(mu,times=NG);
+		# this model is time-independent, i.e. lambda & mu are constant over time
+		if(length(lambda)!=1) return(list(success = FALSE, error = sprintf("Invalid number of lambda values (%d); since no age grid was provided, you must either provide a single (constant) lambda or none",length(lambda))))
+		if(length(mu)!=1) return(list(success = FALSE, error = sprintf("Invalid number of mu values (%d); since no age grid was provided, you must provide a single (constant) mu",length(mu))))
+		NG = 1
+		constant_rates = TRUE
 	}else{
 		NG = length(age_grid);
 		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
 		if((age_grid[1]>age0) || (age_grid[NG]<age0)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age0 (%g)",age0)))
-		if((!is.null(lambda)) && (length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda values (%d); since an age grid of size %d was provided, you must either provide zero, one or %d lambdas",length(lambda),NG,NG)))
-		if((!is.null(mu)) && (length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu values (%d); since an age grid of size %d was provided, you must either provide one or %d mus",length(mu),NG,NG)))
-		if((!is.null(lambda)) && (length(lambda)==1)) lambda = rep(lambda,times=NG);
-		if((!is.null(mu)) && (length(mu)==1)) mu = rep(mu,times=NG);
+		if((length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda values (%d); since an age grid of size %d was provided, you must either provide one or %d lambdas",length(lambda),NG,NG)))
+		if((length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu values (%d); since an age grid of size %d was provided, you must either provide one or %d mus",length(mu),NG,NG)))
+		constant_rates = ((length(lambda)==1) || all(diff(lambda)==0)) && ((length(mu)==1) || all(diff(mu)==0)) # whether this model is in fact a constant-rates model
+		if((length(lambda)==1)) lambda = rep(lambda,times=NG)
+		if((length(mu)==1)) mu = rep(mu,times=NG)
+		if(age_grid[1]>tail(age_grid,1)) return(list(success=FALSE, error=sprintf("Values in age_grid must be strictly increasing")))
 	}
-	if(rho0<=0) return(list(success=FALSE, error=sprintf("rho must be strictly positive; instead, got %g",rho0)))
-	if(!(splines_degree %in% c(0,1,2,3))) return(list(success=FALSE, error=sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
-	if(age_grid[1]>tail(age_grid,1)) return(list(success=FALSE, error=sprintf("Values in age_grid must be strictly increasing")))
 
 	# calculate PSR from lambda, mu & rho0=rho(age0)
-	results = get_PSR_of_HBD_model_CPP(	age0			= age0,
-										oldest_age 		= oldest_age,
-										age_grid		= age_grid,
-										lambda			= lambda,
-										mu				= mu,
-										rho0			= rho0,
-										splines_degree	= splines_degree,
-										relative_dt		= relative_dt)
+	if(constant_rates){
+		results = get_PSR_of_CR_HBD_model_CPP(	age0			= age0,
+												oldest_age 		= oldest_age,
+												lambda			= lambda[1],
+												mu				= mu[1],
+												rho0			= rho0,
+												relative_dt		= relative_dt)
+	}else{
+		results = get_PSR_of_HBD_model_CPP(	age0			= age0,
+											oldest_age 		= oldest_age,
+											age_grid		= age_grid,
+											lambda			= lambda,
+											mu				= mu,
+											rho0			= rho0,
+											splines_degree	= splines_degree,
+											relative_dt		= relative_dt)
+		
+	}
 	if(results$success){
 		return(list(success	= TRUE, 
-					ages	= results$refined_age_grid, # numeric vector listing (potentially refined) grid ages in ascending order, spanning [max(0,age_grid[1]), oldest_age]
+					ages	= results$ages, # numeric vector listing (potentially refined) grid ages in ascending order, spanning [max(0,age_grid[1]), oldest_age]
 					PSR		= results$PSR))	# numeric vector of the same size as ages[], listing the PSR on the refined grid
 	}else{
 		return(list(success=FALSE, error=results$error))
@@ -700,8 +709,8 @@ get_random_params = function(defaults, lower_bounds, upper_bounds, scales, order
 	unboxed 	 = which(is.infinite(lower_bounds) & is.infinite(upper_bounds))
 	if(length(boxed_dual)>0) 	start_values[boxed_dual] = lower_bounds[boxed_dual] + (upper_bounds[boxed_dual]-lower_bounds[boxed_dual]) * runif(n=length(boxed_dual),min=0,max=1)
 	if(length(unboxed)>0) 	 	start_values[unboxed]	 = 10**runif(n=length(unboxed), min=-orders_of_magnitude/2.0, max=orders_of_magnitude/2.0) * start_values[unboxed]
-	if(length(boxed_left)>0) 	start_values[boxed_left] = sapply(boxed_left, FUN=function(fp) random_semiboxed_left(lower_bound=lower_bounds[fp], default=start_values[fp], typical_scale=scales[fp], orders_of_magnitude=orders_of_magnitude))
-	if(length(boxed_right)>0) 	start_values[boxed_right]= sapply(boxed_right, FUN=function(fp) -random_semiboxed_left(lower_bound=-upper_bounds[fp], default=-start_values[fp], typical_scale=scales[fp], orders_of_magnitude=orders_of_magnitude))
+	if(length(boxed_left)>0) 	start_values[boxed_left] = sapply(boxed_left, FUN=function(fp){ random_semiboxed_left(lower_bound=lower_bounds[fp], default=start_values[fp], typical_scale=scales[fp], orders_of_magnitude=orders_of_magnitude) })
+	if(length(boxed_right)>0) 	start_values[boxed_right]= sapply(boxed_right, FUN=function(fp){ -random_semiboxed_left(lower_bound=-upper_bounds[fp], default=-start_values[fp], typical_scale=scales[fp], orders_of_magnitude=orders_of_magnitude) })
 	start_values = pmax(lower_bounds,pmin(upper_bounds,start_values))
 	return(start_values)
 }
@@ -848,8 +857,8 @@ sanitize_parameters_for_fitting = function(	param_values,				# numeric vector of
 get_connected_subgraphs = function(Nnodes, edges){
 	results = split_undirected_graph_CPP(Nnodes=Nnodes, Nedges=nrow(edges), edges = as.vector(t(edges))-1);
 	return(list(Nsubgraphs 		= results$Nsubgraphs,
-				subgraph2nodes	= lapply(1:results$Nsubgraphs, FUN=function(n) results$subgraph2nodes[[n]]+1),
-				subgraph2edges	= lapply(1:results$Nsubgraphs, FUN=function(n) results$subgraph2edges[[n]]+1),
+				subgraph2nodes	= lapply(1:results$Nsubgraphs, FUN=function(n){ results$subgraph2nodes[[n]]+1 }),
+				subgraph2edges	= lapply(1:results$Nsubgraphs, FUN=function(n){ results$subgraph2edges[[n]]+1 }),
 				node2subgraph	= results$node2subgraph+1,
 				edge2subgraph	= results$edge2subgraph+1));
 }
@@ -863,7 +872,7 @@ get_member_lists_from_group_assignments = function(Ngroups, pool2group){
 	if(Ngroups==0) return(list())
 	pool2group[is.na(pool2group)] = -1;
 	results = get_member_lists_from_group_assignments_CPP(Ngroups=Ngroups, pool2group=pool2group-1)
-	return(lapply(1:Ngroups,FUN=function(g) results$group2members[[g]]+1))
+	return(lapply(1:Ngroups,FUN=function(g){ results$group2members[[g]]+1 }))
 }
 
 
@@ -979,15 +988,15 @@ extract_HBDS_events_from_tree = function(	tree,
 		CSAbinning		= place_sorted_values_into_bins_CPP(items=tip_ages[sorted2original], bin_mins=CSA_ages-age_epsilon, bin_maxs=CSA_ages+age_epsilon)
 		tip2CSA 		= 1L + CSAbinning$item2bin
 		Ptip_ages		= tip_ages[sorted2original[which(CSAbinning$item2bin<0)]]
-		CSA2tips		= lapply(1:NCSA, FUN=function(ce) sorted2original[1L + CSAbinning$bin2items[[ce]]]);
-		CSA_tip_counts 	= sapply(1:NCSA, FUN=function(ce) length(CSA2tips[[ce]]))
+		CSA2tips		= lapply(1:NCSA, FUN=function(ce){ sorted2original[1L + CSAbinning$bin2items[[ce]]] });
+		CSA_tip_counts 	= sapply(1:NCSA, FUN=function(ce){ length(CSA2tips[[ce]]) })
 
 		# determine which sampled nodes were sampled during concentrated sampling efforts versus due to Poissonian sampling
 		sorted2original = order(sampled_node_ages)
 		CSAbinning 		= place_sorted_values_into_bins_CPP(items=sampled_node_ages[sorted2original], bin_mins=CSA_ages-age_epsilon, bin_maxs=CSA_ages+age_epsilon)
 		Pnode_ages		= sampled_node_ages[sorted2original[which(CSAbinning$item2bin<0)]]
-		CSA2nodes		= lapply(1:NCSA, FUN=function(ce) sampled_nodes[sorted2original[1L + CSAbinning$bin2items[[ce]]]]);
-		CSA_node_counts = sapply(1:NCSA, FUN=function(ce) length(CSA2nodes[[ce]]))
+		CSA2nodes		= lapply(1:NCSA, FUN=function(ce){ sampled_nodes[sorted2original[1L + CSAbinning$bin2items[[ce]]]] });
+		CSA_node_counts = sapply(1:NCSA, FUN=function(ce){ length(CSA2nodes[[ce]]) })
 	}else{
 		CSA2tips 		= integer(0)
 		CSA_tip_counts 	= integer(0)
@@ -1008,148 +1017,6 @@ extract_HBDS_events_from_tree = function(	tree,
 
 
 
-# Given some HBDS congruence class (in terms of PDR, PSR lambda_psi and CSA_pulled_probs), as well as some desired profile for a specific variable (e.g., the sampling rate psi), calculate the corresponding model in the congruence class
-# The model in the congruence class must be specified through exactly one of the following variable choices:
-# 	lambda (speciation rate)
-#	mu (extinction rate) and lambda0 (present-day speciation rate)
-#	psi (sampling rate)
-#	Reff (effective reproduction ratio) and lambda0
-#	removal_rate (aka. become-uninfectious rate, mu+psi) and lambda0
-# ATTENTION: This function is currently only implemented for HBDS models without retention, i.e. where kappa=0
-# ATTENTION: Not all psi are allowed. In particular, psi(CSA_ages[k]) must be the same for all models in the congruence class whenever CSA_ages[k]>0.
-get_congruent_hbds = function(	age_grid,						# numeric vector of size NG, listing discrete ages in ascending order
-								PSR,							# numeric vector of size NG, listing the PSR on the age_grid
-								PDR,							# numeric vector of size NG, listing the PDR on the age_grid
-								lambda_psi,						# numeric vector of size NG, listing lambda*psi on the age_grid
-								lambda				= NULL,		# numeric vector of size NG. Exactly one of lambda, psi, mu, Reff or removal_rate must be provided.
-								mu					= NULL,		# numeric vector of size NG. Exactly one of psi, mu, Reff or removal_rate must be provided.
-								psi					= NULL,		# numeric vector of size NG. Exactly one of psi, mu, Reff or removal_rate must be provided.
-								Reff				= NULL,		# numeric vector of size NG. Exactly one of psi, mu, Reff or removal_rate must be provided.
-								removal_rate		= NULL,		# numeric vector of size NG. Exactly one of psi, mu, Reff or removal_rate must be provided.
-								lambda0				= NULL,		# numeric, specifying lambda at age 0 (present-day). Only relevant if mu or Reff or removal_rate is provided.
-								CSA_ages			= NULL,		# numeric vector of size NCSA, listing the ages of concentrated sampling attempts, in ascending order
-								CSA_pulled_probs 	= NULL,		# numeric vector of size NCSA, listing the pulled probabilities of concentrated sampling attempts, in ascending order
-								CSA_PSRs			= NULL, 	# numeric vector of size NCSA, listing the PSR at the concentrated sampling attempts, in ascending order
-								splines_degree		= 1, 		# integer between 1 and 3. 0-splines are not allowed, because intervally the 1st derivatives are needed.
-								ODE_relative_dt		= 0.001,
-								ODE_relative_dy		= 1e-4){
-	# basic error checking
-	NCSA = (if(is.null(CSA_ages)) 0 else length(CSA_ages))
-	if((NCSA==0) && (!is.null(CSA_pulled_probs)) && (length(CSA_pulled_probs)>0)) return(list(success=FALSE, error="No CE ages were provided, but CSA_pulled_probs were"))
-	if((NCSA>0) && is.null(CSA_pulled_probs)) return(list(success=FALSE, error="Missing CSA_pulled_probs"))
-	if((NCSA>0) && (length(CSA_pulled_probs)!=NCSA)) return(list(success=FALSE, error=sprintf("Expected %d CSA_pulled_probs, but instead got %d",NCSA,length(CSA_pulled_probs))))
-	if((NCSA>0) && is.null(CSA_PSRs)) return(list(success=FALSE, error="Missing CSA_PSRs"))
-	if((NCSA>0) && (length(CSA_PSRs)!=NCSA)) return(list(success=FALSE, error=sprintf("Expected %d CSA_PSRs, but instead got %d",NCSA,length(CSA_PSRs))))
-	if(is.null(CSA_ages)){
-		CSA_ages 			= numeric(0)
-		CSA_pulled_probs 	= numeric(0)
-		CSA_PSRs 			= numeric(0)
-	}
-	NG = length(age_grid)
-	if(is.null(PSR)){
-		PSR = rep(0,times=NG)
-	}else if(length(PSR)==1){
-		PSR = rep(PSR,times=NG)
-	}else if(length(PSR)!=NG){
-		return(list(success=FALSE, error=sprintf("Expected %d PSR values, but instead got %d",NG,length(PSR))))
-	}
-	if(is.null(PDR)){
-		PDR = rep(0,times=NG)
-	}else if(length(PDR)==1){
-		PDR = rep(PDR,times=NG)
-	}else if(length(PDR)!=NG){
-		return(list(success=FALSE, error=sprintf("Expected %d PDR values, but instead got %d",NG,length(PDR))))
-	}
-	if(is.null(lambda_psi)){
-		lambda_psi = rep(0,times=NG)
-	}else if(length(psi)==1){
-		lambda_psi = rep(lambda_psi,times=NG)
-	}else if(length(lambda_psi)!=NG){
-		return(list(success=FALSE, error=sprintf("Expected %d lambda_psi values, but instead got %d",NG,length(lambda_psi))))
-	}
-	if(is.null(lambda) && is.null(mu) && is.null(psi) && is.null(Reff) && is.null(removal_rate)) return(list(success=FALSE, error=sprintf("Expecting either lambda, mu, psi, Reff or removal_rate")))
-	if(sum(!c(is.null(lambda),is.null(mu),is.null(psi),is.null(Reff),is.null(removal_rate)))>1) return(list(success=FALSE, error=sprintf("Only one of lambda, mu, psi, Reff or removal_rate must be provided")))
-	if((!is.null(lambda)) && (!is.null(lambda0))) return(list(success=FALSE, error=sprintf("lambda0 must not be provided if lambda is provided")))
-	if((!is.null(mu)) && is.null(lambda0)) return(list(success=FALSE, error=sprintf("lambda0 must be provided when mu is provided")))
-	if((!is.null(psi)) && (!is.null(lambda0))) return(list(success=FALSE, error=sprintf("lambda0 must not be provided if psi is provided")))
-	if((!is.null(Reff)) && is.null(lambda0)) return(list(success=FALSE, error=sprintf("lambda0 must be provided when Reff is provided")))
-	if((!is.null(removal_rate)) && is.null(lambda0)) return(list(success=FALSE, error=sprintf("lambda0 must be provided when removal_rate is provided")))
-	if(!is.null(lambda)){
-		if(length(lambda)==1){
-			lambda = rep(lambda,times=NG)
-		}else if(length(lambda)!=NG){
-			return(list(success=FALSE, error=sprintf("Expected %d lambda values, but instead got %d",NG,length(lambda))))
-		}
-		if(NCSA>0) return(list(success=FALSE, error=sprintf("Providing lambda to define a model is only available in the absence of CSAs")))
-	}
-	if(!is.null(mu)){
-		if(length(mu)==1){
-			mu = rep(mu,times=NG)
-		}else if(length(mu)!=NG){
-			return(list(success=FALSE, error=sprintf("Expected %d mu values, but instead got %d",NG,length(mu))))
-		}
-		if(NCSA>0) return(list(success=FALSE, error=sprintf("Providing mu to define a model is only available in the absence of CSAs")))
-	}
-	if(!is.null(psi)){
-		if(length(psi)==1){
-			psi = rep(psi,times=NG)
-		}else if(length(psi)!=NG){
-			return(list(success=FALSE, error=sprintf("Expected %d psi values, but instead got %d",NG,length(psi))))
-		}
-	}
-	if(!is.null(Reff)){
-		if(length(Reff)==1){
-			Reff = rep(Reff,times=NG)
-		}else if(length(Reff)!=NG){
-			return(list(success=FALSE, error=sprintf("Expected %d Reff values, but instead got %d",NG,length(Reff))))
-		}
-		if(NCSA>0) return(list(success=FALSE, error=sprintf("Providing Reff to define a model is only available in the absence of CSAs")))
-	}
-	if(!is.null(removal_rate)){
-		if(length(removal_rate)==1){
-			removal_rate = rep(removal_rate,times=NG)
-		}else if(length(removal_rate)!=NG){
-			return(list(success=FALSE, error=sprintf("Expected %d removal_rate values, but instead got %d",NG,length(removal_rate))))
-		}
-		if(NCSA>0) return(list(success=FALSE, error=sprintf("Providing removal_rate to define a model is only available in the absence of CSAs")))
-	}
-	if(!(splines_degree %in% c(1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 1,2,3.",splines_degree)))
-
-	results = get_congruent_HBDS_CPP(	CSA_ages			= CSA_ages,
-										CSA_pulled_probs	= CSA_pulled_probs,
-										CSA_PSRs			= CSA_PSRs,
-										age_grid			= age_grid,
-										PSRs				= PSR,
-										PDRs				= PDR,
-										lambda_psis			= lambda_psi,
-										lambdas				= (if(is.null(lambda)) numeric(0) else lambda),
-										mus					= (if(is.null(mu)) numeric(0) else mu),
-										psis				= (if(is.null(psi)) numeric(0) else psi),
-										Reffs				= (if(is.null(Reff)) numeric(0) else Reff),
-										removal_rates		= (if(is.null(removal_rate)) numeric(0) else removal_rate),
-										lambda0				= (if(is.null(lambda0)) 0 else lambda0),
-										splines_degree		= splines_degree,
-										ODE_relative_dt		= ODE_relative_dt,
-										ODE_relative_dy		= ODE_relative_dy,
-										runtime_out_seconds	= -1)
-
-	if(!results$success) return(list(success=FALSE, error=results$error))
-	
-	return(list(success			= TRUE,
-				valid			= results$valid,
-				ages			= age_grid,
-				lambda			= results$lambdas,
-				mu				= results$mus,
-				psi				= results$psis,
-				lambda_psi		= results$lambda_psis,
-				Pmissing		= results$Pmissings,
-				CSA_probs		= results$CSA_probs,
-				CSA_Pmissings	= results$CSA_Pmissings,
-				Reff			= results$Reffs,
-				removal_rate	= results$removal_rates))
-}
-
-
 generate_OU_time_series = function(	times,					# numeric vector of size NT
 									start_value,			# optional numeric. If NA or NaN or NULL, it will be chosen randomly from the stationary distribution
 									stationary_mean,		# numeric
@@ -1165,6 +1032,20 @@ generate_OU_time_series = function(	times,					# numeric vector of size NT
 	return(list(times=times, values=pmin(constrain_max,pmax(constrain_min,values))))
 }
 
+
+# generate a time series according to a bounded Brownian Motion, i.e. a diffusing particle inside a finite interval with reflecting boundaries
+generate_bounded_BM_time_series = function(	times,					# numeric vector of size NT
+											diffusivity,			# strictly positive numeric, in units value^2/time
+											lower,					# the lower bound of the reflected Brownian Motion. Either a single numeric (constant bound), or a numeric vector of the same length as times[] (time-dependent bound)
+											upper,					# the upper bound of the reflected Brownian Motion. Either a single numeric (constant bound), or a numeric vector of the same length as times[] (time-dependent bound)
+											start_value = NULL){	# optional numeric. If NA or NaN or NULL, it will be chosen randomly from the stationary distribution
+	values = get_bounded_BM_time_series_CPP(times		= times,
+											start_value	= (if((!is.null(start_value)) && is.finite(start_value)) start_value else NaN),
+											diffusivity = diffusivity,
+											lower		= lower,
+											upper		= upper)$values
+	return(list(times=times, values=values))
+}
 
 
 
@@ -1182,11 +1063,11 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 											max_mu				= +Inf,		# numeric, upper bound for the fitted mus (applying to all grid points).
 											min_rho0			= 1e-10,	# numeric, lower bound for the fitted rho. Note that rho is always within (0,1]
 											max_rho0			= 1,		# numeric, upper bound for the fitted rho.
-											guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages).
-											guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages).
+											guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages), or a function handle (for generating guesses at each grid point).
+											guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages), or a function handle (for generating guesses at each grid point).
 											guess_rho0			= 1,		# initial guess for rho. Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
-											fixed_lambda		= NULL,		# optional fixed lambda value. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed).
-											fixed_mu			= NULL,		# optional fixed mu value. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed).
+											fixed_lambda		= NULL,		# optional fixed lambda value. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed to this value) or a function handle specifying lambda for any arbitrary age (lambdas will be fixed at all ages).
+											fixed_mu			= NULL,		# optional fixed mu value. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed to this value) or a function handle specifying mu for any arbitrary age (mu will be fixed at all ages).
 											fixed_rho0			= NULL,		# optional fixed value for rho. If non-NULL and non-NA, then rho is not fitted. 
 											const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant if lambdas are non-fixed.
 											const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant if mus are non-fixed.
@@ -1201,14 +1082,71 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 											verbose_prefix		= ""){
 	# basic error checking
 	if(verbose) cat(sprintf("%sChecking input parameters..\n",verbose_prefix))
-	if((!is.null(guess_lambda))	&& (length(guess_lambda)!=1)) return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL"))									
-	if((!is.null(guess_mu))	&& (length(guess_mu)!=1)) return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL"))									
-	if((!is.null(fixed_lambda))	&& (length(fixed_lambda)!=1)) return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL"))									
-	if((!is.null(fixed_mu))	&& (length(fixed_mu)!=1)) return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL"))									
+	root_age = get_tree_span(tree)$max_distance
+	if(is.null(oldest_age)) oldest_age = root_age
+	if(!is.null(guess_lambda)){
+		if(class(guess_lambda) == "function"){
+			# guess_lambda is already a function handle , so just check for validity
+			if(!is.finite(guess_lambda(age0))) return(list(success=FALSE, error=sprintf("Guess-lambda functor is not properly defined at age0 (%g)",age0)))
+			if(!is.finite(guess_lambda(oldest_age))) return(list(success=FALSE, error=sprintf("Guess-lambda functor is not properly defined at oldest_age (%g)",oldest_age)))
+		}else if(length(guess_lambda)!=1){
+			return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL, or a function handle"))
+		}else{
+			# convert guess_lambda to a function handle
+			guess_lambda_value = guess_lambda
+			guess_lambda = function(ages){ rep(guess_lambda_value, length(ages)) }
+		}
+	}else{
+		guess_lambda = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(guess_mu)){
+		if(class(guess_mu) == "function"){
+			# guess_mu is already a function handle , so just check for validity
+			if(!is.finite(guess_mu(age0))) return(list(success=FALSE, error=sprintf("Guess-mu functor is not properly defined at age0 (%g)",age0)))
+			if(!is.finite(guess_mu(oldest_age))) return(list(success=FALSE, error=sprintf("Guess-mu functor is not properly defined at oldest_age (%g)",oldest_age)))
+		}else if(length(guess_mu)!=1){
+			return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL, or a function handle"))
+		}else{
+			# convert guess_mu to a function handle
+			guess_mu_value = guess_mu
+			guess_mu = function(ages){ rep(guess_mu_value, length(ages)) }
+		}
+	}else{
+		guess_mu = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(fixed_lambda)){
+		if(class(fixed_lambda) == "function"){
+			# fixed_lambda is already a function handle , so just check for validity
+			if(!is.finite(fixed_lambda(age0))) return(list(success=FALSE, error=sprintf("Fixed-lambda functor is not properly defined at age0 (%g)",age0)))
+			if(!is.finite(fixed_lambda(oldest_age))) return(list(success=FALSE, error=sprintf("Fixed-lambda functor is not properly defined at oldest_age (%g)",oldest_age)))
+		}else if(length(fixed_lambda)!=1){
+			return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL, or a function handle"))
+		}else{
+			# convert fixed_lambda to a function handle
+			fixed_lambda_value = fixed_lambda
+			fixed_lambda = function(ages){ rep(fixed_lambda_value, length(ages)) }
+		}
+	}else{
+		fixed_lambda = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(fixed_mu)){
+		if(class(fixed_mu) == "function"){
+			# mu is already a function handle , so just check for validity
+			if(!is.finite(fixed_mu(age0))) return(list(success=FALSE, error=sprintf("Fixed-mu functor is not properly defined at age0 (%g)",age0)))
+			if(!is.finite(fixed_mu(oldest_age))) return(list(success=FALSE, error=sprintf("Fixed-mu functor is not properly defined at oldest_age (%g)",oldest_age)))
+		}else if(length(fixed_mu)!=1){
+			return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL, or a function handle"))
+		}else{
+			# convert fixed_mu to a function handle
+			fixed_mu_value = fixed_mu
+			fixed_mu = function(ages){ rep(fixed_mu_value, length(ages)) }
+		}
+	}else{
+		fixed_mu = function(ages){ rep(NA, length(ages)) }
+	}
 	if(length(min_lambda)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one min_lambda; instead, received %d",length(min_lambda))))
 	if(length(max_lambda)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one max_lambda; instead, received %d",length(max_lambda))))
 	if(!(criterion %in% c("AIC", "BIC"))) return(list(success=FALSE, error=sprintf("Invalid model selection criterion '%s'. Expected 'AIC' or 'BIC'",criterion)))
-	root_age = get_tree_span(tree)$max_distance
 	Nmodels  = length(grid_sizes)
 	
 	# calculate tree LTT if needed
@@ -1232,7 +1170,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 	best_fit	= NULL
 	for(m in model_order){
 		Ngrid = grid_sizes[m]
-		if(uniform_grid){
+		if(uniform_grid || (Ngrid==1)){
 			age_grid = seq(from=age0, to=oldest_age, length.out=Ngrid)
 		}else{
 			age_grid = get_inhomogeneous_grid_1D(Xstart = age0, Xend = oldest_age, Ngrid = Ngrid, densityX = rev(LTT$ages), densityY=sqrt(rev(LTT$lineages)), extrapolate=TRUE)
@@ -1248,11 +1186,11 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 									max_mu				= max_mu,
 									min_rho0			= min_rho0,
 									max_rho0			= max_rho0,
-									guess_lambda		= guess_lambda,
-									guess_mu			= guess_mu,
+									guess_lambda		= guess_lambda(age_grid),
+									guess_mu			= guess_mu(age_grid),
 									guess_rho0			= guess_rho0,
-									fixed_lambda		= fixed_lambda,
-									fixed_mu			= fixed_mu,
+									fixed_lambda		= fixed_lambda(age_grid),
+									fixed_mu			= fixed_mu(age_grid),
 									fixed_rho0			= fixed_rho0,
 									const_lambda		= const_lambda,
 									const_mu			= const_mu,
@@ -1302,7 +1240,7 @@ unlist_with_nulls = function(L){
 # This function may be needed when returning a large list of lists from an Rcpp function (which may necessitate list nesting due to limitations of Rcpp) and you want to unpack the first-level lists.
 flatten_list_first_level = function(L){
 	N  = length(L)
-	NF = sum(sapply(seq_len(N), FUN=function(i) (if(all(class(L[[i]])=="list")) length(L[[i]]) else 1))) # predicted length of the flattened list
+	NF = sum(sapply(seq_len(N), FUN=function(i){ (if(all(class(L[[i]])=="list")) length(L[[i]]) else 1) })) # predicted length of the flattened list
 	LF = vector(mode="list", NF)
 	Lnames = names(L)
 	LFnames = character(NF)
@@ -1404,7 +1342,7 @@ get_SBM_independent_contrasts = function(	tree,
 		
 	# calculate phylogenetic divergences and geodesic distances between sister tips
 	phylodistances 	= get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], check_input=FALSE)
-	geodistances 	= radius * sapply(1:nrow(tip_pairs), FUN=function(p) geodesic_angle(tip_latitudes[tip_pairs[p,1]],tip_longitudes[tip_pairs[p,1]],tip_latitudes[tip_pairs[p,2]],tip_longitudes[tip_pairs[p,2]]))
+	geodistances 	= radius * sapply(1:nrow(tip_pairs), FUN=function(p){ geodesic_angle(tip_latitudes[tip_pairs[p,1]],tip_longitudes[tip_pairs[p,1]],tip_latitudes[tip_pairs[p,2]],tip_longitudes[tip_pairs[p,2]]) })
 
 	# omit tip pairs with zero phylogenetic distance, because in that case the likelihood density is pathological
 	# also omit tip pairs located at the same geographic location, if requested
@@ -1610,7 +1548,7 @@ read_fasta = function(	file,
 										include_sequences	= include_sequences)
 	if(!results$success) return(list("success"=FALSE, error=results$error))
 	if(include_headers && (!is.null(truncate_headers_at))){
-		results$headers = sapply(seq_len(length(results$headers)), FUN=function(h) strsplit(results$headers[h],split=truncate_headers_at,fixed=TRUE)[[1]][1])
+		results$headers = sapply(seq_len(length(results$headers)), FUN=function(h){ strsplit(results$headers[h],split=truncate_headers_at,fixed=TRUE)[[1]][1] })
 	}
 	return(list(headers		= (if(include_headers) results$headers else NULL),
 				sequences	= (if(include_sequences) results$sequences else NULL),
@@ -1620,10 +1558,1058 @@ read_fasta = function(	file,
 
 
 
-monotonize_time_series = function(	values,				# 1D array of size N, listing the scalar time series values. May include NaN.
-									increasing, 		# logical, specifying whether the resulting time series should be monotonically increasing (rather than decreasing)
-									prefer_later_data){	# logical, specifying whether later data (rather than earlier data) should be kept when resolving monotonicity conflicts
-	results = monotonize_time_series_CPP(values = values, increasing = increasing, prefer_later_data = prefer_later_data)
+# make a time series monotonically increasing or decreasing, by setting problematic values to NaN
+monotonize_series_by_pruning = function(values,				# numeric vector of size N, listing the scalar time series values. May include NaN.
+										increasing, 		# logical, specifying whether the resulting time series should be monotonically increasing (rather than decreasing)
+										prefer_later_data){	# logical, specifying whether later data (rather than earlier data) should be kept when resolving monotonicity conflicts
+	results = monotonize_series_by_pruning_CPP(values = values, increasing = increasing, prefer_later_data = prefer_later_data)
 	return(results)
 }
+
+
+# make a time series monotonically increasing or decreasing, by replacing problematic values with linearly interpolations between valid values.
+monotonize_time_series_via_interpolation = function(times,				# numeric vector of size N, listing the "times" of the time series, in ascending order. May not include NaN.
+													values,				# numeric vector of size N, listing the scalar time series values. May include NaN.
+													increasing, 		# logical, specifying whether the resulting time series should be monotonically increasing (rather than decreasing)
+													prefer_later_data){	# logical, specifying whether later data (rather than earlier data) should be kept when resolving monotonicity conflicts
+	results = monotonize_series_via_interpolation_CPP(times = times, values = values, increasing = increasing, prefer_later_data = prefer_later_data)
+	return(results)
+}
+
+
+
+bootstraps_to_confidence_intervals = function(bootstrap_samples){		# 2D numeric matrix of size NB x NP, where NB is the number of bootstraps and NP is the number of distinct parameters fitted at each bootstraps
+	NP = ncol(bootstrap_samples)
+	NB = nrow(bootstrap_samples)
+	if(NP==0){
+		return(list(mean		= numeric(0),
+					median		= numeric(0),
+					CI50lower	= numeric(0),
+					CI50upper	= numeric(0),
+					CI95lower	= numeric(0),
+					CI95upper	= numeric(0)))
+	}
+	quantiles 	= sapply(seq_len(NP), FUN=function(k){ quantile(bootstrap_samples[,k], probs=c(0.5, 0.25, 0.75, 0.025, 0.975), na.rm=TRUE, type=8) })
+	if(NP==1) quantiles = matrix(quantiles, ncol=NP) # make sure quantiles[,] is 2D matrix, even if only a single parameter was boostrapped
+	return(list(mean 		= colMeans(bootstrap_samples, na.rm=TRUE),
+				median 		= quantiles[1,],
+				CI50lower 	= quantiles[2,],
+				CI50upper 	= quantiles[3,],
+				CI95lower 	= quantiles[4,],
+				CI95upper 	= quantiles[5,]))
+}
+
+
+
+
+# Locally estimate the exponential growth rate of a time series in a sliding window
+fit_local_exponential_rate = function(	X,					# 1D numeric vector of length N, listing X values in ascending order
+										Y,					# 1D numeric vector of length N, listing non-negative Y-values corresponding to X[]
+										window_size				= 2,			# strictly positive integer, specifying the size of the sliding window (number of data points per fitting)
+										trim_window_at_bounds 	= TRUE,			# logical, specifying whether to trim the sliding window when hitting the data's X-bounds. If false, then the sliding window always has the specified size, but may not always be centered around the point of evaluation, and toward the left & right bound the fitted params will be constant. If TRUE, the window becomes smaller towards the edges, hence estimates towards the edges become more noisy.
+										normalize_by_Xstep		= FALSE,		# logical, specifying whether to divide each Y value by the corresponding X-step (this is only relevant if X is a non-regular grid). For example, if X are times and Y are new infections since the last time point, then the exponential growth rate of the disease should be calculated using the normalized Y.
+										model 					= "lognormal",	# character, specifying the stochastic model to assume for the Y values. Available options are "lognormal" and "Poisson" (only suitable for count data).
+										min_Npoints 			= 2,			# integer, specifying the minimum number of valid data points for fitting, per sliding window. If a sliding window covers fewer usable points than this threshold, the corresponding estimate is set to NA.
+										min_Npositives 			= 2,			# integer, specifying the minimum number of valid positive (Y>0) data points for fitting, per sliding window. If a sliding window covers fewer usable points than this threshold, the corresponding estimate is set to NA. Not relevant for the lognormal model, since zeros are always ignored for that model.
+										Nbootstraps 			= 0){			# integer, specifying the optional number of boostraps for estimating confidence intervals
+	NX 				= length(X)
+	window_size 	= max(1,window_size)
+	min_Npoints 	= min(min_Npoints,window_size)
+	min_Npositives 	= min(min_Npositives,window_size)
+	
+	if(model == "lognormal"){
+		if(normalize_by_Xstep && (NX>=2)){
+			# divide Y values by the X-step lengths. For Y[1] we don't know the X-step, so we can't normalize it, hence we set Y[1]=NA
+			Y = c(NA,Y[2:NX]/diff(X))
+		}
+		fit = fit_exp_LeastLogSquares_moving_window_CPP(X = X, Y = Y, window_size = window_size, trim_window_at_bounds = trim_window_at_bounds)
+		fit$rate[fit$Npoints<min_Npoints] = NA
+		valid_points_for_bootstrap = which(is.finite(fit$predicted_logY) & is.finite(fit$log_variance) & is.finite(X) & is.finite(Y) & (Y>0))
+	}else if(model=="Poisson"){
+		if(normalize_by_Xstep && (NX>=2)){
+			# the appropriate scalings must be passed to the max-likelihood fitting routine, i.e. we can't just rescale the Y-values
+			scalings = c(1, diff(X))
+			Y = c(NA, Y[2:NX])
+		}else{
+			scalings = rep(1, NX)
+		}
+		fit = fit_exp_Poisson_moving_window_CPP(X = X, Y = Y, scalings = scalings, window_size = window_size, trim_window_at_bounds = trim_window_at_bounds)	
+		fit$rate[(fit$Npoints<min_Npoints) | (fit$Npositives<min_Npositives)] = NA
+		valid_points_for_bootstrap = which(is.finite(X) & is.finite(Y) & (Y>=0))
+	}else{
+		stop(sprintf("Invalid model '%s'",model))
+	}
+	
+	if(Nbootstraps>0){
+		bootstrap_Y 	= rep(NA, times=NX)
+		boostrap_rates 	= matrix(NA, nrow=Nbootstraps, ncol=NX)
+		if(length(valid_points_for_bootstrap)>0){
+			for(b in seq_len(Nbootstraps)){
+				# generate random time series bootstrap_Y, according to the fitted model params 
+				if(model=="lognormal"){
+					# assuming a log-normal model, i.e. where log(Y) ~ normal(mean=fit$predicted_logY, variance=fit$log_variance)
+					bootstrap_Y[valid_points_for_bootstrap] = exp(rnorm(n=length(valid_points_for_bootstrap), mean=fit$predicted_logY[valid_points_for_bootstrap], sd=sqrt(pmax(0,fit$log_variance[valid_points_for_bootstrap]))))
+				}else if(model=="Poisson"){
+					bootstrap_Y[valid_points_for_bootstrap] = rpois(n=length(valid_points_for_bootstrap), lambda=Y[valid_points_for_bootstrap])				
+				}
+				bfit = fit_local_exponential_rate(	X						= X,
+													Y						= bootstrap_Y,
+													window_size				= window_size,
+													trim_window_at_bounds	= trim_window_at_bounds,
+													model					= model,
+													min_Npoints				= min_Npoints,
+													Nbootstraps				= 0)
+				boostrap_rates[b,] = bfit$rate
+			}
+		}
+		rate_CI = bootstraps_to_confidence_intervals(bootstrap_samples=boostrap_rates)		
+	}
+	
+	return(list(rate 	= fit$rate, 
+				rate_CI = (if(Nbootstraps>0) rate_CI else NULL)))
+}
+
+
+# create a latitude x longitude grid, such that every grid cell has the same surface area
+# returns a vector of latitudes (of size Nlat+1) and longitudes (of size Nlon), such that latitudes[1]=-90, latitudes[end]=+90, longitues[1]=-180 and longitudes[end]=+180
+split_sphere_into_equisized_tiles = function(Nlat, Nlon){
+	latitudes  = asin(2*seq(from=0,to=1,length.out=(Nlat+1)) - 1) * 180/pi # split sphere into Nlat latitudinal segments ("onion rings")
+	longitudes = seq(from=-pi,to=pi,length.out=(Nlon+1)) * 180/pi
+	return(list(latitudes=latitudes, longitudes=longitudes))
+}
+
+
+assign_points_to_tiles_on_sphere = function(point_latitudes, 
+											point_longitudes,
+											tile_latitudes,		# numeric vector of size Nlat+1, listing latitudes in ascending order from -90 up to 90.
+											tile_longitudes){	# numeric vector of size Nlon+1, listing longitudes in ascending order from -180 to 180.
+	Nlat = length(tile_latitudes)-1
+	Nlon = length(tile_longitudes)-1
+	NP	 = length(point_latitudes)
+	
+	# first bin by latitude
+	# point2lat[p] will be the latitudinal tile index (from 1 to Nlat) for point p
+	lat_order = order(point_latitudes)
+	lat_binning = place_sorted_values_into_bins_CPP(items		= point_latitudes[lat_order],
+													bin_mins 	= tile_latitudes[1:Nlat],
+													bin_maxs	= tile_latitudes[2:(Nlat+1)])
+	point2lat = integer(NP)
+	point2lat[lat_order] = lat_binning$item2bin+1
+	
+	# next bin by longitude
+	# point2lon[p] will be the longitudinal tile index (from 1 to Nlon) for point p
+	lon_order = order(point_longitudes)
+	lon_binning = place_sorted_values_into_bins_CPP(items		= point_longitudes[lon_order],
+													bin_mins 	= tile_longitudes[1:Nlon],
+													bin_maxs	= tile_longitudes[2:(Nlon+1)])
+	point2lon = integer(NP)
+	point2lon[lon_order] = lon_binning$item2bin+1
+	
+	return(list(point2lat=point2lat, point2lon=point2lon))
+}
+
+
+
+# generate random birth-death trees, simulate a constant-diffusivity SBM on each tree, and subsample each tree with geographic biases
+# The geographically variable sampling probability can either be provided (see tile_counts[]) or determined based on a set of provided points on the sphere, by splitting the sphere into a number of equally sized tiles
+# Note that the returned trees might have somewhat different tip counts than requested, depending on whether some simulated tips land in zero-probability tiles
+simulate_geobiased_sbm = function(	Nsims,
+									Ntips,
+									radius,
+									diffusivity,
+									lambda					= 1,
+									mu						= 0,
+									rarefaction 			= 1,
+									crown_age				= NULL,
+									stem_age				= NULL,
+									root_latitude			= NULL,
+									root_longitude			= NULL,
+									Nthreads				= 1,
+									omit_failed_sims		= FALSE,
+									Ntiles					= NULL,	# number of tiles into which to split sphere, for calculating sampling density. Only needed if tile_counts==NULL.
+									reference_latitudes		= NULL,	# optional numeric vector of size NR, specifying the latitudes of the reference points on the sphere, i.e. based on which the sampling probability density will be determined. Only needed if tile_counts==NULL.
+									reference_longitudes	= NULL,	# optional numeric vector of size NR, specifying the latitudes of the reference points on the sphere, i.e. based on which the sampling probability density will be determined. Only needed if tile_counts==NULL.
+									tile_counts				= NULL,	# optional 2D numeric matrix listing reference counts (~density) for each spherical tile. The normalization of tile_counts[] does not matter, i.e. only relative values matter.
+									tile_latitudes			= NULL,	# optional numeric vector of size nrow(tile_counts)+1, listing tile latitudes, ranging from -90 to +90. Must be provided iff tile_counts is provided.
+									tile_longitudes			= NULL){# optional numeric vector of size ncol(tile_counts)+1, listing tile longitudes, ranging from -180 to +180. Must be provided iff tile_counts is provided.
+
+	# determine spherical tiles
+	if(!is.null(tile_counts)){
+		if(is.null(tile_latitudes)) return(list(success=FALSE, error="Missing tile_latitudes"))
+		if(is.null(tile_longitudes)) return(list(success=FALSE, error="Missing tile_longitudes"))
+		Ntiles = nrow(tile_counts) * ncol(tile_counts)
+		Nlat   = nrow(tile_counts)
+		Nlon   = ncol(tile_counts)
+		if(length(tile_latitudes)!=Nlat+1) return(list(success=FALSE, error=sprintf("Number of tile_latitudes (%d) differs from expectation (%d)",length(tile_latitudes),Nlat+1)))
+		if(length(tile_longitudes)!=Nlon+1) return(list(success=FALSE, error=sprintf("Number of tile_longitudes (%d) differs from expectation (%d)",length(tile_longitudes),Nlon+1)))
+	}else{
+		if(is.null(reference_latitudes)) return(list(success=FALSE, error="Missing reference_latitudes"))
+		if(is.null(reference_longitudes)) return(list(success=FALSE, error="Missing reference_longitudes"))
+		if(is.null(Ntiles)) Ntiles = max(8,length(reference_latitudes)/10)
+		Nlat 	= max(1,as.integer(round(sqrt(Ntiles/2))))
+		Nlon 	= max(1,as.integer(round(Ntiles/Nlat)))
+		tiles 	= split_sphere_into_equisized_tiles(Nlat=Nlat, Nlon=Nlon)
+		tile_latitudes  = tiles$latitudes
+		tile_longitudes = tiles$longitudes
+
+		# determine number of reference points in each tile (i.e. geographic sampling density)
+		tile_counts = matrix(0, nrow=Nlat, ncol=Nlon)
+		for(r in seq_len(Nlat)){
+			for(k in seq_len(Nlon)){
+				tile_counts[r,k] = sum((reference_latitudes<tile_latitudes[r+1]) & (reference_latitudes>=tile_latitudes[r]) & (reference_longitudes<tile_longitudes[k+1]) & (reference_longitudes>=tile_longitudes[k]))
+			}
+		}
+	}
+		
+	# core function for running a single simulation
+	single_simulation = function(r){
+		# generate random tree
+		tree_sim = generate_tree_hbd_reverse(	Ntips		= Ntips/rarefaction,
+												lambda		= lambda,
+												mu			= mu,
+												rho			= 1,
+												crown_age	= crown_age,
+												stem_age	= stem_age,
+												relative_dt	= 0.01)
+		if(!tree_sim$success) return(list(success=FALSE, error=sprintf("Simulation #%d failed: %s",r,tree_sim$error)))
+		tree = tree_sim$trees[[1]]
+		# simulate SBM on tree
+		sbm_sim = simulate_sbm(	tree			= tree, 
+								radius			= radius,
+								diffusivity		= diffusivity,
+								root_latitude	= root_latitude,
+								root_longitude	= root_longitude)
+		if(!sbm_sim$success) return(list(success=FALSE, error=sprintf("SBM simulation #%d failed: %s",r,sbm_sim$error)))
+		# rarefy tree, picking tips according to the previously determined spherical probability density
+		tip2tile 		= assign_points_to_tiles_on_sphere(point_latitudes = sbm_sim$tip_latitudes, point_longitudes = sbm_sim$tip_longitudes, tile_latitudes = tile_latitudes, tile_longitudes = tile_longitudes)
+		tip2tile_count  = tile_counts[cbind(tip2tile$point2lat,tip2tile$point2lon)] # tip2tile_count[i] will be the tile_count value for tip i, i.e. the number of reference points found in the same tile as this tip
+		if(sum(tip2tile_count>0)<2) return(list(success=FALSE, error=sprintf("SBM simulation #%d failed: Nearly all simulated tips are in empty tiles",r)))
+		tip2prob 		= tip2tile_count/sum(tip2tile_count)
+		keep_tips		= sample(x=seq_len(length(tip2prob)), size=min(Ntips,sum(tip2prob>0)), replace=FALSE, prob=tip2prob)
+		if(length(keep_tips)<2) return(list(success=FALSE, error=sprintf("SBM simulation #%d failed: Insufficient number of tips sampled",r)))
+		rarefying		 = get_subtree_with_tips(tree, only_tips=keep_tips)
+		return(list(success=TRUE, tree=rarefying$subtree, latitudes=sbm_sim$tip_latitudes[rarefying$new2old_tip], longitudes=sbm_sim$tip_longitudes[rarefying$new2old_tip]))
+	}
+
+	
+	# simulate multiple trees & SBMs
+    if((Nsims>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
+		# simulate trees in parallel using multiple forks
+		# Note: Forks (and hence shared memory) are not available on Windows
+		sims = parallel::mclapply(	seq_len(Nsims), 
+									FUN = function(r){ single_simulation(r) }, 
+									mc.cores = min(Nthreads, Nsims), 
+									mc.preschedule = TRUE, 
+									mc.cleanup = TRUE)
+	}else{
+		# run in serial mode
+		sims = vector(mode="list", Nsims)
+		for(r in 1:Nsims){
+			sims[[r]] = single_simulation(r)
+		}
+	}
+
+	# remove failed sims if requested
+	if(omit_failed_sims){
+		sims = sims[which(sapply(seq_len(Nsims), FUN=function(r) sims[[r]]$success))]
+	}
+
+	return(list(success			= TRUE,
+				sims			= sims,
+				Nlat			= Nlat,
+				Nlon			= Nlon,
+				tile_latitudes 	= tile_latitudes,
+				tile_longitudes	= tile_longitudes,
+				tile_counts		= tile_counts))
+}
+
+
+# remove values in the left- and right-tail of a distribution of numbers
+# For example, if outlier_prob=0.5, then only the percentile 0.025 - 0.975 will be kept.
+remove_outliers = function(X, outlier_prob){
+	Q = quantile(X, probs=c(outlier_prob/2,1-outlier_prob/2), na.rm=TRUE, type=8)
+	return(X[(X>Q[1]) & (X<Q[2])])
+}
+
+
+# fit a constant-diffusivity SBM model to a tree with given tip coordinates, while iteratively correcting for geographic sampling biases
+fit_sbm_geobiased_const = function(	trees, 								# either a single tree in phylo format, or a list of trees
+									tip_latitudes, 						# either a 1D vector of size Ntips (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), listing geographical latitudes of the tips (in decimal degrees) of each tree
+									tip_longitudes, 					# either a 1D vector of size Ntips (if trees[] is a single tree) or a list of 1D vectors (if trees[] is a list of trees), listing geographical longitudes of the tips (in decimal degrees) of each tree
+									radius,								# numeric, radius to assume for the sphere (e.g. Earth). Use this e.g. if you want to hange the units in which diffusivity is estimated. Earth's mean radius is about 6371e3 m.
+									reference_latitudes		= NULL,		# optional numeric vector of length NR, listing latitudes of reference coordinates based on which to calculate the geographic sampling density. If NULL, the geographic sampling density is estimated based on tip_latitudes[] and tip_longitudes[]
+									reference_longitudes	= NULL,		# optional numeric vector of length NR, listing longitudes of reference coordinates based on which to calculate the geographic sampling density. If NULL, the geographic sampling density is estimated based on tip_latitudes[] and tip_longitudes[]
+									only_basal_tip_pairs	= FALSE,	# logical, specifying whether only immediate sister tips should be considered, i.e. tip pairs with at most 2 edges between the two tips
+									only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
+									min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
+									max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+									min_diffusivity			= NULL,		# numeric, specifying the lower bound of allowed diffusivities, for the first iteration. If omitted, it will be automatically chosen.
+									max_diffusivity			= NULL,		# numeric, specifying the upper bound of allowed diffusivities, for the first iteration. If omitted, it will be automatically chosen.
+									rarefaction				= 0.1,		# numeric, by how much to rarefy the simulated trees when geographically subsampling. This should be less than 1, so that geographic bias actually plays in. note that the simulated trees will have the same size as the original tree.
+									Nsims					= 2,		# integer, number of SBM simulatons to perform per iteration for assessing the effects of geographic bias. Smaller trees require larger Nsims (due to higher stochasticity). This must be at least 2, although values of 10 or even 100 are better.
+									max_iterations			= 1,		# integer, maximum number of iterations (correction steps) to perform. Note that due to the stochastic nature of the SBM, exact convergence is not possible.
+									Nbootstraps				= 0,		# integer, number of boostraps to perform, in the final iteration. If <=0, no boostrapping is performed.
+									NQQ						= 0,		# integer, optional number of simulations to perform for creating Q-Q plots of the theoretically expected distribution of geodistances vs the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting.
+									Nthreads				= 1,		# integer, number of parallel thread to use whenever possible
+									SBM_PD_functor			= NULL,		# optional object, internally used SBM probability density functor
+									verbose					= FALSE,
+									verbose_prefix			= ""){
+	# basic input checking
+	if("phylo" %in% class(trees)){
+		# trees[] is actually a single tree
+		trees = list(trees)
+		Ntrees = 1
+		if(!(("list" %in% class(tip_latitudes)) && (length(tip_latitudes)==1))){
+			tip_latitudes = list(tip_latitudes)
+		}
+		if(!(("list" %in% class(tip_longitudes)) && (length(tip_longitudes)==1))){
+			tip_longitudes = list(tip_longitudes)
+		}
+	}else if("list" %in% class(trees)){
+		# trees[] is a list of trees
+		Ntrees = length(trees)
+		if("list" %in% class(tip_latitudes)){
+			if(length(tip_latitudes)!=Ntrees) return(list(success=FALSE,error=sprintf("Input list of tip_latitudes has length %d, but should be of length %d (number of trees)",length(tip_latitudes),Ntrees)))
+		}else if("numeric" %in% class(tip_latitudes)){
+			if(Ntrees!=1) return(list(success=FALSE,error=sprintf("Input tip_latitudes was given as a single vector, but expected a list of %d vectors (number of trees)",Ntrees)))
+			if(length(tip_latitudes)!=length(trees[[1]]$tip.label)) return(list(success=FALSE,error=sprintf("Input tip_latitudes was given as a single vector of length %d, but expected length %d (number of tips in the input tree)",length(tip_latitudes),length(trees[[1]]$tip.label))))
+			tip_latitudes = list(tip_latitudes)
+		}
+		if("list" %in% class(tip_longitudes)){
+			if(length(tip_longitudes)!=Ntrees) return(list(success=FALSE,error=sprintf("Input list of tip_longitudes has length %d, but should be of length %d (number of trees)",length(tip_longitudes),Ntrees)))
+		}else if("numeric" %in% class(tip_longitudes)){
+			if(Ntrees!=1) return(list(success=FALSE,error=sprintf("Input tip_longitudes was given as a single vector, but expected a list of %d vectors (number of trees)",Ntrees)))
+			if(length(tip_longitudes)!=length(trees[[1]]$tip.label)) return(list(success=FALSE,error=sprintf("ERROR: Input tip_longitudes was given as a single vector of length %d, but expected length %d (number of tips in the input tree)",length(tip_longitudes),length(trees[[1]]$tip.label))))
+			tip_longitudes = list(tip_longitudes)
+		}
+	}else{
+		return(list(success=FALSE,error=sprintf("Unknown data format '%s' for input trees[]: Expected a list of phylo trees or a single phylo tree",class(trees)[1])))
+	}
+	Nsims 			= max(2,Nsims)
+	max_iterations 	= max(1,max_iterations)
+	rarefaction 	= max(0,min(1,rarefaction))
+	
+	# get flattened set of coordinates (across all tips)
+	if(is.null(reference_latitudes) || is.null(reference_longitudes)){
+		reference_latitudes  = unlist(tip_latitudes)
+		reference_longitudes = unlist(tip_longitudes)
+	}
+	
+	# fit a simple birth-death model to each tree, for simulating "similar" trees later on
+	if(verbose) cat(sprintf("%sFitting basic birth-death models to the trees..\n",verbose_prefix))
+	BD_lambdas 	= rep(NA,Ntrees)
+	BD_mus		= rep(NA,Ntrees)
+	BD_rhos		= rep(NA,Ntrees)
+	for(tr in seq_len(Ntrees)){
+		if(length(trees[[tr]]$tip.label)<=3) next # this tree is too small
+		BDfit = castor::fit_hbd_model_on_grid(	tree			= trees[[tr]],
+												const_lambda	= TRUE,
+												const_mu		= TRUE,
+												guess_rho0		= rarefaction,
+												min_rho0		= 0.0001*rarefaction,
+												condition		= "auto",
+												Ntrials			= 100,
+												Nthreads		= Nthreads)
+		if(!BDfit$success) next
+		# figure out congruent BD model with the appropriate rho
+		# the reason we don't fit with rho fixed at rarefaction, is that for some trees there is an upper bound on the biologically plausible values of rho (with higher values leading to mu<=0).
+		BD_rhos[tr] 	= min(rarefaction,(if(BDfit$fitted_lambda<=BDfit$fitted_mu) 1 else BDfit$fitted_rho/(1-BDfit$fitted_mu/BDfit$fitted_lambda))) # set rho to the provided rarefaction, but avoid getting above a certain threshold where the congruent mu would be negative
+		BD_lambdas[tr] 	= max(0,BDfit$fitted_lambda * BDfit$fitted_rho / BD_rhos[tr])
+		BD_mus[tr] 		= max(0,BD_lambdas[tr] - (BDfit$fitted_lambda - BDfit$fitted_mu))
+	}
+	successfull_BD_fits = which(is.finite(BD_lambdas))
+	if(length(successfull_BD_fits)==0) return(list(success=FALSE, error=sprintf("BD model fitting failed for all %d trees",Ntrees)))
+	if(length(successfull_BD_fits)<Ntrees){
+		# filter out failed trees
+		if(verbose) cat(sprintf("%s  WARNING: Ignoring %d out of %d trees for which BD model fitting failed\n",verbose_prefix,Ntrees-length(successfull_BD_fits),Ntrees))
+		BD_lambdas 		= BD_lambdas[successfull_BD_fits]
+		BD_mus			= BD_mus[successfull_BD_fits]
+		BD_rhos			= BD_rhos[successfull_BD_fits]
+		trees			= trees[successfull_BD_fits]
+		tip_latitudes	= tip_latitudes[successfull_BD_fits]
+		tip_longitudes	= tip_longitudes[successfull_BD_fits]
+		Ntrees			= length(successfull_BD_fits)
+	}
+	if(verbose) cat(sprintf("%s  Note: Congruents of fitted models have mean lambda = %g, mu = %g, r = %g, rho = %g\n",verbose_prefix,mean(BD_lambdas),mean(BD_mus),mean(BD_lambdas-BD_mus),mean(BD_rhos)))
+
+	
+	# fit SBM-const (without any correction)
+	if(verbose) cat(sprintf("%sFitting diffusivity without any correction..\n",verbose_prefix))
+	fit0 = fit_sbm_const(	trees					= trees,
+							tip_latitudes			= tip_latitudes,
+							tip_longitudes			= tip_longitudes,
+							radius					= radius,
+							only_basal_tip_pairs	= only_basal_tip_pairs,
+							only_distant_tip_pairs	= only_distant_tip_pairs,
+							min_MRCA_time			= min_MRCA_time,
+							max_MRCA_age			= max_MRCA_age,
+							min_diffusivity			= min_diffusivity,
+							max_diffusivity			= max_diffusivity,
+							Nbootstraps				= Nbootstraps,
+							NQQ						= 0,
+							SBM_PD_functor			= SBM_PD_functor)
+	if(!fit0$success) return(list(success=FALSE, error=sprintf("Could not fit SBM model in first round: %s",fit0$error)))
+	if(verbose) cat(sprintf("%s  Fitted diffusivity: %g\n",verbose_prefix,fit0$diffusivity))
+	
+	root_ages 					= sapply(seq_len(Ntrees), FUN=function(tr) get_tree_span(trees[[tr]])$max_distance)
+	correction_factor 			= 1 # multiplicative factor to multiply the last fit diffusivity with, in order to get the true diffusivity
+	all_correction_factors 		= rep(NA,min(1000,max_iterations))
+	all_diffusivity_estimates 	= rep(NA,min(1000,max_iterations)) # all_diffusivity_estimates[i] will be the geometric-mean diffusivity estimated for trees simulated assuming a correction factor all_correction_factors[i]
+	Niterations			 		= 0
+	stopping_criterion 			= NULL
+	sims 						= vector(mode="list", Ntrees)
+	Nsims_per_tree 				= numeric(Ntrees)
+	tile_counts 				= NULL
+	tile_latitudes 				= NULL
+	tile_longitudes 			= NULL
+	converged					= FALSE
+	for(i in seq_len(max_iterations)){
+		if(verbose) cat(sprintf("%sIteration %d\n",verbose_prefix,i))
+		if(verbose) cat(sprintf("%s  Simulating %d replicate SBM models for each input tree (with D=%g)..\n",verbose_prefix,Nsims,fit0$diffusivity * correction_factor))
+		for(tr in seq_len(Ntrees)){
+			sims[[tr]] = simulate_geobiased_sbm(Nsims					= Nsims,
+												Ntips					= length(trees[[tr]]$tip.label),
+												radius					= radius,
+												diffusivity				= fit0$diffusivity * correction_factor,
+												lambda					= BD_lambdas[tr],
+												mu						= BD_mus[tr],
+												rarefaction 			= BD_rhos[tr],
+												crown_age				= root_ages[tr],
+												Nthreads				= Nthreads,
+												omit_failed_sims		= TRUE,
+												reference_latitudes		= reference_latitudes,
+												reference_longitudes	= reference_longitudes,
+												tile_counts				= tile_counts,
+												tile_latitudes			= tile_latitudes,
+												tile_longitudes			= tile_longitudes)
+			if(!sims[[tr]]$success) return(list(success=FALSE, error=sprintf("Iteration %d failed for tree #%d: Simulations failed: %s",i,tr,sims[[tr]]$error)))
+			if(length(sims[[tr]]$sims)==0) return(list(success=FALSE, error=sprintf("Iteration %d failed for tree #%d: All simulations failed",i,tr)))
+			Nsims_per_tree[tr] = length(sims[[tr]]$sims)
+			# keep record of geographic sampling density (spherical tiles) to avoid costly re-computing
+			if(is.null(tile_counts)){
+				tile_counts 	= sims[[tr]]$tile_counts
+				tile_latitudes 	= sims[[tr]]$tile_latitudes
+				tile_longitudes = sims[[tr]]$tile_longitudes
+			}
+		}
+		if(all(Nsims_per_tree<2)) return(list(success=FALSE, error=sprintf("Iteration %d failed: Fewer than 2 simulations succeeded for each tree",i)))
+		
+		aux_fit_SBM_to_simulation = function(r){
+			# extract r-th simulation for each tree (recycle simulations cyclically if fewer than r are available e.g. due to some simulation failures)
+			sim_trees 		= lapply(seq_len(Ntrees), FUN=function(tr) sims[[tr]]$sims[[1+(r-1) %% Nsims_per_tree[tr]]]$tree)
+			sim_latitudes 	= lapply(seq_len(Ntrees), FUN=function(tr) sims[[tr]]$sims[[1+(r-1) %% Nsims_per_tree[tr]]]$latitudes)
+			sim_longitudes 	= lapply(seq_len(Ntrees), FUN=function(tr) sims[[tr]]$sims[[1+(r-1) %% Nsims_per_tree[tr]]]$longitudes)
+			sim_fit = fit_sbm_const(trees					= sim_trees, 
+									tip_latitudes			= sim_latitudes,
+									tip_longitudes			= sim_longitudes,
+									radius 					= radius,
+									only_basal_tip_pairs	= only_basal_tip_pairs,
+									only_distant_tip_pairs	= only_distant_tip_pairs,
+									min_MRCA_time			= min_MRCA_time,
+									max_MRCA_age			= max_MRCA_age,
+									SBM_PD_functor			= SBM_PD_functor)
+			return(if(sim_fit$success) sim_fit$diffusivity else NA)
+		}
+		if((Nsims>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
+			if(verbose) cat(sprintf("%s  Fitting SBM diffusivity to %d simulations (parallelized)..\n",verbose_prefix,Nsims))
+			sim_fit_diffusivities = unlist(parallel::mclapply(	seq_len(Nsims), 
+																FUN = function(r){ aux_fit_SBM_to_simulation(r) }, 
+																mc.cores = min(Nthreads, Nsims), 
+																mc.preschedule = TRUE, 
+																mc.cleanup = TRUE))
+		}else{
+			if(verbose) cat(sprintf("%s  Fitting SBM diffusivity to %d simulations (sequentially)..\n",verbose_prefix,Nsims))
+			sim_fit_diffusivities = rep(NA, Nsims)
+			for(r in seq_len(Nsims)){
+				sim_fit_diffusivities[r] = aux_fit_SBM_to_simulation(r)
+			}
+		}
+
+		valid_sims = which(is.finite(sim_fit_diffusivities))
+		if(length(valid_sims)==0) return(list(success=FALSE, error=sprintf("Iteration %d failed: Could not fit SBM to any of the simulated datasets",i)))
+		if(length(valid_sims)==1) return(list(success=FALSE, error=sprintf("Iteration %d failed: Could only fit SBM to one of the simulated datasets, but need at least 2 successful sims",i)))
+		sim_fit_diffusivities = sim_fit_diffusivities[valid_sims]
+		if(length(sim_fit_diffusivities)>=5) sim_fit_diffusivities = remove_outliers(X=sim_fit_diffusivities, outlier_prob=0.1)
+		if(length(sim_fit_diffusivities)<2) return(list(success=FALSE, error=sprintf("Iteration %d failed: Nearly all sim-fitted diffusivities were filtered out as 'outliers'.",i)))
+		mean_sim_fit_diffusivity 		= exp(mean(log(sim_fit_diffusivities))) # geometric mean
+		se_sim_fit_log_diffusivity	 	= sd(log(sim_fit_diffusivities))/sqrt(length(sim_fit_diffusivities)) # standard error in log space
+		all_correction_factors[i]		= correction_factor
+		all_diffusivity_estimates[i] 	= mean_sim_fit_diffusivity
+		Niterations 					= Niterations + 1
+		if(verbose) cat(sprintf("%s  Geometric-mean diffusivity fitted to sims: %g (standard error of mean log-D %g)\n",verbose_prefix,mean_sim_fit_diffusivity,se_sim_fit_log_diffusivity))
+
+		# check if approximate "convergence" was achieved
+		if((abs(log(fit0$diffusivity)-log(mean_sim_fit_diffusivity))<min(se_sim_fit_log_diffusivity,0.1)) && (i>1) && (abs(log10(correction_factor/all_correction_factors[i-1]))<0.1)){
+			# mean_sim_fit_diffusivity is pretty close (by one standard deviation) from the fit0, so consider this a successful convergence
+			if(verbose) cat(sprintf("%s  Achieved approximate convergence at iteration %d: true estimated diffusivity = %g\n",verbose_prefix,i,fit0$diffusivity*correction_factor))
+			stopping_criterion = sprintf("Achieved approximate convergence at iteration %d (relative difference to uncorrected fit: %g)",i,abs(fit0$diffusivity-mean_sim_fit_diffusivity)/fit0$diffusivity)
+			converged = TRUE
+			break
+		}
+		
+		# improve correction factor for next iteration
+		if(i<=2){
+			correction_factor = correction_factor * fit0$diffusivity/mean_sim_fit_diffusivity
+		}else{
+			# use linear interpolation (on a log scale) between the closest two iterations (closest to the target from below and above) if possible, to estimate improved correction factor
+			aboves = which(all_diffusivity_estimates-fit0$diffusivity>=0)
+			belows = which(all_diffusivity_estimates-fit0$diffusivity<=0)
+			if((length(aboves)>0) && (length(belows)>0)){
+				# found closest from below (left) and above (right)
+				left  = belows[which.min(fit0$diffusivity-all_diffusivity_estimates[belows])]
+				right = aboves[which.min(all_diffusivity_estimates[aboves]-fit0$diffusivity)]
+				if((i!=left) && (i!=right)){
+					# both points seem to be old, hence there's no point in trying them out again. Replace one of the two with the current iteration i.
+					if((all_diffusivity_estimates[i]-fit0$diffusivity) * (all_diffusivity_estimates[left]-fit0$diffusivity)<0){
+						# i and left landed on opposite sides of the target, so use those
+						right = i
+					}else{
+						left = i
+					}
+				}
+			}else{
+				# can't bracket the target yet, so just use last 2 iterations
+				left 	= i-1
+				right	= i
+			}
+			correction_factor = exp(log(all_correction_factors[left]) + (log(fit0$diffusivity)-log(all_diffusivity_estimates[left])) * (log(all_correction_factors[right])-log(all_correction_factors[left]))/(log(all_diffusivity_estimates[right])-log(all_diffusivity_estimates[left])))
+		}
+		if(verbose) cat(sprintf("%s  Estimated correction factor: %g\n",verbose_prefix,correction_factor))
+		if(!is.finite(correction_factor)) return(list(success=FALSE, error=sprintf("Sequence diverged (correction factor non-finite)")))		
+	}
+	if(!converged) return(list(success=FALSE, error="Failed to converge", Nlat = sims[[1]]$Nlat, Nlon = sims[[1]]$Nlon, uncorrected_fit_diffusivity	= fit0$diffusivity, Ncontrasts = fit0$Ncontrasts, Ntrees = Ntrees))
+	true_diffusivity = fit0$diffusivity * correction_factor
+	
+	# Calculate QQ-plot using simulations, based on estimated true diffusivity	
+	if(NQQ>0){
+		sim_geodistances = numeric(NQQ * fit0$Ncontrasts)
+		next_g = 1 # index in sim_geodistances[] for placing the next simulated geodistance
+		for(tr in 1:Ntrees){
+			tip_pairs = fit0$tip_pairs_per_tree[[tr]]
+			if(length(tip_pairs)>0){
+				for(q in 1:NQQ){
+					sim = castor::simulate_sbm(tree = trees[[tr]], radius = radius, diffusivity = true_diffusivity, root_latitude = NULL, root_longitude = NULL)
+					if(!sim$success) return(list(success=FALSE, error=sprintf("Calculation of QQ failed at simulation %d for tree %d: Could not simulate SBM for the fitted model: %s",q,tr,sim$error), diffusivity=true_diffusivity));
+					sim_geodistances[next_g + c(1:nrow(tip_pairs))] = radius * geodesic_angles(sim$tip_latitudes[tip_pairs[,1]],sim$tip_longitudes[tip_pairs[,1]],sim$tip_latitudes[tip_pairs[,2]],sim$tip_longitudes[tip_pairs[,2]])
+					next_g = next_g + nrow(tip_pairs)
+				}
+			}
+		}
+		probs  = seq_len(fit0$Ncontrasts)/fit0$Ncontrasts
+		QQplot = cbind(quantile(fit0$geodistances, probs=probs, na.rm=TRUE, type=8), quantile(sim_geodistances, probs=probs, na.rm=TRUE, type=8))
+	}
+
+	return(list(success						= TRUE,
+				Nlat						= sims[[1]]$Nlat,
+				Nlon						= sims[[1]]$Nlon,
+				diffusivity					= true_diffusivity,
+				correction_factor			= correction_factor,
+				Niterations					= Niterations,
+				stopping_criterion			= stopping_criterion,
+				uncorrected_fit_diffusivity	= fit0$diffusivity,
+				last_sim_fit_diffusivity	= mean_sim_fit_diffusivity,
+				all_correction_factors		= all_correction_factors, # correction factor at each iteration
+				all_diffusivity_estimates	= all_diffusivity_estimates, # mean diffusivity estimates for trees simulated at each iteration
+				lambda						= BD_lambdas,
+				mu							= BD_mus,
+				rarefaction					= rarefaction,
+				Ncontrasts					= fit0$Ncontrasts,
+				Ntrees						= Ntrees,
+				standard_error				= fit0$standard_error * correction_factor,
+				CI50lower					= fit0$CI50lower * correction_factor,
+				CI50upper					= fit0$CI50upper * correction_factor,
+				CI95lower					= fit0$CI95lower * correction_factor,
+				CI95upper					= fit0$CI95upper * correction_factor,
+				QQplot						= (if(NQQ>0) QQplot else NULL),
+				SBM_PD_functor				= fit0$SBM_PD_functor))
+}
+
+
+
+# run a  Kolmogorov-Smirnov test to check whether an empirical set of samples was generated by some null model (or some fitted model), using parametric boostraps of that model
+# For example, empirical[] may be branch lengths of some empirical tree, while bootstraps[] are branch lengths of trees simulated under a fitted birth-death model
+bootstrap_Kolmogorov_Smirnov_test = function(	bootstraps,	# list of length NB, listing samples from NB bootstraps (e.g., simulations of some stochastic null model or fitted model). Hence, bootstraps[[b]] is a numeric vector, listing values generated during the b-th bootstrap.
+												empirical){	# numeric vector of arbitrary size, listing samples whose deviation from the null/fitted model is to be evaluated
+	NB = length(bootstraps)
+	
+	# calculate empirical CDF
+	CDF_grid 				= sort(empirical)
+	empirical_CDF_values 	= seq_len(length(empirical))/length(empirical)	
+
+	# calculate bootstrap CDFs and mean bootstrap CDF (will be used as "reference"), evaluated at the same points as the empirical CDF
+	bootstrap_CDF_values = matrix(NA, nrow=NB, ncol=length(CDF_grid))
+	for(b in seq_len(NB)){
+		NBG = length(bootstraps[[b]])
+		bootstrap_CDF_values[b,] = evaluate_spline(Xgrid=sort(bootstraps[[b]]), Ygrid=seq_len(NBG)/NBG, splines_degree=0, Xtarget=CDF_grid, extrapolate="const", derivative=0)
+	}
+	reference_CDF_values = colMeans(bootstrap_CDF_values)	
+
+	# calculate KS distance (i.e. the Kolmogorov-Smirnov test statistic) of empirical data from the reference_CDF
+	empirical_KS = max(abs(empirical_CDF_values-reference_CDF_values))
+	
+	# calculate KS distance of each boostrap to the reference CDF
+	boostrap_KSs = rep(NA, NB)
+	for(b in seq_len(NB)){
+		boostrap_KSs[b] = max(abs(bootstrap_CDF_values[b,]-reference_CDF_values))
+	}
+
+	# compare empirical_KS to bootstrap_KSs
+	mean_bootstrap_KS 	= mean(boostrap_KSs)
+	median_bootstrap_KS = median(boostrap_KSs)
+	Pvalue 				= mean(boostrap_KSs>=empirical_KS)
+	return(list(empirical_KS		= empirical_KS,
+				mean_bootstrap_KS	= mean_bootstrap_KS, 
+				median_bootstrap_KS	= median_bootstrap_KS, 
+				Pvalue				= Pvalue,
+				CDF_grid			= CDF_grid,
+				reference_CDF_values= reference_CDF_values,
+				empirical_CDF_values= empirical_CDF_values))
+}
+
+
+
+# calculate equal-tailed credible intervals of a collection of curves defined on a time grid of size NG (or more abstractly, of NG-dimensional numeric vectors)
+# each curve is considered a "replicate", and the CIs are computed at each grid point based on all replicates
+calculate_equal_tailed_CIs_of_curves = function(curves){ 	# 2D numeric matrix of size NB x NG, listing the values of NB replicate curves on NG grid points
+	NB 			= nrow(curves)
+	NG			= ncol(curves)
+	CI50lower 	= numeric(NG)
+	CI50upper 	= numeric(NG)
+	CI95lower 	= numeric(NG)
+	CI95upper 	= numeric(NG)
+	medians 	= numeric(NG)
+	means	 	= colMeans(curves, na.rm=TRUE)
+	for(g in seq_len(NG)){
+		quantiles = quantile(curves[,g], probs=c(0.25, 0.75, 0.025, 0.975, 0.5), na.rm=TRUE)
+		CI50lower[g] = quantiles[1]
+		CI50upper[g] = quantiles[2]
+		CI95lower[g] = quantiles[3]
+		CI95upper[g] = quantiles[4]
+		medians[g] 	 = quantiles[5]	
+	}
+	return(list(means		= means,
+				medians 	= medians,
+				CI50lower 	= CI50lower,
+				CI50upper 	= CI50upper,
+				CI95lower	= CI95lower,
+				CI95upper	= CI95upper))
+}
+
+
+
+# draw random numbers from the 4-parameter beta distribution, i.e. a beta distribution scaled and shifted to an arbitrary interval [minx, maxx]
+# The parameterization used here is in terms of the mean (mu), standard deviation (sigma) and the interval bounds minx & maxx
+# Note that mu & sigma must satisfy the condition sigma^2 < (mu-minx)*(maxx-mu).
+rbeta4 = function(n, mu, sigma, minx=0, maxx=1){
+	# determine the corresponding parameterization to use for the standard (2-parameter) beta distribution in [0,1]
+	mu0 	= (mu-minx)/(maxx-minx)
+	sigma0 	= sigma/(maxx-minx) # note that sigma0 and mean0 must satisfy the condition sigma0^2 < mu0*(1-mu0), which is equivalent to sigma^2 < (mu-minx)*(maxx-mu)
+	nu0		= mu0*(1-mu0)/(sigma0^2) - 1
+	alpha0	= mu0 * nu0
+	beta0	= (1-mu0)*nu0
+	# draw from the standard beta distribution, then rescale & shift
+	x0 = rbeta(n=n, shape1=alpha0, shape2=beta0)
+	return(minx + (maxx-minx)*x0)
+}
+
+
+# calculate the probability density of the 4-parameter beta distribution, i.e. a beta distribution scaled and shifted to an arbitrary interval [minx, maxx]
+# The parameterization used here is in terms of the mean (mu), standard deviation (sigma) and the interval bounds minx & maxx
+# Note that mu & sigma must satisfy the condition sigma^2 < (mu-minx)*(maxx-mu).
+dbeta4 = function(x, mu, sigma, minx=0, maxx=1){
+	# determine the corresponding parameterization to use for the standard (2-parameter) beta distribution in [0,1]
+	mu0 	= (mu-minx)/(maxx-minx)
+	sigma0 	= sigma/(maxx-minx) # note that sigma0 and mean0 must satisfy the condition sigma0^2 < mu0*(1-mu0), which is equivalent to sigma^2 < (mu-minx)*(maxx-mu)
+	nu0		= mu0*(1-mu0)/(sigma0^2) - 1
+	alpha0	= mu0 * nu0
+	beta0	= (1-mu0)*nu0
+	# get density of standard beta distribution
+	x0	= (x-minx)/(maxx-minx)
+	rho0 = dbeta(x=x0, shape1=alpha0, shape2=beta0)
+	return(rho0/(maxx-minx))
+}
+
+
+# calculate the variance of entries in each row, thus returning a numeric vector of length nrow(A)
+rowVars = function(A, d=1, na.rm=FALSE){
+	means = rowMeans(A, na.rm=na.rm)
+	vars  = rowSums((A-means)^2, na.rm=na.rm)/(ncol(A)-d)
+	return(vars)
+}
+
+
+# calculate the covvariance of entries in each row between two equally-sized matrixes A & B, thus returning a numeric vector of length nrow(A) = nrow(B)
+rowCovs = function(A, B, d=1, na.rm=FALSE){
+	meansA = rowMeans(A, na.rm=na.rm)
+	meansB = rowMeans(B, na.rm=na.rm)
+	covs   = rowSums((A-meansA)*(B-meansB), na.rm=na.rm)/(ncol(A)-d)
+	return(covs)
+}
+
+
+
+# a basic ABC-MCMC Metropolis-Hastings sampler for Bayesian parameter inference when the likelihood is intractable but the model itself can be efficiently simulated to generate random samples for any given choice of parameters
+# ABC-MCMC: Approximate Bayesian Computation Markov Chain Monte Carlo
+# Literature:
+#   First introduced by: Marjoram et a. (2003). Markov chain Monte Carlo without likelihoods. PNAS. 100:15324-15328.
+#   Reviewed by: Beaumont (2019). Approximate Bayesian Computation. Annual Review of Statistics and Its Application. 6:379-403. Section 4.1.
+ABC_MCMC = function(observation,					# a data structure representing the original observations to which the model should be fitted, or summary statistics thereof. Must be of the same type as generated by the model.
+					model,							# functional, generating data (e.g., a gene tree in the case of a Multispecies Coalescent model) according to specific input parameters, or returning low-dimensional summary statistics of generated data. Thus, model(theta) returns data or a low-dimensional summary statistic thereof. May also occasionally return NULL (e.g. model failure for some parameter values).
+					metric,							# functional, returning the distance between two data points (e.g., between two gene trees), or between low-dimensional summary statistics of two data points. Hence, metric(observation, model(theta)) should return a numeric scalar.
+					prior_sampler,					# functional, generating random draws from the prior parameter distribution. prior_sampler() should return a random choice of parameters. If numeric_theta==TRUE, then prior_sampler() must not generate thetas outside of the box [min_theta,max_theta].
+					prior_density,					# functional, returning the prior probability density at a specific location in parameter space (need not be normalized). prior_density(theta) should be a numeric scalar.
+					proposal_sampler		= "uniform",# functional, generating new proposals conditional on a specific current location in parameter space. proposal_sampler(theta_old) should return a new random choice of parameters. If numeric_theta==TRUE, then proposal_sampler() must not generate thetas outside of the box [min_theta,max_theta]. May also be "beta" or "uniform" (if numeric_theta==TRUE).
+					proposal_density		= NULL,		# functional, returning the density of new proposals conditional on a specific current location in parameter space. proposal_density(theta_new, theta_old) should be a numeric scalar, corresponding to the probability density P(theta_new | theta_old). May also be NULL (if numeric_theta==TRUE), in which case a default proposal is used.
+					bandwidth				= NULL,		# numeric, acceptance threshold for generated samples ("epsilon"). Either bandwidth or relative_bandwidth must be provided.
+					relative_bandwidth		= NULL,		# numeric, specifying the relative acceptance threshold for generated samples (epsilon relative to the typical distances of samples drawn from the prior). Typical suitable values are 0.01 - 0.1, but this also strongly depends on your metric.
+					numeric_theta			= TRUE,		# logical, specifying whether it can be assumed that the parameters theta are always a numeric of a specific size. If FALSE, theta is considered an abstract data structure and thus computation is somewhat less efficient (also, statistical analyses of theta will be omitted).
+					min_theta				= -Inf,		# either a single numeric, or a numeric vector of length NP, specifying the lower bounds for the parameters theta. Only relevant if numeric_theta==TRUE. May include -Inf.
+					max_theta				= +Inf,		# either a single numeric, or a numeric vector of length NP, specifying the upper bounds for the parameters theta. Only relevant if numeric_theta==TRUE. May include +Inf.
+					proposal_rescaling		= 1,		# singla numeric or a numeric vector of size NP, specifying a factor for the scales (e.g., standard deviation) of the proposal. Only relevant if numeric_theta==TRUE and proposal_sampler==NULL.
+					chain_length			= 10000,	# integer, the length of each MCMC chain (including burnin and prior to thinning)
+					burnin					= 1000,		# integer, how many initial samples should be discarded as burnin from each MCMC chain
+					thinning_step			= 1,		# integer, thinning step. A thinning step of 10 means that every 10-th sample is kept from the chain (after burnin)
+					max_ACF_lag				= 1000,		# integer, maximum time lag to consider when calculating ACFs. Only relevant if numeric_theta=TRUE.
+					Nchains					= 1,		# integer, number of independent MCMC chains to run. If Nthreads>1, each chain is run on a separate thread.
+					Nthreads				= 1,		# integer, number of parallel threads to use for computing. Only relevant if Nchains>1.
+					max_start_attempts		= 100,		# integer, maximum number of attempts to start a chain (i.e., initiate a jump)
+					start_bandwidth_factor	= NULL,		# optional numeric, specifying the how much larger the initial bandwidth of each chain should be relative to the final bandwidth, during the early phase of "burnin". If NULL, this is automatically chosen.
+					verbose_prefix			= "",		# character, line prefix to use before any console output
+					verbose					= FALSE,	# logical, whether to print progress reports to standard output
+					diagnostics				= FALSE){	# logical, whether to print technical details at each iteration. For debugging purposes mainly.
+	# basic error checking and preparations
+	if(chain_length<=burnin) return(list(success=FALSE, error="The chain length cannot be shorter than the burnin"))
+	if(chain_length-burnin<=thinning_step) return(list(success=FALSE, error="The chain length minus the burnin cannot be shorter than the thinning_step"))
+	thinning_step = max(1,thinning_step)
+	adaptive_proposal = FALSE
+	if(is.null(bandwidth) && is.null(relative_bandwidth)) return(list(success=FALSE, error="Either bandwidth or relative_bandwidth must be specified"))
+	if((!is.null(bandwidth)) && (!is.null(relative_bandwidth))) return(list(success=FALSE, error="Only one of bandwidth or relative_bandwidth must be specified"))
+
+	# check if prior sampler and density are functional
+	if(verbose) cat(sprintf("%sChecking functionality of prior..\n",verbose_prefix))
+	example_thetas = lapply(seq_len(10), FUN=function(k) prior_sampler())
+	example_prior_densities = unlist(lapply(example_thetas, FUN=function(theta) prior_density(theta)))
+	if(any(!is.finite(example_prior_densities))) return(list(success=FALSE, error=sprintf("%d out of %d randomly drawn prior thetas have a non-finite probability density",sum(!is.finite(example_prior_densities)),length(example_prior_densities))))
+
+	if(numeric_theta){
+		example_theta = prior_sampler()
+		if(!is.numeric(example_theta)) return(list(success=FALSE, error="Example theta (drawn from the prior) is not numeric. Consider setting numeric_theta=FALSE"))
+		NP = length(example_theta) # dimensionality of parameter space
+		if(length(min_theta)==1) min_theta = rep(min_theta, NP)
+		if(length(min_theta)!=NP) return(list(success=FALSE, error=sprintf("min_theta must either be of length 1 or %d (NP); instead, got length %d",NP,length(min_theta))))
+		if(length(max_theta)==1) max_theta = rep(max_theta, NP)
+		if(length(max_theta)!=NP) return(list(success=FALSE, error=sprintf("max_theta must either be of length 1 or %d (NP); instead, got length %d",NP,length(max_theta))))
+		if(is.character(proposal_sampler) && (!is.null(proposal_density))) return(list(success=FALSE, error=sprintf("Since proposal sampler is set to '%s', the proposal density must be left at NULL.",proposal_sampler)))
+		if((!is.character(proposal_sampler)) && is.null(proposal_density)) return(list(success=FALSE, error=sprintf("Missing proposal density")))
+		if(is.character(proposal_sampler)){
+			# define a reasonable proposal sampler and its corresponding probability density, accounting for potential lower & upper bounds
+			if(length(proposal_rescaling)==1) proposal_rescaling = rep(proposal_rescaling,NP)
+			if(length(proposal_rescaling)!=NP) return(list(success=FALSE, error=sprintf("proposal_rescaling must either be of length 1 or %d (NP); instead, got length %d",NP,length(proposal_rescaling))))
+			typical_thetas 	  = sapply(seq_len(1000), FUN=function(k) prior_sampler())
+			proposal_scales	  = proposal_rescaling*0.1*rowMeans(abs(typical_thetas), na.rm=TRUE)
+			adaptive_proposal = TRUE
+			if(proposal_sampler=="beta"){
+				# Beta distribution
+				if(verbose) cat(sprintf("%sSetting proposal sampler to beta distribution\n",verbose_prefix))
+				proposal_sampler = function(old, scales){ rbeta4(n=NP, mu=old, sigma=pmin(scales,0.5*(old-min_theta),0.5*(max_theta-old)), minx=min_theta, maxx=max_theta) }
+				proposal_density = function(theta, old, scales){ dbeta4(x=theta, mu=old, sigma=pmin(scales,0.5*(old-min_theta),0.5*(max_theta-old)), minx=min_theta, maxx=max_theta) } # note that the density must be consistent with proposal_sampler()
+			}else if(proposal_sampler=="uniform"){
+				# uniform distribution within a small box
+				if(verbose) cat(sprintf("%sSetting proposal sampler to uniform distribution in a box\n",verbose_prefix))
+				proposal_sampler = function(old, scales){ return(runif(n=NP, min=pmax(min_theta,old-scales), max=pmin(max_theta,old+scales))) }
+				proposal_density = function(theta, old, scales){
+					box_mins = pmax(min_theta,old-scales)
+					box_maxs = pmin(max_theta,old+scales)
+					return(1.0/prod(box_maxs-box_mins))
+				}
+			}else{
+				return(list(success=FALSE, error=sprintf("Invalid proposal_sampler '%s'",proposal_sampler)))
+			}
+		}
+	}else{
+		if(is.null(proposal_sampler)) return(list(success=FALSE, error="Proposal sampler must be non-NULL when numeric_theta=FALSE"))
+		if(is.null(proposal_density)) return(list(success=FALSE, error="Proposal density must be non-NULL when numeric_theta=FALSE"))
+	}
+	
+	# determine bandwidths if needed
+	if(is.null(bandwidth) || is.null(start_bandwidth_factor)){
+		# determine typical distances based on prior
+		if(verbose) cat(sprintf("%sDetermining typical distances from observation based on prior models..\n",verbose_prefix))
+		Ncalibrations = 1000
+		get_typical_distance = function(k){ theta = prior_sampler(); sam = model(theta); return(if(is.null(sam)) NA else metric(observation, sam)); }
+		if((Ncalibrations>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
+			typical_distances = parallel::mcmapply(seq_len(Ncalibrations), FUN=get_typical_distance, mc.cores=min(Nthreads, Ncalibrations), mc.preschedule=TRUE, mc.cleanup=TRUE, SIMPLIFY=TRUE, USE.NAMES=FALSE)
+		}else{
+			typical_distances = sapply(seq_len(Ncalibrations), FUN=get_typical_distance)
+		}
+	}
+	if(is.null(bandwidth)){
+		mean_typical_distance = mean(typical_distances, na.rm=TRUE)
+		bandwidth = relative_bandwidth * mean_typical_distance
+		if(verbose) cat(sprintf("%sSetting long-term bandwidth to %g (typical prior distances is %g)\n",verbose_prefix,bandwidth,mean_typical_distance))
+	}
+	if(is.null(start_bandwidth_factor) || (!is.finite(start_bandwidth_factor))){
+		if(burnin<=1){
+			start_bandwidth = bandwidth
+		}else{
+			# figure out a reasonable start bandwidth, based on the typical distances of randomly generated data from the observation
+			start_bandwidth = quantile(typical_distances, probs=0.5, na.rm=TRUE) # choose initial bandwidth so that half of the typical samples would be kept
+			if(verbose) cat(sprintf("%sSetting start (early burnin) bandwidth to %g (median of prior distances)\n",verbose_prefix,start_bandwidth))
+		}
+	}else{
+		start_bandwidth = start_bandwidth_factor * bandwidth
+	}	
+	
+	aux_single_ABC_MCMC_chain = function(n){
+		if(verbose) cat(sprintf("%s  Running chain %d..\n",verbose_prefix,n))
+		if(numeric_theta){
+			thetas = matrix(NA, nrow=NP, ncol=floor((chain_length-burnin)/thinning_step))
+		}else{
+			thetas = vector(mode="list", floor((chain_length-burnin)/thinning_step)) # pre-allocate space for storing samples of this chain (after burnin and thinning)
+		}
+		if(numeric_theta && adaptive_proposal){
+			# reserve space for storing burnin thetas whose sample ended up within the desired bandwidth. Only store up to 1000 thetas.
+			burnin_good_thetas  = matrix(NA, nrow=NP, ncol=min(burnin,1000))
+			Nburnin_good_thetas = 0
+		}
+		distances				= rep(NA,ncol(thetas))
+		Naccepts				= 0
+		Naccepts_after_burnin 	= 0
+		Nproposals_after_burnin	= 0
+		Nstart_attempts 		= 1
+		next_slot 				= 1 # next slot in thetas[] for storing a sample
+		theta_old 				= prior_sampler() # draw random starting point from prior
+		k						= 1
+		while(k<=chain_length){
+			current_bandwidth = (if(k>burnin) bandwidth else (bandwidth*(k/burnin) + start_bandwidth*(1-k/burnin))) # if within the burnin phase, gradually reduce the bandwidth to its final value
+			if(numeric_theta && adaptive_proposal && (k==burnin+1) && (Nburnin_good_thetas>=10)){
+				# finalize proposal scales based on good thetas seen so far falling within the bandwidth
+				burnin_theta_stds = sqrt(rowVars(burnin_good_thetas[,seq_len(Nburnin_good_thetas)], na.rm=TRUE))
+				if(diagnostics) cat(sprintf("%s  Chain %d, end of burnin: Standard deviations of thetas within bandwidth (N=%d): %s\n",verbose_prefix,n,Nburnin_good_thetas,paste(sprintf("%.3g",burnin_theta_stds),collapse=", ")))
+				proposal_scales = 2.5 * proposal_rescaling * burnin_theta_stds # For classical Metropolis-Hastings MCMC, [Yang and Rodriguez, 2013, PNAS. 110:19307-19312] show that for a Gaussian proposal and a Gaussian target distribution, the optimal proposal standard deviation should be 2.5 x the target standard deviation. A similar result is reported by [Thawornwattana et al. 2018. Bayesian Analysis. 13:1033-1059]
+			}
+			theta_new = (if(adaptive_proposal) proposal_sampler(theta_old, proposal_scales) else proposal_sampler(theta_old))
+			if(k>burnin) Nproposals_after_burnin = Nproposals_after_burnin + 1
+			#  decide whether to accept this proposal
+			acceptance_probability = min(1, (prior_density(theta_new)/prior_density(theta_old)) * (if(adaptive_proposal) (proposal_density(theta_old, theta_new, proposal_scales)/proposal_density(theta_new, theta_old, proposal_scales)) else (proposal_density(theta_old, theta_new)/proposal_density(theta_new, theta_old))))
+			accept 	 = TRUE
+			distance = NA
+			if(runif(n=1, min=0, max=1)>acceptance_probability){
+				accept = FALSE
+			}else{
+				if(diagnostics) cat(sprintf("%s  Chain %d, iteration %d: simulating model for theta=%s..\n",verbose_prefix,n,k,paste(sprintf("%.3g",theta_new),collapse=", ")))
+				sample_new = model(theta_new) # simulate data from the model based on the proposed parameters
+				if(is.null(sample_new)){
+					# the model failed to generate data for this specific choice of parameters, so don't accept it
+					accept = FALSE
+				}else{
+					if(diagnostics) cat(sprintf("%s  Chain %d, iteration %d: Calculating distance to observation..\n",verbose_prefix,n,k))
+					distance = metric(observation, sample_new)
+					if(is.null(distance) || (!is.finite(distance)) || (distance>current_bandwidth)){
+						accept = FALSE
+					}
+					# keep record of this theta if it is a "good" one (i.e., within the desired bandwidth) and if we are in the burnin phase
+					if(numeric_theta && (k<=burnin) && (Nburnin_good_thetas<ncol(burnin_good_thetas)) && (!is.null(distance)) && is.finite(distance) && (distance<=bandwidth)){
+						Nburnin_good_thetas = Nburnin_good_thetas + 1
+						burnin_good_thetas[,Nburnin_good_thetas] = theta_new
+					}
+				}
+			}
+			if(diagnostics) cat(sprintf("%s  Chain %d, iteration %d: distance=%g, accept=%d (proposed theta=%s), Naccepts=%d\n",verbose_prefix,n,k,distance,accept,paste(sprintf("%.3g",theta_new),collapse=", "),Naccepts))
+			if(accept){
+				Naccepts = Naccepts + 1
+				if(k>burnin) Naccepts_after_burnin = Naccepts_after_burnin + 1
+			}else{
+				theta_new = theta_old
+				if((Naccepts==0) && (Nstart_attempts<max_start_attempts)){
+					# try to start the chain again
+					Nstart_attempts = Nstart_attempts + 1
+					if(diagnostics) cat(sprintf("%s  Chain %d: Attempting restart (attempt %d)\n",verbose_prefix,n,Nstart_attempts))
+					theta_old = prior_sampler()
+					next
+				}
+			}
+			if((k>burnin) && (((k-burnin-1) %% thinning_step) == 0)){
+				# store this sample
+				if(numeric_theta){
+					thetas[,next_slot] = theta_new
+				}else{
+					thetas[[next_slot]] = theta_new
+				}
+				distances[next_slot] = distance
+				next_slot = next_slot + 1
+			}
+			theta_old = theta_new
+			k = k + 1
+			if((k %%100) ==0) gc()
+		}
+		if(verbose) cat(sprintf("%s  Finished chain %d\n",verbose_prefix,n))
+		return(list(success=TRUE, thetas=thetas, Naccepts=Naccepts, Naccepts_after_burnin=Naccepts_after_burnin, acceptance_rate_after_burnin=Naccepts_after_burnin/Nproposals_after_burnin, distances=distances, Nstart_attempts=Nstart_attempts))
+	}
+	if((Nchains>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
+		if(verbose) cat(sprintf("%sRunning %d MCMC chains (parallelized)..\n",verbose_prefix,Nchains))
+		chains = parallel::mclapply(seq_len(Nchains), 
+									FUN 			= function(n){ aux_single_ABC_MCMC_chain(n) }, 
+									mc.cores 		= min(Nthreads, Nchains), 
+									mc.preschedule 	= FALSE, 
+									mc.cleanup 		= TRUE)
+	}else{
+		if(verbose) cat(sprintf("%sRunning %d MCMC chains (sequential)..\n",verbose_prefix,Nchains))
+		chains = vector(mode="list", Nchains)
+		for(n in seq_len(Nchains)){
+			chains[[n]] = aux_single_ABC_MCMC_chain(n)
+		}
+	}
+	
+	# discard failed or stuck chains
+	valid_chains = which(sapply(seq_len(Nchains), FUN=function(n) chains[[n]]$success))
+	if(length(valid_chains)<Nchains){
+		if(length(valid_chains)==0) return(list(success=FALSE, error=sprintf("All MCMC chains failed: %s",chains[[1]]$error)))
+		chains  = chains[valid_chains]
+		Nchains = length(valid_chains)
+	}
+	stuck_chains = which(sapply(seq_len(Nchains), FUN=function(n) (chains[[n]]$Naccepts_after_burnin==0)))
+	if(length(stuck_chains)==Nchains) return(list(success=FALSE, error=sprintf("All MCMC chains got stuck at a single value after burnin")))
+	if(length(stuck_chains)>0){
+		if(verbose) cat(sprintf("%sWARNING: %d out of %d MCMC chains got stuck at a single value after burnin. These chains will be discarded.\n",verbose_prefix,length(stuck_chains),Nchains))
+		chains  = chains[get_complement(Nchains,stuck_chains)]
+		Nchains = length(chains)
+	}
+		
+	if(numeric_theta){
+		# calculate autocorrelation function (ACF) and other statistics, separately for each chain and each component of theta
+		# ACFs[[n]] will be a 2D numeric matrix listing the ACF for the n-th chain, with ACFs[[n]][p,l] being the autocorrelation of the p-th component at time-lag l in chain n
+		if(verbose) cat(sprintf("%sCalculating autocorrelations..\n",verbose_prefix))
+		ACFs 	= vector(mode="list", Nchains)
+		ESS 	= rep(NA, Nchains) # effective sample size per chain
+		for(n in seq_len(Nchains)){
+			thetas		= chains[[n]]$thetas
+			max_lag		= min(max_ACF_lag, ncol(thetas)-2)
+			ACFs[[n]] 	= matrix(NA, nrow=NP, ncol=max_lag)
+			theta_mean 	= rowMeans(thetas)
+			theta_var	= rowMeans((thetas-theta_mean)**2)
+			for(l in seq_len(max_lag)){
+				ACFs[[n]][,l] = rowMeans((thetas[,1:(ncol(thetas)-l),drop=FALSE]-theta_mean)*(thetas[,(1+l):ncol(thetas),drop=FALSE]-theta_mean),na.rm=TRUE)/theta_var
+			}
+			# determine "effective" number of samples, based on how much lag is needed between two samples to effectively become uncorrelated
+			# we use a definition similar to that used by BEAST: https://jrnold.github.io/bayesian_notes/mcmc-diagnostics.html
+			decoherence_lags = sapply(seq_len(NP), FUN=function(p) which(ACFs[[n]][p,]<=0)[1])
+			if(all(is.finite(decoherence_lags))){
+				most_correlated = which.max(decoherence_lags)
+				ESS[n] = ncol(thetas)/(1 + 2*sum(ACFs[[n]][most_correlated,seq_len(decoherence_lags[most_correlated])],na.rm=TRUE))
+			}else{
+				# for at least one component of theta the ACF never drops to zero no matter how large the time-lag, so effectively we only have one sample (being conservative here)
+				ESS[n] = 1
+			}
+		}
+		
+		# calculate the (original) Gelman-Rubin diagnostic, otherwise known as potential scale reduction factor (PSRF), denoted \hat{R}, separately for each parameter component
+		# A PSRF < 1.1 is often used as a rough criterion for terminating the chain, although for critical applications the threshold should be closer to 1 (Vats and Knudson, 2020, Revisiting the Gelman-Rubin Diagnostic)
+		# Because the commonly used PSRF formula (Brooks and Gelman, 1998) assumes equal-length chains, we only use the last N samples from every chain, where N is the minimum chain length available
+		# The formula used here is also the same as used by the R function coda::gelman.diag.
+		# Reference:
+		#	Gelman and Rubin (1992). Inference from iterative simulation using multiple sequences. Statistical science. 7:457-472.
+		#	Brooks and Gelman (1998). General methods for monitoring convergence of iterative simulations. Journal of Computational and Graphical Statistics. 7:434-455.
+		if(verbose) cat(sprintf("%sCalculating Gelman-Rubin diagnostic R (for each model parameter)..\n",verbose_prefix))
+		chain_means = matrix(NA,nrow=NP, ncol=Nchains)
+		chain_vars  = matrix(NA,nrow=NP, ncol=Nchains)
+		min_chain_length = min(sapply(seq_len(Nchains), FUN=function(n) ncol(chains[[n]]$thetas)))
+		for(n in seq_len(Nchains)){
+			N = ncol(chains[[n]]$thetas)
+			chain_means[,n] = rowMeans(chains[[n]]$thetas[,(N-min_chain_length):N], na.rm=TRUE)
+			chain_vars[,n]  = rowSums((chains[[n]]$thetas[,(N-min_chain_length):N]-chain_means[,n])^2, na.rm=TRUE)/(min_chain_length-1)
+		}
+		pooled_means = rowMeans(chain_means) # average of the chain means, separately for each parameter component
+		Bn 			 = rowVars(chain_means,d=1)
+		W  			 = rowMeans(chain_vars)
+		sigma2 		 = ((min_chain_length-1)/min_chain_length) * W + Bn # Equation (3) in Gelman and Rubin (1992)
+		Vhat		 = sigma2 + Bn/Nchains
+		varVhat		 = ((min_chain_length-1)/min_chain_length)^2 * (1/Nchains) * rowVars(chain_vars,d=1) + ((Nchains+1)/Nchains)^2*(2/(Nchains-1))*(Bn^2) + (2*(Nchains+1)*(min_chain_length-1)/(Nchains*Nchains*min_chain_length)) * (rowCovs(chain_vars,chain_means^2,d=1) - 2*pooled_means*rowCovs(chain_vars,chain_means,d=1)) # Equation 4 in Gelman and Rubin (1992).
+		degrees		 = 2*(Vhat^2)/varVhat
+		PSRF 		 = sqrt(((degrees+3)/(degrees+1)) * Vhat/W) # \hat{R}_c on page 438 in Brooks and Gelman (1998)
+		if(verbose) cat(sprintf("%s  Note: max R = %g..\n",verbose_prefix,max(PSRF)))
+		
+		# calculate equal-tailed credible intervals of parameters (using the pooled chains)
+		if(verbose) cat(sprintf("%sCalculating posteror credible intervals..\n",verbose_prefix))
+		thetas 			= sapply(seq_len(Nchains), FUN=function(n) chains[[n]]$thetas)
+		theta_CI50lower = numeric(NP)
+		theta_CI50upper = numeric(NP)
+		theta_CI95lower = numeric(NP)
+		theta_CI95upper = numeric(NP)
+		theta_median	= numeric(NP)
+		theta_mean 		= rowMeans(thetas, na.rm=TRUE)
+		for(p in seq_len(NP)){
+			quantiles 			= quantile(thetas[p,], probs=c(0.25, 0.75, 0.025, 0.975, 0.5), na.rm=TRUE)
+			theta_CI50lower[p] 	= quantiles[1]
+			theta_CI50upper[p] 	= quantiles[2]
+			theta_CI95lower[p] 	= quantiles[3]
+			theta_CI95upper[p] 	= quantiles[4]
+			theta_median[p] 	= quantiles[5]	
+		}
+	}
+	
+	return(list(success					= TRUE,
+				Nchains					= Nchains,
+				chain_thetas			= lapply(seq_len(Nchains), FUN=function(n) chains[[n]]$thetas),
+				chain_distances			= lapply(seq_len(Nchains), FUN=function(n) chains[[n]]$distances),
+				acceptance_rate			= sapply(seq_len(Nchains), FUN=function(n) chains[[n]]$acceptance_rate_after_burnin),
+				ESS 					= (if(numeric_theta) ESS else NULL), # numeric vector of size Nchains
+				PSRF					= (if(numeric_theta) PSRF else NULL), # numeric vector of size NP, Gelman-Rubin convergence diagnostic, aka. potential scale reduction factor, per parameter.
+				Nstart_attempts			= sapply(seq_len(Nchains), FUN=function(n) chains[[n]]$Nstart_attempts),
+				ACF						= (if(numeric_theta) ACFs else NULL),
+				theta_mean				= (if(numeric_theta) theta_mean else NULL),
+				theta_median			= (if(numeric_theta) theta_median else NULL),
+				theta_CI50lower			= (if(numeric_theta) theta_CI50lower else NULL),
+				theta_CI50upper			= (if(numeric_theta) theta_CI50upper else NULL),
+				theta_CI95lower			= (if(numeric_theta) theta_CI95lower else NULL),
+				theta_CI95upper			= (if(numeric_theta) theta_CI95upper else NULL)))
+	
+}
+
+
+# calculate the first Wasserstein distance between two sets of numbers, X & Y
+# This is the 1-Wasserstein distance between two probability distributions, each consisting of a sum of Dirac distributions
+# As shown by Ramdas et al. (2017), the p-Wasserstein distance between two probability distributions can be written as:
+#	D(X,Y) = \int_0^1 |g(u) - f(u)| du
+# where g and f are the quantile functions of the two distributions. For the special case where p=1 (first Wasserstein distance), this is equivalent to:
+#	D(X,Y) = \int_{-\infty}^\infty |G(t) - F(t)| dt
+# where G and F are the cumulative distribution functions (CDFs). For finite sets of numbers X and Y, generated by the two distributions, one replaces G and F by their empirical CDFs.
+# This approach is used in python's function scipy.stats.wasserstein_distance
+# References:
+#   Ramdas et al. (2017). On Wasserstein two-sample testing and related families of nonparametric tests. Entropy. 19(2):47. Proposition 1.
+first_Wasserstein_distance = function(X, Y){
+	return(first_Wasserstein_distance_CPP(sort(X), sort(Y)))
+}
+
+
+# calculate the weighted Graph Laplacian of a phylogenetic tree (Lewitus and Morlon, 2016, Systematic Biology. 65:495-507)
+# If normalized=TRUE, then the Laplacian is ensured to have eigenvalues in [0,2], see for example: http://www2.cs.cas.cz/semincm/lectures/2010-04-13-Hall.pdf
+weighted_graph_Laplacian_of_tree = function(tree, normalized=FALSE, sparse=FALSE){
+	Nclades = length(tree$tip.label) + tree$Nnode
+	edge_length_sums = get_sum_of_edge_lengths_per_clade_CPP(	Ntips 		= length(tree$tip.label),
+																Nnodes		= tree$Nnode,
+																Nedges		= nrow(tree$edge),
+																tree_edge	= as.vector(t(tree$edge)) - 1,
+																edge_length	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length))
+	bidirectional_edges   = rbind(tree$edge,tree$edge[,c(2,1)]) # duplicate list of edges, to include both directions
+	bidirectional_lengths = c(tree$edge.length, tree$edge.length)
+	if(normalized){
+		diagonal = rep(1, Nclades)
+		bidirectional_weights = -bidirectional_lengths/sqrt(edge_length_sums[bidirectional_edges[,1]]*edge_length_sums[bidirectional_edges[,2]])
+	}else{
+		diagonal = edge_length_sums
+		bidirectional_weights = -bidirectional_lengths
+	}
+	if(sparse){
+		# construct matrix in sparse symmetric format
+		upper_triangulars = which(bidirectional_edges[,1]>=bidirectional_edges[,2])
+		L = Matrix::sparseMatrix(i=c(seq_len(Nclades),bidirectional_edges[upper_triangulars,1]), j=c(seq_len(Nclades),bidirectional_edges[upper_triangulars,2]), x=c(diagonal,bidirectional_weights[upper_triangulars]), dims=c(Nclades,Nclades), symmetric=TRUE)
+	}else{
+		L 			 = matrix(0, ncol=Nclades, nrow=Nclades)
+		diag(L) 	 = diagonal
+		L[bidirectional_edges] = bidirectional_weights
+	}
+	return(L)
+}
+
 

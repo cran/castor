@@ -355,7 +355,7 @@ fit_hbds_model_on_grid = function(	tree,
 													relative_ODE_step				= ODE_relative_dt,
 													E_value_step					= ODE_relative_dy,
 													runtime_out_seconds				= max_model_runtime)
-		loglikelihood = if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) -Inf else results$loglikelihood
+		loglikelihood = if((!results$success) || (!is.finite(results$loglikelihood))) -Inf else results$loglikelihood
 		if(diagnostics && (trial>=0)){
 			if(results$success){ cat(sprintf("%s  Trial %d: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,trial,loglikelihood,results$runtime)) }
 			else{ cat(sprintf("%s  Trial %d: Model evaluation failed: %s\n",verbose_prefix,trial,results$error)) }
@@ -410,13 +410,20 @@ fit_hbds_model_on_grid = function(	tree,
 		}
 		# run fit
 		if(is.finite(start_objective)){
-			fit = stats::nlminb(start_values/fparam_scales, 
+			fit = tryCatch({ stats::nlminb(start_values/fparam_scales, 
 								objective	= function(pars) objective_function(fparam_values=pars, param_values=NULL, trial=trial), 
 								lower		= lower_bounds/fparam_scales, 
 								upper		= upper_bounds/fparam_scales, 
 								control		= fit_control)
+							}, error = function(e){ list(objective=NA, par=NA, convergence=1, iterations=NA, evaluations=NA) })
 			results = list(objective_value=fit$objective, fparam_values = fit$par, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1], Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
-			if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, Niterations %d, Nevaluations %d, converged = %d\n",verbose_prefix,trial,-results$objective_value, results$Niterations, results$Nevaluations, results$converged))
+			if(diagnostics){
+				if(is.finite(fit$objective)){
+					cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, Niterations %d, Nevaluations %d, converged = %d\n",verbose_prefix,trial,-results$objective_value, results$Niterations, results$Nevaluations, results$converged))
+				}else{
+					cat(sprintf("%s  Trial %d: Fitting failed for unknown reason\n",verbose_prefix,trial))
+				}
+			}
 		}else{
 			results = list(objective_value=NA, fparam_values = NA, converged=FALSE, Niterations=0, Nevaluations=0, Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
 			if(diagnostics) cat(sprintf("%s  Trial %d: Start objective is non-finite. Skipping trial\n",verbose_prefix,trial))

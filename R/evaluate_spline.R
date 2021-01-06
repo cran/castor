@@ -10,7 +10,7 @@ evaluate_spline = function(	Xgrid,					# numeric vector of size NG, listing x-va
 	if(!(splines_degree %in% c(0,1,2,3))) stop("splines_degree must be 0, 1, 2 or 3");
 	if(!(derivative %in% c(0,1,2))) stop("derivative must be 0, 1 or 2");
 	if(Xgrid[1]>tail(Xgrid,1)) stop("Xgrid must be in ascending order")
-	
+
 	Ytarget = evaluate_spline_CPP(Xgrid=Xgrid, Ygrid=Ygrid, splines_degree=splines_degree, Xtarget=Xtarget, extrapolate=extrapolate, derivative=derivative);
 	return(Ytarget);
 }

@@ -12,18 +12,19 @@
 #   Tree must be rooted. Root will be determined automatically as the node with no parent.
 #   Tree must be ultrametric (e.g. a timetree of extant species). In particular, all tips are assumed to have age 0.
 loglikelihood_hbd = function(	tree, 
-								oldest_age		= NULL,			# either a numeric specifying the oldest age to consider or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd. If oldest_age>root_age, this is assumed to be the stem age. If oldest_age<root_age, the tree is "split" into multiple subtrees at that age, and each subtree is considered an independent realization of the HBD model stemming at that age.
-								age0			= 0,			# non-negative numeric, youngest age (time before present) to consider when cancluating the loglikelihood and with respect to which rholambda0 is defined (i.e. rholambda0 = rho(age0)*lambda(age0))
-								rho0			= NULL,			# numeric within (0,1], specifying the fraction of extant diversity at age0 that is represented in the tree.
-								rholambda0		= NULL,			# either NULL or numeric, specifying the product between the sampling fraction at age0 and the speciation rate at age0
-								age_grid		= NULL,			# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu must be a single scalar.
-								lambda			= NULL,			# either NULL, or a single scalar (constant speciation rate over time), or a numeric vector of size NG (listing speciation rates at each age in grid_ages[]).
-								mu				= NULL,			# either NULL, or a single scalar (constant extinction rate over time), or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]).
-								PDR				= NULL,			# either NULL, or a single scalar (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]).
-								PSR				= NULL,			# either NULL, or a single scalar (constant PSR over time), or a numeric vector of size NG (listing PSR at each age in grid_ages[]).
-								splines_degree	= 1,			# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
-								condition		= "auto",		# one of "crown", "stem", "auto" or "none" (or FALSE), specifying whether to condition the likelihood on the survival of the stem group, the crown group or none (not recommended, and only available when lambda/mu are provided). It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
-								relative_dt		= 1e-3){		# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
+								oldest_age			= NULL,			# either a numeric specifying the oldest age to consider or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd. If oldest_age>root_age, this is assumed to be the stem age. If oldest_age<root_age, the tree is "split" into multiple subtrees at that age, and each subtree is considered an independent realization of the HBD model stemming at that age.
+								age0				= 0,			# non-negative numeric, youngest age (time before present) to consider when cancluating the loglikelihood and with respect to which rholambda0 is defined (i.e. rholambda0 = rho(age0)*lambda(age0))
+								rho0				= NULL,			# numeric within (0,1], specifying the fraction of extant diversity at age0 that is represented in the tree.
+								rholambda0			= NULL,			# either NULL or numeric, specifying the product between the sampling fraction at age0 and the speciation rate at age0
+								age_grid			= NULL,			# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu must be a single scalar.
+								lambda				= NULL,			# either NULL, or a single scalar (constant speciation rate over time), or a numeric vector of size NG (listing speciation rates at each age in grid_ages[]).
+								mu					= NULL,			# either NULL, or a single scalar (constant extinction rate over time), or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]).
+								PDR					= NULL,			# either NULL, or a single scalar (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]).
+								PSR					= NULL,			# either NULL, or a single scalar (constant PSR over time), or a numeric vector of size NG (listing PSR at each age in grid_ages[]).
+								splines_degree		= 1,			# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
+								condition			= "auto",		# one of "crown", "stem", "auto" or "none" (or FALSE), specifying whether to condition the likelihood on the survival of the stem group, the crown group or none (not recommended, and only available when lambda/mu are provided). It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+								max_model_runtime	= -1,			# maximum time (in seconds) to allocate for the likelihood evaluation. If negative, this option is ignored.
+								relative_dt			= 1e-3){		# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 	# basic input error checking
 	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
@@ -112,37 +113,37 @@ loglikelihood_hbd = function(	tree,
 		
 	# calculate log-likelihood
 	if(PDR_based){
-		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												rholambda0 			= rholambda0,
-												age_grid 			= age_grid,
-												PDRs 				= PDR,
-												splines_degree		= splines_degree,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= 0,
-												diff_PDR			= numeric(),
-												diff_PDR_degree		= 0);
+		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+											oldest_age			= oldest_age,
+											rholambda0 			= rholambda0,
+											age_grid 			= age_grid,
+											PDRs 				= PDR,
+											splines_degree		= splines_degree,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime,
+											diff_PDR			= numeric(),
+											diff_PDR_degree		= 0);
 	}else if(PSR_based){
-		results = get_HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+		results = HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+											oldest_age			= oldest_age,
+											age_grid 			= age_grid,
+											PSRs 				= PSR,
+											splines_degree		= splines_degree,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime);
+	}else{
+		results = HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
 												oldest_age			= oldest_age,
+												rarefaction			= rho0,
 												age_grid 			= age_grid,
-												PSRs 				= PSR,
+												lambdas 			= lambda,
+												mus					= mu,
 												splines_degree		= splines_degree,
 												condition			= condition,
 												relative_dt			= relative_dt,
-												runtime_out_seconds	= 0);
-	}else{
-		results = get_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
-													oldest_age			= oldest_age,
-													rarefaction			= rho0,
-													age_grid 			= age_grid,
-													lambdas 			= lambda,
-													mus					= mu,
-													splines_degree		= splines_degree,
-													condition			= condition,
-													relative_dt			= relative_dt,
-													runtime_out_seconds	= 0);
+												runtime_out_seconds	= max_model_runtime);
 	}
 	if(!results$success) return(list(success = FALSE, error = sprintf("Could not calculate loglikelihood: %s",results$error)))
 	loglikelihood = results$loglikelihood;

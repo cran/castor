@@ -7,6 +7,6 @@ get_all_distances_to_root = function(tree, as_edge_count=FALSE){
 											Nnodes			= Nnodes,
 											Nedges			= nrow(tree$edge),
 											tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
-											edge_length		= (if(as_edge_count || is.null(tree$edge.length)) numeric() else tree$edge.length));
-	return(distances);
+											edge_length		= (if(as_edge_count || is.null(tree$edge.length)) numeric() else tree$edge.length))
+	return(distances)
 }

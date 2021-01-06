@@ -108,6 +108,18 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 	if((!is.null(LTT0)) && (!is.null(N0))) return(list(success=FALSE, error="Either N0 or LTT0 must be specified, but not both"))
 	if(age0<0) return(list(success=FALSE, error="The reference age (age0) must be non-negative"))
 	if((!is.null(LTT0)) && (age0==0) && ((NCE==0) || CSA_ages[1]>0)) return(list(success=FALSE, error="LTT0 cannot be specified at age=0 since there is no concentrated sampling attempt at age 0. Either set age0>0, or use N0 instead of N0 for scaling"))
+	
+	if(splines_degree==0){
+		# represent the time-curves on a time-grid as piecewise-linear functions, because simulate_deterministic_HBDS_CPP() cannot work directly with splines_degree 0
+		refinement_factor	= 100
+		refined_age_grid 	= c(unlist(lapply(seq_len(NG-1), FUN=function(g) seq(from=age_grid[g],to=age_grid[g+1]*(1-1/refinement_factor),length.out=refinement_factor))),age_grid[NG])
+		lambda 				= evaluate_spline(Xgrid = age_grid, Ygrid = lambda, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)
+		mu 					= evaluate_spline(Xgrid = age_grid, Ygrid = mu, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)
+		psi 				= evaluate_spline(Xgrid = age_grid, Ygrid = psi, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)
+		kappa 				= evaluate_spline(Xgrid = age_grid, Ygrid = kappa, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)
+		splines_degree 		= 1
+		age_grid 			= refined_age_grid
+	}
 
 	simulation = simulate_deterministic_HBDS_CPP(	CSA_ages				= (if(NCE==0) numeric(0) else CSA_ages),
 													CSA_probs				= (if(NCE==0) numeric(0) else CSA_probs),
@@ -126,24 +138,38 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 													ODE_relative_dy			= ODE_relative_dy,
 													runtime_out_seconds		= -1)
 	if(!simulation$success) return(list(success = FALSE, error = sprintf("Could not simulate model: %s",simulation$error)))
+	NRA = length(requested_ages)
+	
+	# calculate area-under-the-curve for the LTT, in order to get a normalized version of the LTT
+	# Note that the LTT's AUC is only calculated over the domain spanned by requested_ages!
+	LTT_AUC = sum(0.5 * (simulation$LTT[2:NRA]+simulation$LTT[1:(NRA-1)]) * diff(requested_ages))
+	simulation$nLTT = simulation$nonscaledLTT/sum(0.5 * (simulation$nonscaledLTT[2:NRA]+simulation$nonscaledLTT[1:(NRA-1)]) * diff(requested_ages)) # use the nonscaled-LTT to get the nLTT, since the scaled LTT may sometimes be NaN.
 
 	return(list(success				= TRUE,
 				ages				= requested_ages,
 				total_diversity		= simulation$total_diversity,
 				LTT					= simulation$LTT,
+				nLTT				= simulation$nLTT,
 				Pmissing			= simulation$Pmissing,
 				lambda				= simulation$lambda,
 				mu					= simulation$mu,
 				psi					= simulation$psi,
 				kappa				= simulation$kappa,
 				PDR					= simulation$PDR,	# pulled diversification rate
+				IPDR				= simulation$IPDR,	# age-integrated PDR, \int_0^t PDR(s) ds
 				PSR					= simulation$PSR,	# pulled speciation rate
+				PRP					= simulation$PRP,	# pulled retention probability
 				diversification_rate= simulation$diversification, # net diversification rate
-				lambda_psi			= simulation$lambda_psi,
-				psi_kappa			= simulation$psi_kappa,
+				branching_density	= simulation$PSR * simulation$nLTT, # non-normalized probability density of branching points over time (in units 1/time)
+				sampling_density	= simulation$psi * simulation$total_diversity/LTT_AUC, # non-normalized probability density of sampling points over time (in units 1/time)
+				lambda_psi			= simulation$lambda * simulation$psi,
+				kappa_psi			= simulation$psi * simulation$kappa,
 				Reff				= simulation$Reff, # effective reproduction ratio
 				removal_rate		= simulation$mu+simulation$psi, # removal rate = mu+psi
 				sampling_proportion = simulation$psi/(simulation$mu + simulation$psi),
+				CSA_ages			= CSA_ages,
+				CSA_probs			= CSA_probs,
+				CSA_kappas			= CSA_kappas,
 				CSA_pulled_probs 	= simulation$CSA_pulled_probs, # pulled_rho_k := rho_k/(1-Pmissing)
 				CSA_psis			= simulation$CSA_psis,
 				CSA_PSRs			= simulation$CSA_PSRs)) # PSRs exactly at the concentrated sampling attempts

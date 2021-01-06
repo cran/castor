@@ -4,7 +4,7 @@
 #   Effective population sizes and generation times for each clade (incoming edge) in the species tree
 #   HGT, D/L rates for each clade (incoming edge) in the species tree
 #   Number of alleles (individuals) sampled at each tip
-generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree, with NStips tips and NSedges edges
+generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree, with NStips tips and NSedges edges. May (and typically should) include extinct lineages.
 											allele_counts				= 1,		# (integer vector) number of alleles sampled per locus and per species (equivalently, the number of individual organisms sampled per species). Either NULL (1 allele per locus per species) or a single integer (same number of alleles per locus per species) or a vector of length NStips listing the numbers of alleles sampled per locus per species. To only not include alleles from a subset of species (e.g. extinct species) set their allele counts to zero.
 											population_sizes 			= 1,		# (numeric vector) effective population size along the edge leading into each clade. Either NULL (all population sizes are 1) or a single integer (same population sizes for all edges) or a vector of length NSclades listing population sizes for each clade's incoming edge (including the root).
 											generation_times			= 1,		# (numeric vector) generation time along the edge leading into each clade. Either NULL (all generation times are 1) or a single integer (same generation time for all edges) or a vector of length NSclades listing generation times for each clade's incoming edge (including the root).
@@ -20,6 +20,7 @@ generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree,
 											HGT_source_by_locus			= FALSE,	# (boolean) if TRUE, at any HGT event, every extant locus is chosen as source locus with the same probability (hence the probability of a lineage to be a source is proportional to the number of current loci in it). If FALSE, source lineages are chosen with the same probability (regardless of their number of loci) and the source locus within the source lineage is chosen randomly.
 											HGT_only_to_empty_clades	= FALSE,	# (boolean) if TRUE, HGT transfers are only done to clades with no current loci
 											no_loss_before_time			= 0,		# (numeric) optional time since the root during which no gene losses shall occur (even if loss_rate>0). This is to reduce the probability of an early extinction of the entire locus tree, i.e. give the locus some "startup time" to spread into various species lineages. The default value should be 0.
+											max_runtime					= NULL,		# maximum time (in seconds) to allow for the computation; if the computation roughly exceeds this threshold, it is aborted. Use this as protection against badly parameterized models. If NULL or <=0, this option is ignored.
 											include_event_times			= TRUE){	# (boolean) if TRUE, then HGT & DL event times and associated clades will be returned
 	NStips   = length(species_tree$tip.label)
 	NSnodes  = species_tree$Nnode
@@ -67,6 +68,7 @@ generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree,
 	}else{
 		allele_counts = rep(1, NStips);
 	}
+	if(is.null(max_runtime)) max_runtime = 0
 	
 	# simulate gene tree
 	results = generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP(NStips						= NStips,
@@ -89,6 +91,7 @@ generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree,
 																HGT_source_by_locus			= HGT_source_by_locus,
 																HGT_only_to_empty_clades	= HGT_only_to_empty_clades,
 																no_loss_before_time			= no_loss_before_time,
+																runtime_out_seconds			= max_runtime,
 																include_event_times			= include_event_times);
 	if(!results$success) return(list(success=FALSE, error=results$error)); # something went wrong
 	
@@ -123,6 +126,7 @@ generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree,
 	return(list(success					= TRUE,
 				locus_tree				= locus_tree,
 				locus_type				= strsplit(intToUtf8(results$locus_tree$locus_type),"")[[1]],
+				locus2clade				= locus2clade,
 				HGT_times				= (if(include_event_times) results$locus_tree$HGT_times else NULL),
 				HGT_source_clades		= (if(include_event_times) results$locus_tree$HGT_source_clades+1 else NULL),
 				HGT_target_clades		= (if(include_event_times) results$locus_tree$HGT_target_clades+1 else NULL),

@@ -10,7 +10,7 @@
 generate_tree_hbd_reverse = function(	Ntips,							# (integer) Number of tips in the tree
 										stem_age			= NULL,		# either NULL (don't condition on the stem age) or a strictly positive numeric, specifying the stem age of the tree. If <=0, this is the same as NULL.
 										crown_age			= NULL,		# either NULL (don't condition on the crown age) or a strictly positive numeric, specifying the crown age of the tree. If <=0, this is the same as NULL.
-										age_grid			= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which the PSR is specified. If NULL or empty, then the PSR must be a single scalar. The returned time series will be defined on an age-grid that may be finer than this grid.
+										age_grid			= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which the PSR is specified. If NULL or empty, then the PSR must be a single scalar.
 										lambda				= NULL,		# either a single numeric (constant lambda over time), or a numeric vector of size NG (listing lambda at each age in age_grid[]). Can also be NULL.
 										mu					= NULL,		# either a single numeric (constant mu over time), or a numeric vector of size NG (listing mu at each age in age_grid[]). Can also be NULL.
 										rho					= NULL,		# numeric, species sampling fraction at present day. Can also be NULL.
@@ -58,7 +58,13 @@ generate_tree_hbd_reverse = function(	Ntips,							# (integer) Number of tips in
 		if((!is.null(crown_age)) || (!is.null(stem_age))){
 			oldest_age = min(crown_age,stem_age)
 		}else{
-			oldest_age = 1.0
+			# estimate how far back we might need to go, in order to cover the likeky root ages
+			r = lambda-mu
+			if(lambda>mu){
+				oldest_age = 10*log(Ntips)/(lambda-mu)
+			}else{
+				oldest_age = log(Ntips)/(1000*lambda) # really a pathological case that should not be requested by the user, so this is just a wild guess
+			}
 		}
 		age_grid = seq(from=0,to=oldest_age,length.out=NG)
 		if(!is.null(PSR)) PSR = rep(PSR,times=NG);
@@ -72,7 +78,7 @@ generate_tree_hbd_reverse = function(	Ntips,							# (integer) Number of tips in
 		if(any(diff(age_grid)<=0)) return(list(success = FALSE, error = sprintf("Values in age_grid must be strictly increasing")))
 	}
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
-	if(age_grid[1]>0) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including present-day (age 0)")))
+	if(age_grid[1]>0) return(list(success = FALSE, error = sprintf("Age grid must cover the present-day (age 0)")))
 	if((!is.null(crown_age)) && (crown_age>0) && (crown_age>tail(age_grid,1))) return(list(success = FALSE, error = sprintf("age_grid does not cover the crown age (%g)", crown_age)))
 	if((!is.null(stem_age)) && (stem_age>0) && (stem_age>tail(age_grid,1))) return(list(success = FALSE, error = sprintf("age_grid does not cover the stem age (%g)", stem_age)))
 	if((!is.null(crown_age)) && (crown_age>0) && (!is.null(stem_age)) && (stem_age>0)){

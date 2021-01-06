@@ -9,23 +9,30 @@ Given an ultrametric timetree, fit a homogenous birth-death (HBD) model in which
 \usage{
 fit_hbd_model_parametric( tree, 
                           param_values,
-                          param_guess        = NULL,
-                          param_min          = -Inf,
-                          param_max          = +Inf,
-                          param_scale        = NULL,
-                          oldest_age         = NULL,
-                          age0               = 0,
+                          param_guess           = NULL,
+                          param_min             = -Inf,
+                          param_max             = +Inf,
+                          param_scale           = NULL,
+                          oldest_age            = NULL,
+                          age0                  = 0,
                           lambda,
-                          mu                 = 0,
-                          rho0               = 1,
-                          age_grid           = NULL,
-                          condition          = "auto",
-                          relative_dt        = 1e-3,
-                          Ntrials            = 1,
-                          max_start_attempts = 1,
-                          Nthreads           = 1,
-                          max_model_runtime  = NULL,
-                          fit_control        = list())
+                          mu                    = 0,
+                          rho0                  = 1,
+                          age_grid              = NULL,
+                          condition             = "auto",
+                          relative_dt           = 1e-3,
+                          Ntrials               = 1,
+                          max_start_attempts    = 1,
+                          Nthreads              = 1,
+                          max_model_runtime     = NULL,
+                          Nbootstraps           = 0,
+                          Ntrials_per_bootstrap = NULL,
+                          fit_algorithm         = "nlminb",
+                          fit_control           = list(),
+                          focal_param_values    = NULL,
+                          verbose               = FALSE,
+                          diagnostics           = FALSE,
+                          verbose_prefix        = "")
 }
 \arguments{
 \item{tree}{
@@ -83,8 +90,29 @@ Integer, specifying the number of parallel threads to use for performing multipl
 \item{max_model_runtime}{
 Optional numeric, specifying the maximum number of seconds to allow for each evaluation of the likelihood function. Use this to abort fitting trials leading to parameter regions where the likelihood takes a long time to evaluate (these are often unlikely parameter regions).
 }
+\item{Nbootstraps}{
+Integer, specifying the number of parametric bootstraps to perform for estimating standard errors and confidence intervals of estimated model parameters. Set to 0 for no bootstrapping.
+}
+\item{Ntrials_per_bootstrap}{
+Integer, specifying the number of fitting trials to perform for each bootstrap sampling. If \code{NULL}, this is set equal to \code{max(1,Ntrials)}. Decreasing \code{Ntrials_per_bootstrap} will reduce computation time, at the expense of potentially inflating the estimated confidence intervals; in some cases (e.g., for very large trees) this may be useful if fitting takes a long time and confidence intervals are very narrow anyway. Only relevant if \code{Nbootstraps>0}.
+}
+\item{fit_algorithm}{
+Character, specifying which optimization algorithm to use. Either "nlminb" or "subplex" are allowed.
+}
 \item{fit_control}{
- Named list containing options for the \code{nlminb} optimization routine, such as \code{iter.max}, \code{eval.max} or \code{rel.tol}. For a complete list of options and default values see the documentation of \code{nlminb} in the \code{stats} package.
+Named list containing options for the \code{nlminb} or \code{subplex} optimization routine, depending on the choice of \code{fit_algorithm}. For example, for "nlminb" commonly modified options are \code{iter.max}, \code{eval.max} or \code{rel.tol}. For a complete list of options and default values see the documentation of \code{nlminb} in the \code{stats} package or of \code{nloptr} in the \code{nloptr} package.
+}
+\item{focal_param_values}{
+Optional numeric matrix having NP columns and an arbitrary number of rows, listing combinations of parameter values of particular interest and for which the log-likelihoods should be returned. This may be used for diagnostic purposes, e.g., to examine the shape of the likelihood function.
+}
+\item{verbose}{
+Logical, specifying whether to print progress reports and warnings to the screen. Note that errors always cause a return of the function (see return values \code{success} and \code{error}).
+}
+\item{diagnostics}{
+Logical, specifying whether to print detailed information (such as model likelihoods) at every iteration of the fitting routine. For debugging purposes mainly.
+}
+\item{verbose_prefix}{
+Character, specifying the line prefix for printing progress reports to the screen.
 }
 }
 
@@ -152,6 +180,27 @@ Integer vector of size \code{Ntrials}, listing the number of iterations needed f
 \item{trial_Nevaluations}{
 Integer vector of size \code{Ntrials}, listing the number of likelihood evaluations needed for each fitting trial.
 }
+\item{standard_errors}{
+Numeric vector of size NP, estimated standard error of the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{medians}{
+Numeric vector of size NP, median the estimated parameters across parametric bootstraps. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI50lower}{
+Numeric vector of size NP, lower bound of the 50\% confidence interval (25-75\% percentile) for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI50upper}{
+Numeric vector of size NP, upper bound of the 50\% confidence interval for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI95lower}{
+Numeric vector of size NP, lower bound of the 95\% confidence interval (2.5-97.5\% percentile) for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{CI95upper}{
+Numeric vector of size NP, upper bound of the 95\% confidence interval for the parameters, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
+}
+\item{consistency}{
+Numeric between 0 and 1, estimated consistency of the data with the fitted model (Lindholm et al. 2019). See the documentation of \code{\link{fit_hbds_model_on_grid}} for an explanation.
+}
 }
 
 
@@ -161,6 +210,8 @@ Integer vector of size \code{Ntrials}, listing the number of likelihood evaluati
 H. Morlon, T. L. Parsons, J. B. Plotkin (2011). Reconciling molecular phylogenies with the fossil record. Proceedings of the National Academy of Sciences. 108:16327-16332.
 
 S. Louca et al. (2018). Bacterial diversification through geological time. Nature Ecology & Evolution. 2:1458-1467.
+
+A. Lindholm, D. Zachariah, P. Stoica, T. B. Schoen (2019). Data consistency approach to model validation. IEEE Access. 7:59788-59796.
 }
 
 \seealso{

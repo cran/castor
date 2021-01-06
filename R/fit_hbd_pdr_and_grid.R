@@ -351,17 +351,17 @@ fit_hbd_pdr_and_grid = function(tree,
 			diff_PDR = numeric()
 			diff_PDR_degree = 0
 		}
-		results = get_HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												rholambda0 			= rholambda0,
-												age_grid 			= input_age_grid,
-												PDRs 				= input_PDRs,
-												splines_degree		= splines_degree,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime,
-												diff_PDR			= diff_PDR,
-												diff_PDR_degree		= diff_PDR_degree);
+		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+											oldest_age			= oldest_age,
+											rholambda0 			= rholambda0,
+											age_grid 			= input_age_grid,
+											PDRs 				= input_PDRs,
+											splines_degree		= splines_degree,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime,
+											diff_PDR			= diff_PDR,
+											diff_PDR_degree		= diff_PDR_degree);
 		if(results$success && (is.na(results$loglikelihood) || is.nan(results$loglikelihood) || is.infinite(results$loglikelihood))) results$success=FALSE
 		if(!results$success) return(results)
 		if(include_gradient){
@@ -429,22 +429,22 @@ fit_hbd_pdr_and_grid = function(tree,
 		if(is.null(outer_reltol)) outer_reltol = max(1e-30,min(1e-5,0.001/abs(start_results$loglikelihood))) # relative tolerance for the outer algorithm
 		
 		# debug
-		start_ages = fixed_age_grid
-		start_ages[fitted_params[1:NFG]] = start_values[1:NFG]
-		if(any(diff(start_ages)<min_age_step)){
-			cat(sprintf("OOPS: age grid steps are at or below minimum:\n"))
-			print(start_ages)
-		}
-		if(any(start_values<=lower_bounds)){
-			cat(sprintf("OOPS: some start params are below minimum:\n"))
-			print(lower_bounds)
-			print(start_values)
-		}
-		if(any(start_values>=upper_bounds)){
-			cat(sprintf("OOPS: some start params are above maximum:\n"))
-			print(upper_bounds)
-			print(start_values)
-		}
+# 		start_ages = fixed_age_grid
+# 		start_ages[fitted_params[1:NFG]] = start_values[1:NFG]
+# 		if(any(diff(start_ages)<min_age_step)){
+# 			cat(sprintf("OOPS: age grid steps are at or below minimum:\n"))
+# 			print(start_ages)
+# 		}
+# 		if(any(start_values<=lower_bounds)){
+# 			cat(sprintf("OOPS: some start params are below minimum:\n"))
+# 			print(lower_bounds)
+# 			print(start_values)
+# 		}
+# 		if(any(start_values>=upper_bounds)){
+# 			cat(sprintf("OOPS: some start params are above maximum:\n"))
+# 			print(upper_bounds)
+# 			print(start_values)
+# 		}
 			
 
 		# old code. Using gradient to improve starting point. Does not seem to improve the fitting.

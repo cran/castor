@@ -88,7 +88,9 @@ Logical, indicating whether the calculation was successful. If \code{FALSE}, the
 }
 \item{total_diversity}{Numerical vector of size NG, listing the predicted (deterministic) total diversity (number of extant species, denoted \eqn{N}) at the ages given in \code{ages[]}.
 }
-\item{LTT}{Numeric vector of size NG, listing the number of lineages represented in the tree at any given age, also known as ``lineages-through-time'' (LTT) curve. Note that \code{LTT} at \code{age0} will be equal to \code{LTT0} (if the latter was provided), and that values in \code{LTT} will be non-increasing with age.
+\item{LTT}{Numeric vector of size NG, listing the number of lineages represented in the tree at any given age, also known as ``lineages-through-time'' (LTT) curve. Note that \code{LTT} at \code{age0} will be equal to \code{LTT0} (if the latter was provided).
+}
+\item{nLTT}{Numeric vector of size NG, listing values of the normalized LTT at ages \code{ages[]}. The nLTT is calculated by dividing the LTT by its area-under-the-curve (AUC). The AUC is calculated by integrating the LTT over the time spanned by \code{ages} and using the trapezoid rule. Hence, the exact value of the AUC and of the nLTT depends on the span and resolution of \code{ages[]}. If you want the AUC to accurately refer to the entire area under the curve (i.e. across the full real axis), you should specify a sufficiently wide and sufficiently fine age grid (e.g., via \code{requested_ages}).
 }
 \item{Pmissing}{Numeric vector of size NG, listing the probability that a lineage, extant at a given age, will not be represented in the tree.}
 \item{lambda}{
@@ -104,14 +106,22 @@ Numeric vector of size NG, listing the Poissonian sampling rates at the ages giv
 Numeric vector of size NG, listing the retention probabilities (for continuously sampled lineages) at the ages given in \code{ages[]}.
 }
 \item{PDR}{Numeric vector of size NG, listing the pulled diversification rate (PDR, in units 1/time) at the ages given in \code{ages[]}.}
+\item{IPRP}{Numeric vector of size NG, listing the age-integrated pulled diversification rate at the ages given in \code{ages[]}, i.e. \eqn{IPDR(t)=\int_0^t PDR(s)ds}.}
 \item{PSR}{Numeric vector of size NG, listing the ``pulled speciation rate'' (PSR, in units 1/time) at the ages given in \code{ages[]}. The PSR is defined as \eqn{PSR=\lambda\cdot(1-Pmissing)}.}
+\item{PRP}{Numeric vector of size NG, listing the ``pulled retention probability'' (PRP) at the ages given in \code{ages[]}. The PRP is defined as \eqn{PRP=\kappa\cdot(1-Pmissing)}.}
 \item{diversification_rate}{
 Numeric vector of size NG, listing the net diversification rate (in units 1/time) at the ages given in \code{ages[]}.
+}
+\item{branching_density}{
+Numeric vector of size NG, listing the deterministic branching density (PSR * nLTT, in units nodes/time) at the ages given in \code{ages[]}.
+}
+\item{sampling_density}{
+Numeric vector of size NG, listing the deterministic sampling density (\eqn{\psi\cdot N/AUC}, in units tips/time, where AUC is the area-under-the-curve calculated for the LTT) at the ages given in \code{ages[]}.
 }
 \item{lambda_psi}{
 Numeric vector of size NG, listing the product of the speciation rate and Poissonian sampling rate (in units 1/time^2) at the ages given in \code{ages[]}.
 }
-\item{psi_kappa}{
+\item{kappa_psi}{
 Numeric vector of size NG, listing the product of the continuous sampling rate and the continuous retention probability (in units 1/time) at the ages given in \code{ages[]}.
 }
 \item{Reff}{

@@ -119,10 +119,11 @@ fit_hbd_psr_on_grid = function(	tree,
 
 	# set fit-control options, unless provided by the caller
 	if(is.null(fit_control)) fit_control = list()
-	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
-	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
-	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
-	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
+	if(is.null(fit_control$step.min)) fit_control$step.min 	= 0.001
+	if(is.null(fit_control$rel.tol)) fit_control$rel.tol 	= 1e-10
+	if(is.null(fit_control$x.tol)) fit_control$x.tol 		= 1e-10
+	if(is.null(fit_control$iter.max)) fit_control$iter.max 	= 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max 	= 2 * fit_control$iter.max * NFP
 
 	################################
 	# FITTING
@@ -141,7 +142,7 @@ fit_hbd_psr_on_grid = function(	tree,
 			input_age_grid 	= age_grid;
 			input_PSRs 		= PSRs
 		}
-		results = get_HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+		results = HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
 												oldest_age			= oldest_age,
 												age_grid 			= input_age_grid,
 												PSRs 				= input_PSRs,

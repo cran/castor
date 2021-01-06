@@ -13,10 +13,12 @@ where \eqn{B} is the tree-wide birth rate (species generation rate), \eqn{I} is 
 \usage{
 generate_random_tree(parameters           = list(),
                      max_tips             = NULL, 
+                     max_extant_tips      = NULL,
                      max_time             = NULL,
                      max_time_eq          = NULL,
                      coalescent           = TRUE,
                      as_generations       = FALSE,
+                     no_full_extinction   = TRUE,
                      Nsplits              = 2,
                      added_rates_times    = NULL,
                      added_birth_rates_pc = NULL,
@@ -58,10 +60,13 @@ Non-negative numeric, specifying the resolution (in time units) at which to coll
 Numeric between 0 and 1. Rarefaction to be applied to the final tree (fraction of random tips kept in the tree). Note that if \code{coalescent==FALSE}, rarefaction may remove both extant as well as extinct clades. Set \code{rarefaction=1} to not perform any rarefaction (default).
 }
 \item{max_tips}{
-Maximum number of tips of the tree to be generated. If \code{coalescent=TRUE}, this refers to the number of extant tips. Otherwise, it refers to the number of extinct + extant tips. If \code{NULL} or <=0, the number of tips is unlimited (so be careful).
+Integer, maximum number of tips of the tree to be generated. If \code{coalescent=TRUE}, this refers to the number of extant tips. Otherwise, it refers to the number of extinct + extant tips. If \code{NULL} or <=0, this halting condition is ignored.
+}
+\item{max_extant_tips}{
+Integer, maximum number of extant lineages allowed at any moment during the simulation. If this number is reached, the simulation is halted. If \code{NULL} or <=0, this halting condition is ignored.
 }
 \item{max_time}{
-Maximum duration of the simulation. If \code{NULL} or <=0, this constraint is ignored.
+Numeric, maximum duration of the simulation. If \code{NULL} or <=0, this constraint is ignored.
 }
 \item{max_time_eq}{
 Maximum duration of the simulation, counting from the first point at which speciation/extinction equilibrium is reached, i.e. when (birth rate - death rate) changed sign for the first time. If \code{NULL} or <0, this constraint is ignored.
@@ -71,6 +76,9 @@ Logical, specifying whether only the coalescent tree (i.e. the tree spanning the
 }
 \item{as_generations}{
 Logical, specifying whether edge lengths should correspond to generations. If FALSE, then edge lengths correspond to time.
+}
+\item{no_full_extinction}{
+Logical, specifying whether to prevent complete extinction of the tree. Full extinction is prevented by temporarily disabling extinctions whenever the number of extant tips is 1. Note that, strictly speaking, the trees generated do not exactly follow the proper probability distribution when \code{no_full_extinction} is \code{TRUE}.
 }
 \item{Nsplits}{
 Integer greater than 1. Number of child-tips to generate at each diversification event. If set to 2, the generated tree will be bifurcating. If >2, the tree will be multifurcating.

@@ -26,6 +26,7 @@ generate_tree_hbds( max_sampled_tips             = NULL,
                     CSA_probs                    = NULL,
                     CSA_kappas                   = NULL,
                     no_full_extinction           = FALSE,
+                    max_runtime                  = NULL,
                     tip_basename                 = "",
                     node_basename                = NULL,
                     edge_basename                = NULL,
@@ -90,6 +91,9 @@ Optional numeric vector of the same size as \code{CSA_times}, listing sampling r
 }
 \item{no_full_extinction}{
 Logical, specifying whether to prevent complete extinction of the tree. Full extinction is prevented by temporarily disabling extinctions whenever the number of extant tips is 1. Note that, strictly speaking, the trees generated do not exactly follow the proper probability distribution when \code{no_full_extinction} is \code{TRUE}.
+}
+\item{max_runtime}{
+Numeric, optional maximum computation time (in seconds) to allow for the simulation. Use this to avoid occasional explosions of runtimes, for example due to very large generated trees. Aborted simulations will return with the flag \code{success=FALSE} (i.e., no tree is returned at all).
 }
 \item{tip_basename}{
 Character. Prefix to be used for tip labels (e.g. "tip."). If empty (""), then tip labels will be integers "1", "2" and so on.

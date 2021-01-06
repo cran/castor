@@ -48,6 +48,7 @@ fit_musse = function(	tree,
 						root_conditioning		= "auto",		# can be 'none', 'madfitz', 'herr_als', 'stem', 'crown' or 'auto', specifying how to condition the state-likelihoods at the root prior to averaging. "none" (no conditioning) uses the raw state-likelihoods, as originally described by Maddison (2007). "madfitz" and "herr_als" are the options implemented in the hisse package, conditioning the root's state-likelihoods based on the birth-rates and the computed extinction probability (after or before averaging, respectively). For typical use cases, we suspect that this option does not matter much.
 						oldest_age				= NULL,			# oldest age to consider. Typically this will be <=root_age. If NULL, this will be set to root_age.
 						Ntrials 				= 1,			# (integer) number of trials (starting points) for fitting the model. If 0, then no fitting is performed, and only the a first-guess (start params) is evaluated and returned.
+						max_start_attempts		= 10,			# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
 						optim_algorithm 		= "subplex",	# either "optim", "nlminb" or "subplex". What algorithm to use for fitting.
 						optim_max_iterations	= 10000,		# maximum number of iterations of the optimization algorithm (per trial)
 						optim_max_evaluations	= NULL,			# maximum number of evaluations of the objective function (per trial). If left unspecified, it is chosen automatically based on the number of iterations.
@@ -117,6 +118,7 @@ fit_musse = function(	tree,
 			}
 		}
 	}
+	max_start_attempts 	= (if(is.null(max_start_attempts)) 1 else max(1,max_start_attempts))
 	if((Nbootstraps>0) && (!is.null(Ntrials_per_bootstrap)) && (Ntrials_per_bootstrap<=0)) stop(sprintf("ERROR: Ntrials_per_bootstrap must be strictly positive, if bootstrapping is requested"))
 	if((!is.null(birth_rates)) && (length(birth_rates)!=1) && (length(birth_rates)!=Nstates)) stop(sprintf("ERROR: Invalid number of birth-rates; got %d, but expected 1 or %d (Nstates)",length(birth_rates),Nstates))
 	if((!is.null(death_rates)) && (length(death_rates)!=1) && (length(death_rates)!=Nstates)) stop(sprintf("ERROR: Invalid number of death-rates; got %d, but expected 1 or %d (Nstates)",length(death_rates),Nstates))
@@ -248,7 +250,7 @@ fit_musse = function(	tree,
 	}
 
 	
-	# if some model parameters were passed as NaN or NULL, replace with NAs
+	# if some model parameters were passed as NaN or NULL, replace with NAs for consistency
 	# also, if some birth/death/sampling rates were passed as single scalars, multiply to Nstates
 	if((!is.null(birth_rates)) && (length(birth_rates)==1)) birth_rates = rep(birth_rates,Nstates)
 	if((!is.null(death_rates)) && (length(death_rates)==1)) death_rates = rep(death_rates,Nstates)
@@ -593,53 +595,70 @@ fit_musse = function(	tree,
 	scaled_param_mins = scale_params(param_mins,param_scales,param_mins);
 	scaled_param_maxs = scale_params(param_maxs,param_scales,param_mins);
 	fit_single_trial = function(trial){
-		#initial_param_values = if(trial==1) first_guess_compr else first_guess_compr * pmin(1e6,pmax(1e-6,2**runif(n=NIP, min=-sqrt(Ntrials), max=sqrt(Ntrials))));
-		#initial_param_values = pmin(pmax(initial_param_values, param_mins), param_maxs) # make sure randomized start params are within bounds
-		initial_param_values = if(trial==1) first_guess_compr else get_random_params(defaults=first_guess_compr, lower_bounds=param_mins, upper_bounds=param_maxs, scales=param_scales, orders_of_magnitude=max(1,min(6,log2(10.0)*sqrt(Ntrials))))
-		scaled_initial_param_values = scale_params(initial_param_values,param_scales,param_mins)
-		if(optim_algorithm == "optim"){
-			fit = stats::optim(	par		= scaled_initial_param_values[fitted_params], 
-								fn		= function(pars){ objective_function(pars, trial) }, 
-								method 	= "L-BFGS-B", 
-								lower 	= scaled_param_mins[fitted_params],
-								upper 	= scaled_param_maxs[fitted_params],
-								control = list(maxit=optim_max_iterations, reltol=optim_rel_tol))
-			LL 				= -fit$value
-			Nevaluations 	= fit$counts
-			Niterations		= NA
-			converged 		= (fit$convergence==0)
-		}else if(optim_algorithm == "nlminb"){
-			fit = stats::nlminb(start		= scaled_initial_param_values[fitted_params], 
-								objective	= function(pars){ objective_function(pars, trial) }, 
-								lower 		= scaled_param_mins[fitted_params], 
-								upper 		= scaled_param_maxs[fitted_params],
-								control 	= list(iter.max = optim_max_iterations, eval.max = optim_max_evaluations, rel.tol = optim_rel_tol))
-			LL 				= -fit$objective;
-			Nevaluations 	= fit$evaluations[1]
-			Niterations		= fit$iterations
-			converged		= (fit$convergence==0)
-		}else if(optim_algorithm == "subplex"){
-			fit = nloptr::nloptr(	x0 		= scaled_initial_param_values[fitted_params], 
-									eval_f 	= function(pars){ objective_function(pars, trial) },
-									lb 		= scaled_param_mins[fitted_params], 
-									ub 		= scaled_param_maxs[fitted_params], 
-									opts 	= list(algorithm = "NLOPT_LN_SBPLX", maxeval = optim_max_evaluations, ftol_rel = optim_rel_tol))
-            LL 				= -fit$objective
-            Nevaluations 	= NA
-            Niterations 	= (fit$iterations)
-            converged 		= (fit$status==0)
-            fit$par 		= fit$solution
-			#fit = subplex::subplex(par = initial_param_values[fitted_params], 
-			#						fn = function(pars){ objective_function(pars, trial) },
-			#						control = list(maxit=optim_max_iterations, reltol = optim_rel_tol, parscale=0.1), 
-			#						hessian = FALSE)
-			#LL 				= -fit$value
-			#Nevaluations 	= fit$count
-			#converged 		= (fit$convergence>=0)
+		# randomly choose start values for fitted params (keep trying up to max_start_attempts times)
+		Nstart_attempts = 0
+		while(Nstart_attempts<max_start_attempts){
+			# randomly choose start values for fitted params
+			if(trial==1){
+				initial_param_values = first_guess_compr
+			}else{
+				initial_param_values = get_random_params(defaults=first_guess_compr, lower_bounds=param_mins, upper_bounds=param_maxs, scales=param_scales, orders_of_magnitude=max(1,min(6,log2(10.0)*sqrt(Ntrials))))
+			}
+			scaled_initial_fparam_values = scale_params(initial_param_values,param_scales,param_mins)[fitted_params]
+			# check if start values yield NaN
+			start_LL = -objective_function(fparam_values=scaled_initial_fparam_values, trial=0)
+			Nstart_attempts = Nstart_attempts + 1
+			if(is.finite(start_LL)) break;
 		}
-		if(is.null(LL)){ LL = NaN; converged = FALSE; }
-		if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
-		return(list(LL=LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit));
+		# run fit with chose start values
+		if(is.finite(start_LL)){
+			if(optim_algorithm == "optim"){
+				fit = stats::optim(	par		= scaled_initial_fparam_values, 
+									fn		= function(pars){ objective_function(pars, trial) }, 
+									method 	= "L-BFGS-B", 
+									lower 	= scaled_param_mins[fitted_params],
+									upper 	= scaled_param_maxs[fitted_params],
+									control = list(maxit=optim_max_iterations, reltol=optim_rel_tol))
+				LL 				= -fit$value
+				Nevaluations 	= fit$counts
+				Niterations		= NA
+				converged 		= (fit$convergence==0)
+			}else if(optim_algorithm == "nlminb"){
+				fit = stats::nlminb(start		= scaled_initial_fparam_values, 
+									objective	= function(pars){ objective_function(pars, trial) }, 
+									lower 		= scaled_param_mins[fitted_params], 
+									upper 		= scaled_param_maxs[fitted_params],
+									control 	= list(iter.max = optim_max_iterations, eval.max = optim_max_evaluations, rel.tol = optim_rel_tol))
+				LL 				= -fit$objective;
+				Nevaluations 	= fit$evaluations[1]
+				Niterations		= fit$iterations
+				converged		= (fit$convergence==0)
+			}else if(optim_algorithm == "subplex"){
+				fit = nloptr::nloptr(	x0 		= scaled_initial_fparam_values, 
+										eval_f 	= function(pars){ objective_function(pars, trial) },
+										lb 		= scaled_param_mins[fitted_params], 
+										ub 		= scaled_param_maxs[fitted_params], 
+										opts 	= list(algorithm = "NLOPT_LN_SBPLX", maxeval = optim_max_evaluations, ftol_rel = optim_rel_tol))
+				LL 				= -fit$objective
+				Nevaluations 	= NA
+				Niterations 	= (fit$iterations)
+				converged 		= (fit$status==0)
+				fit$par 		= fit$solution
+				#fit = subplex::subplex(par = initial_param_values[fitted_params], 
+				#						fn = function(pars){ objective_function(pars, trial) },
+				#						control = list(maxit=optim_max_iterations, reltol = optim_rel_tol, parscale=0.1), 
+				#						hessian = FALSE)
+				#LL 				= -fit$value
+				#Nevaluations 	= fit$count
+				#converged 		= (fit$convergence>=0)
+			}
+			if(is.null(LL)){ LL = NaN; converged = FALSE; }
+			if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
+			return(list(LL=LL, start_LL=start_LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit, Nstart_attempts=Nstart_attempts))
+		}else{
+			if(diagnostics) cat(sprintf("%s  Trial %d: Start loglikelihood is non-finite. Skipping trial\n",verbose_prefix,trial))
+			return(list(LL=NA, start_LL = NA, Niterations=0, Nevaluations=0, converged=FALSE, Nstart_attempts=Nstart_attempts))
+		}
 	}
 	
 	# run one or more independent fitting trials
@@ -651,6 +670,7 @@ fit_musse = function(	tree,
 		Niterations			= NA
 		converged 			= TRUE
 		point_name			= "fixed params"
+		LLs					= rep(NA, Ntrials)
 
 	}else if(Ntrials==0){
 		# fitting not requested, so just evaluate once at start params
@@ -660,6 +680,7 @@ fit_musse = function(	tree,
 		Niterations			= NA
 		converged 			= FALSE
 		point_name 			= "start params"
+		LLs					= numeric()
 
 	}else{
 		if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
@@ -703,7 +724,7 @@ fit_musse = function(	tree,
 		
 		# keep record of these new results, in case we fail in the future
 		return_value_on_failure$parameters 		= best_param_values
-		return_value_on_failure$Nevaluations 	= Nevaluations
+		return_value_on_failure$Nevaluations	= Nevaluations
 		point_name = "final point (best fit)"
 	}
 
@@ -791,6 +812,7 @@ fit_musse = function(	tree,
 							root_conditioning		= root_conditioning,
 							oldest_age				= oldest_age,
 							Ntrials 				= Ntrials_per_bootstrap,
+							max_start_attempts		= max_start_attempts,
 							optim_algorithm 		= optim_algorithm,
 							optim_max_iterations	= optim_max_iterations,
 							optim_max_evaluations	= optim_max_evaluations,
@@ -829,28 +851,33 @@ fit_musse = function(	tree,
 		colnames(CI) = c("ML_estimate", "standard_error", "CI50lower", "CI50upper", "CI95lower", "CI95upper")
 	}
 		
-	return(list(success					= TRUE, 
-				Nstates					= Nstates,
-				NPstates				= NPstates,
-				root_prior				= root_prior,
-				parameters				= best_param_values, 
-				start_parameters		= first_guess,
-				loglikelihood			= loglikelihood,
-				AIC						= 2*NFP - 2*loglikelihood,
-				Niterations				= Niterations, # may be NA, depending on the optimization algorithm
-				Nevaluations			= Nevaluations, # may be NA, depending on the optimization algorithm
-				converged				= converged,
-				warnings				= (if(length(final$warnings)>0) final$warnings else NULL),
-				subroots				= final$subroots, # clade indices of subtree roots
-				ML_subroot_states		= final$ML_subroot_states, # maximum-likelihood estimate of the state at each subtree's root, based on the computed state-likelihoods
-				ML_substem_states		= final$ML_substem_states, # maximum-likelihood estimate of the state at each subtree's stem, based on the computed state-likelihoods
-				standard_errors			= (if(Nbootstraps>0) standard_errors else NULL),
-				CI50lower				= (if(Nbootstraps>0) CI50lower else NULL),
-				CI50upper				= (if(Nbootstraps>0) CI50upper else NULL),
-				CI95lower				= (if(Nbootstraps>0) CI95lower else NULL),
-				CI95upper				= (if(Nbootstraps>0) CI95upper else NULL),
-				CI						= (if(Nbootstraps>0) CI else NULL), # 2D matrix of size NP x 4, listing 50% 95% confidence intervals
-				ancestral_likelihoods 	= ancestral_likelihoods));
+	return(list(success						= TRUE, 
+				Nstates						= Nstates,
+				NPstates					= NPstates,
+				root_prior					= root_prior,
+				parameters					= best_param_values, 
+				start_parameters			= first_guess,
+				loglikelihood				= loglikelihood,
+				AIC							= 2*NFP - 2*loglikelihood,
+				Niterations					= Niterations, # may be NA, depending on the optimization algorithm
+				Nevaluations				= Nevaluations, # may be NA, depending on the optimization algorithm
+				converged					= converged,
+				warnings					= (if(length(final$warnings)>0) final$warnings else NULL),
+				subroots					= final$subroots, # clade indices of subtree roots
+				ML_subroot_states			= final$ML_subroot_states, # maximum-likelihood estimate of the state at each subtree's root, based on the computed state-likelihoods
+				ML_substem_states			= final$ML_substem_states, # maximum-likelihood estimate of the state at each subtree's stem, based on the computed state-likelihoods
+				trial_start_loglikelihoods	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_LL)),
+				trial_loglikelihoods		= LLs,
+				trial_Nstart_attempts		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts)),
+				trial_Niterations			= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations)),
+				trial_Nevaluations			= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)),
+				standard_errors				= (if(Nbootstraps>0) standard_errors else NULL),
+				CI50lower					= (if(Nbootstraps>0) CI50lower else NULL),
+				CI50upper					= (if(Nbootstraps>0) CI50upper else NULL),
+				CI95lower					= (if(Nbootstraps>0) CI95lower else NULL),
+				CI95upper					= (if(Nbootstraps>0) CI95upper else NULL),
+				CI							= (if(Nbootstraps>0) CI else NULL), # 2D matrix of size NP x 4, listing 50% 95% confidence intervals
+				ancestral_likelihoods 		= ancestral_likelihoods));
 }
 
 

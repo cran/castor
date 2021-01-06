@@ -83,8 +83,9 @@ fit_hbd_model_on_grid = function(	tree,
 	if(NG==1) splines_degree = 1; # no point in using splines since lambda & mu are assumed to be time-independent
 	
 	# reformat shape of input params to an internally standardized format
-	min_rho0 = max(0,min_rho0);
-	max_rho0 = max(0,max_rho0);
+	min_rho0 	= max(0,min_rho0);
+	max_rho0 	= max(0,max_rho0);
+	min_lambda 	= pmax(0, min_lambda) # lambda cannot be negative
 	if(length(min_lambda)==1) min_lambda = rep(min_lambda,times=NG);
 	if(length(max_lambda)==1) max_lambda = rep(max_lambda,times=NG);
 	if(length(min_mu)==1) min_mu = rep(min_mu,times=NG);
@@ -150,6 +151,7 @@ fit_hbd_model_on_grid = function(	tree,
 	fitted2free		= c(fitted2free, (if(is.na(fixed_rho0)) (if(length(fitted2free)==0) 0 else tail(fitted2free,1)) + 1 else c()))
 	Nfree			= length(unique(fitted2free)); # number of free (i.e. independently) fitted parameters
 	free2fitted		= lapply(1:Nfree, FUN=function(frp) which(fitted2free==frp))
+	constant_rates	= (NG==1) || (((const_lambda && (NFlambda==NG)) || ((NFlambda==0) && all(diff(fixed_lambda)==0))) && ((const_mu && (NFmu==NG)) || ((NFmu==0) && all(diff(fixed_mu)==0)))) # whether the BD model is in fact a constant-rates model (i.e. lambda & mu are time-independent)
 		
 	# determine typical parameter scales
 	scale_lambda = abs(guess_lambda); scale_lambda[scale_lambda==0] = mean(scale_lambda);
@@ -177,7 +179,7 @@ fit_hbd_model_on_grid = function(	tree,
 	# set fit-control options, unless provided by the caller
 	if(is.null(fit_control)) fit_control = list()
 	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
-	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-10
 	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
 	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * Nfree
 
@@ -189,33 +191,33 @@ fit_hbd_model_on_grid = function(	tree,
 	objective_function = function(fparam_values){
 		param_values = expand_free_fitted_params(fparam_values);
 		if(any(is.nan(param_values)) || any(is.infinite(param_values))) return(Inf); # catch weird cases where params become NaN
-		lambdas = param_values[1:NG]; 
-		mus 	= param_values[(NG+1):(NG+NG)]; 
-		rho 	= param_values[2*NG+1];
+		lambdas = pmax(0,param_values[1:NG])
+		mus 	= param_values[(NG+1):(NG+NG)]
+		rho 	= param_values[2*NG+1]
+		if(rho==0) return(Inf)
 		if(length(age_grid)==1){
-			# while age-grid has only one point (i.e., lambda & mu are constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
-			input_age_grid 	= c(0,oldest_age);
-			input_lambdas	= c(lambdas, lambdas);
-			input_mus		= c(mus, mus);
+			# This is a constant-rates model (i.e., lambda & mu are constant over time), so use more specialized (efficient) loglikelihood routine
+			results = CR_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
+														oldest_age			= oldest_age,
+														rarefaction			= rho,
+														lambda	 			= lambdas[1],
+														mu 					= mus[1],
+														condition			= condition);
 		}else{
-			input_age_grid 	= age_grid;
-			input_lambdas	= lambdas
-			input_mus 		= mus
-		}
-		results = get_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
+			results = HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
 													oldest_age			= oldest_age,
 													rarefaction			= rho,
-													age_grid 			= input_age_grid,
-													lambdas 			= input_lambdas,
-													mus 				= input_mus,
+													age_grid 			= age_grid,
+													lambdas 			= lambdas,
+													mus 				= mus,
 													splines_degree		= splines_degree,
 													condition			= condition,
 													relative_dt			= relative_dt,
 													runtime_out_seconds	= max_model_runtime);
-		if(!results$success) return(Inf);
-		LL = results$loglikelihood;
-		if(is.na(LL) || is.nan(LL) || is.infinite(LL)) return(Inf);
-		return(-LL);
+		}
+		if((!results$success) || (!is.finite(results$loglikelihood))) return(Inf)
+		LL = results$loglikelihood
+		return(-LL)
 	}
 	
 
@@ -243,7 +245,7 @@ fit_hbd_model_on_grid = function(	tree,
 							upper		= upper_bounds/fparam_scales, 
 							control		= fit_control)
 						}, error = function(e){ list(objective=NaN, par=NA, convergence=1) })
-		return(list(objective_value=fit$objective, fparam_values = fit$par, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1]))
+		return(list(objective_value=fit$objective, fparam_values = pmin(upper_bounds/fparam_scales,pmax(lower_bounds/fparam_scales,fit$par)), converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1]))
 	}
 	
 	################################

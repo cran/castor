@@ -32,6 +32,7 @@ fit_musse(tree,
           root_conditioning     = "auto",
           oldest_age            = NULL,
           Ntrials               = 1,
+          max_start_attempts    = 10,
           optim_algorithm       = "subplex",
           optim_max_iterations  = 10000,
           optim_max_evaluations = NULL,
@@ -129,6 +130,9 @@ Strictly positive numeric, specifying the oldest age (time before present) to co
 }
 \item{Ntrials}{
 Non-negative integer, specifying the number of trials for fitting the model, using alternative (randomized) starting parameters at each trial. A larger \code{Ntrials} reduces the risk of landing on a local non-global optimum of the likelihood function, and thus increases the chances of finding the truly best fit. If 0, then no fitting is performed, and only the first-guess (i.e., provided or guessed start params) is evaluated and returned. Hence, setting \code{Ntrials=0} can be used to obtain a reasonable set of start parameters for subsequent fitting or for Markov Chain Monte Carlo.
+}
+\item{max_start_attempts}{
+Integer, specifying the number of times to attempt finding a valid start point (per trial) before giving up on that trial. Randomly chosen extreme start parameters may occasionally result in Inf/undefined likelihoods, so this option allows the algorithm to keep looking for valid starting points. For complex models (e.g., with >5 states), setting this to 10, 100 or even 1000 may be beneficial.
 }
 \item{optim_algorithm}{
 Character, specifying the optimization algorithm for fitting. Must be one of either "optim", "nlminb" or "subplex".
@@ -247,8 +251,29 @@ Logical, indicating whether convergence was successful during fitting. If conver
 \item{warnings}{
 Character vector, listing any warnings encountered during evaluation of the likelihood function at the fitted parameter values. For example, this vector may contain warnings regarding the differential equation solvers or regarding the rank of the G-matrix (Louca, 2019).
 }
-\item{ML_root_state}{
-Integer between 1 and Nstates, an estimate of the root's state based on the computed state likelihoods.
+\item{subroots}{
+Integer vector, listing indices of tips/nodes in the tree that were considered as starting points of independent MuSSE processes. If \code{oldest_age} was equal to or greater than the root age, then \code{subroots} will simply list the tree's root.
+}
+\item{ML_subroot_states}{
+Integer vector, with values between 1 and Nstates, giving the maximum-likelihood estimate of each subroot's state.
+}
+\item{ML_substem_states}{
+Integer vector, with values between 1 and Nstates, giving the maximum-likelihood estimate of the state at each subroot's stem (i.e., exactly at \code{oldest_age}).
+}
+\item{trial_start_loglikelihoods}{
+Numeric vector of length \code{Ntrials}, listing the initial loglikelihoods (i.e., at the starting parameter values) for each fitting trial.
+}
+\item{trial_loglikelihoods}{
+Numeric vector of length \code{Ntrials}, listing the maximized loglikelihoods for each fitting trial. These may be used for diagnosing the robustness of maximum-likelihood estimates and the assessing the needed for increasing \code{Ntrials}.
+}
+\item{trial_Nstart_attempts}{
+Integer vector of length \code{Ntrials}, listing the number of random start attempts for each trial (see option \code{max_start_attempts}).
+}
+\item{trial_Niterations}{
+Integer vector of length \code{Ntrials}, listing the number of iterations of each trial. Depending on the fitting algorithm used (option \code{optim_algorithm}), these may be \code{NA} (not available).
+}
+\item{trial_Nevaluations}{
+Integer vector of length \code{Ntrials}, listing the number of likelihood evaluations of each trial. Depending on the fitting algorithm used (option \code{optim_algorithm}), these may be \code{NA} (not available).
 }
 \item{standard_errors}{
 Named list containing the elements "transition_matrix" (numeric matrix of size Nstates x Nstates), "birth_rates" (numeric vector of size Nstates) and "death_rates" (numeric vector of size Nstates), listing standard errors of all model parameters estimated using parametric bootstrapping. Only included if \code{Nbootstraps>0}. Note that the standard errors of non-fitted (i.e., fixed) parameters will be zero.

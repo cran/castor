@@ -233,8 +233,8 @@ fit_sbm_const = function(	trees, 								# either a single tree in phylo format,
 				for(q in 1:NQQ){
 					sim = castor::simulate_sbm(tree = trees[[tr]], radius = radius, diffusivity = diffusivity, root_latitude = NULL, root_longitude = NULL)
 					if(!sim$success) return(list(success=FALSE, error=sprintf("Calculation of QQ failed at simulation %d for tree %d: Could not simulate SBM for the fitted model: %s",q,tr,sim$error), diffusivity=diffusivity, loglikelihood=loglikelihood, Ncontrasts=NC));
-					sim_geodistances[next_g + c(1:length(tip_pairs))] = radius * geodesic_angles(sim$tip_latitudes[tip_pairs[,1]],sim$tip_longitudes[tip_pairs[,1]],sim$tip_latitudes[tip_pairs[,2]],sim$tip_longitudes[tip_pairs[,2]])
-					next_g = next_g + length(tip_pairs)
+					sim_geodistances[next_g + c(1:nrow(tip_pairs))] = radius * geodesic_angles(sim$tip_latitudes[tip_pairs[,1]],sim$tip_longitudes[tip_pairs[,1]],sim$tip_latitudes[tip_pairs[,2]],sim$tip_longitudes[tip_pairs[,2]])
+					next_g = next_g + nrow(tip_pairs)
 				}
 			}
 		}
@@ -251,6 +251,7 @@ fit_sbm_const = function(	trees, 								# either a single tree in phylo format,
 				Ncontrasts				= NC,
 				phylodistances 			= phylodistances,
 				geodistances			= geodistances,
+				tip_pairs_per_tree		= tip_pairs_per_tree,
 				focal_loglikelihoods	= focal_LLs,
 				standard_error			= (if(Nbootstraps>0) sd(bootstrap_fit_diffusivities, na.rm=TRUE) else NULL),
 				CI50lower				= (if(Nbootstraps>0) unname(quantile(bootstrap_fit_diffusivities, probs=0.25, type=8, na.rm=TRUE)) else NULL),

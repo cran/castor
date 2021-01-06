@@ -17,6 +17,10 @@ place_sorted_values_into_bins_CPP <- function(items, bin_mins, bin_maxs) {
     .Call(`_castor_place_sorted_values_into_bins_CPP`, items, bin_mins, bin_maxs)
 }
 
+first_Wasserstein_distance_CPP <- function(X, Y) {
+    .Call(`_castor_first_Wasserstein_distance_CPP`, X, Y)
+}
+
 split_undirected_graph_CPP <- function(Nnodes, Nedges, edges) {
     .Call(`_castor_split_undirected_graph_CPP`, Nnodes, Nedges, edges)
 }
@@ -41,6 +45,14 @@ exponentiate_matrix_for_multiple_scalings_CPP <- function(NR, A, scalings, epsil
     .Call(`_castor_exponentiate_matrix_for_multiple_scalings_CPP`, NR, A, scalings, epsilon, NPmin, NPmax, enforce_probability_matrix)
 }
 
+fit_exp_LeastLogSquares_moving_window_CPP <- function(X, Y, window_size, trim_window_at_bounds) {
+    .Call(`_castor_fit_exp_LeastLogSquares_moving_window_CPP`, X, Y, window_size, trim_window_at_bounds)
+}
+
+fit_exp_Poisson_moving_window_CPP <- function(X, Y, scalings, window_size, trim_window_at_bounds) {
+    .Call(`_castor_fit_exp_Poisson_moving_window_CPP`, X, Y, scalings, window_size, trim_window_at_bounds)
+}
+
 smoothenTimeSeriesSavitzkyGolay_CPP <- function(times, data, windowTimeSpan, windowIndexSpan, order) {
     .Call(`_castor_smoothenTimeSeriesSavitzkyGolay_CPP`, times, data, windowTimeSpan, windowIndexSpan, order)
 }
@@ -49,12 +61,20 @@ get_inhomogeneous_grid_1D_CPP <- function(Xstart, Xend, Ngrid, densityX, density
     .Call(`_castor_get_inhomogeneous_grid_1D_CPP`, Xstart, Xend, Ngrid, densityX, densityY, xepsilon)
 }
 
-monotonize_time_series_CPP <- function(values, increasing, prefer_later_data) {
-    .Call(`_castor_monotonize_time_series_CPP`, values, increasing, prefer_later_data)
+monotonize_series_by_pruning_CPP <- function(values, increasing, prefer_later_data) {
+    .Call(`_castor_monotonize_series_by_pruning_CPP`, values, increasing, prefer_later_data)
+}
+
+monotonize_series_via_interpolation_CPP <- function(times, values, increasing, prefer_later_data) {
+    .Call(`_castor_monotonize_series_via_interpolation_CPP`, times, values, increasing, prefer_later_data)
 }
 
 get_Ornstein_Uhlenbeck_time_series_CPP <- function(times, start_value, stationary_mean, stationary_std, decay_rate) {
     .Call(`_castor_get_Ornstein_Uhlenbeck_time_series_CPP`, times, start_value, stationary_mean, stationary_std, decay_rate)
+}
+
+get_bounded_BM_time_series_CPP <- function(times, start_value, diffusivity, lower, upper) {
+    .Call(`_castor_get_bounded_BM_time_series_CPP`, times, start_value, diffusivity, lower, upper)
 }
 
 get_Poisson_event_times_CPP <- function(time_grid, rates, splines_degree, Nevents, time0) {
@@ -103,6 +123,10 @@ get_paths_root_to_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
 
 get_adjacent_edges_per_edge_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
     .Call(`_castor_get_adjacent_edges_per_edge_CPP`, Ntips, Nnodes, Nedges, tree_edge)
+}
+
+get_sum_of_edge_lengths_per_clade_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
+    .Call(`_castor_get_sum_of_edge_lengths_per_clade_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
 get_total_tip_count_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
@@ -261,6 +285,10 @@ extract_independent_sister_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge
     .Call(`_castor_extract_independent_sister_tips_CPP`, Ntips, Nnodes, Nedges, tree_edge)
 }
 
+join_rooted_trees_CPP <- function(Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2) {
+    .Call(`_castor_join_rooted_trees_CPP`, Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2)
+}
+
 congruify_trees_CPP <- function(RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping) {
     .Call(`_castor_congruify_trees_CPP`, RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping)
 }
@@ -401,20 +429,28 @@ get_PSR_from_PDR_HBD_CPP <- function(age0, oldest_age, age_grid, PDR, rholambda0
     .Call(`_castor_get_PSR_from_PDR_HBD_CPP`, age0, oldest_age, age_grid, PDR, rholambda0, splines_degree, relative_dt, include_nLTT0)
 }
 
+get_PSR_of_CR_HBD_model_CPP <- function(age0, oldest_age, lambda, mu, rho0, relative_dt) {
+    .Call(`_castor_get_PSR_of_CR_HBD_model_CPP`, age0, oldest_age, lambda, mu, rho0, relative_dt)
+}
+
 get_PSR_of_HBD_model_CPP <- function(age0, oldest_age, age_grid, lambda, mu, rho0, splines_degree, relative_dt) {
     .Call(`_castor_get_PSR_of_HBD_model_CPP`, age0, oldest_age, age_grid, lambda, mu, rho0, splines_degree, relative_dt)
 }
 
-get_HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds) {
-    .Call(`_castor_get_HBD_model_loglikelihood_CPP`, branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds)
+CR_HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefaction, lambda, mu, condition) {
+    .Call(`_castor_CR_HBD_model_loglikelihood_CPP`, branching_ages, oldest_age, rarefaction, lambda, mu, condition)
 }
 
-get_HBD_PDR_loglikelihood_CPP <- function(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds, diff_PDR, diff_PDR_degree) {
-    .Call(`_castor_get_HBD_PDR_loglikelihood_CPP`, branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds, diff_PDR, diff_PDR_degree)
+HBD_model_loglikelihood_CPP <- function(branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds) {
+    .Call(`_castor_HBD_model_loglikelihood_CPP`, branching_ages, oldest_age, rarefaction, age_grid, lambdas, mus, splines_degree, condition, relative_dt, runtime_out_seconds)
 }
 
-get_HBD_PSR_loglikelihood_CPP <- function(branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds) {
-    .Call(`_castor_get_HBD_PSR_loglikelihood_CPP`, branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds)
+HBD_PDR_loglikelihood_CPP <- function(branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds, diff_PDR, diff_PDR_degree) {
+    .Call(`_castor_HBD_PDR_loglikelihood_CPP`, branching_ages, oldest_age, rholambda0, age_grid, PDRs, splines_degree, condition, relative_dt, runtime_out_seconds, diff_PDR, diff_PDR_degree)
+}
+
+HBD_PSR_loglikelihood_CPP <- function(branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds) {
+    .Call(`_castor_HBD_PSR_loglikelihood_CPP`, branching_ages, oldest_age, age_grid, PSRs, splines_degree, condition, relative_dt, runtime_out_seconds)
 }
 
 get_HBDS_model_loglikelihood_CPP <- function(branching_ages, Ptip_ages, Pnode_ages, CSA_ages, CSA_probs, CSA_kappas, concentrated_tip_counts, concentrated_node_counts, oldest_age, age_grid, lambdas, mus, psis, kappas, splines_degree, condition, relative_ODE_step, E_value_step, runtime_out_seconds) {
@@ -453,12 +489,12 @@ simulate_neutral_gene_evolution_CPP <- function(Ntips, Nnodes, Nedges, Nsites, N
     .Call(`_castor_simulate_neutral_gene_evolution_CPP`, Ntips, Nnodes, Nedges, Nsites, Nstates, tree_edge, edge_length, root_states, mutation_rate, include_tips, include_nodes, include_gene_distances, Nsimulations)
 }
 
-generate_random_tree_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times) {
-    .Call(`_castor_generate_random_tree_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, include_birth_times, include_death_times)
+generate_random_tree_CPP <- function(max_tips, max_extant_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times) {
+    .Call(`_castor_generate_random_tree_CPP`, max_tips, max_extant_tips, max_time, max_time_since_equilibrium, birth_rate_intercept, birth_rate_factor, birth_rate_exponent, death_rate_intercept, death_rate_factor, death_rate_exponent, additional_rates_times, additional_birth_rates_pc, additional_death_rates_pc, additional_periodic, coalescent, Nsplits, as_generations, no_full_extinction, include_birth_times, include_death_times)
 }
 
-generate_random_tree_HBDS_CPP <- function(max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, include_extant, include_extinct, include_birth_times, include_death_times) {
-    .Call(`_castor_generate_random_tree_HBDS_CPP`, max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, include_extant, include_extinct, include_birth_times, include_death_times)
+generate_random_tree_HBDS_CPP <- function(max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, runtime_out_seconds, include_extant, include_extinct, include_birth_times, include_death_times) {
+    .Call(`_castor_generate_random_tree_HBDS_CPP`, max_sampled_tips, max_sampled_nodes, max_extant_tips, max_extinct_tips, max_tips, max_time, time_grid, birth_rates, death_rates, sampling_rates, retention_probs, splines_degree, CSA_times, CSA_probs, CSA_kappas, as_generations, no_full_extinction, runtime_out_seconds, include_extant, include_extinct, include_birth_times, include_death_times)
 }
 
 get_tree_from_branching_ages_CPP <- function(branching_ages) {
@@ -493,8 +529,8 @@ generate_gene_tree_in_species_tree_MSC_CPP <- function(NStips, NSnodes, NSedges,
     .Call(`_castor_generate_gene_tree_in_species_tree_MSC_CPP`, NStips, NSnodes, NSedges, tree_edge, edge_length, population_sizes, generation_times, mutation_rates, allele_counts, gene_edge_unit, Nsites, bottleneck_at_speciation, force_coalescence_at_root, ploidy)
 }
 
-generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP <- function(NStips, NSnodes, NSedges, tree_edge, edge_length, population_sizes, generation_times, mutation_rates, HGT_rates, duplication_rates, loss_rates, allele_counts, gene_edge_unit, Nsites, bottleneck_at_speciation, force_coalescence_at_root, ploidy, HGT_source_by_locus, HGT_only_to_empty_clades, no_loss_before_time, include_event_times) {
-    .Call(`_castor_generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP`, NStips, NSnodes, NSedges, tree_edge, edge_length, population_sizes, generation_times, mutation_rates, HGT_rates, duplication_rates, loss_rates, allele_counts, gene_edge_unit, Nsites, bottleneck_at_speciation, force_coalescence_at_root, ploidy, HGT_source_by_locus, HGT_only_to_empty_clades, no_loss_before_time, include_event_times)
+generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP <- function(NStips, NSnodes, NSedges, tree_edge, edge_length, population_sizes, generation_times, mutation_rates, HGT_rates, duplication_rates, loss_rates, allele_counts, gene_edge_unit, Nsites, bottleneck_at_speciation, force_coalescence_at_root, ploidy, HGT_source_by_locus, HGT_only_to_empty_clades, no_loss_before_time, runtime_out_seconds, include_event_times) {
+    .Call(`_castor_generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP`, NStips, NSnodes, NSedges, tree_edge, edge_length, population_sizes, generation_times, mutation_rates, HGT_rates, duplication_rates, loss_rates, allele_counts, gene_edge_unit, Nsites, bottleneck_at_speciation, force_coalescence_at_root, ploidy, HGT_source_by_locus, HGT_only_to_empty_clades, no_loss_before_time, runtime_out_seconds, include_event_times)
 }
 
 simulate_deterministic_HBD_MSC_CPP <- function(oldest_age, age_grid, PSRs, CTs, rho0, sLTT0, gLTT0, splines_degree, relative_dt) {
