@@ -2471,6 +2471,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// simulate_SBM_trajectory_CPP
+Rcpp::List simulate_SBM_trajectory_CPP(const std::vector<double>& times, const double radius, const double diffusivity, const double start_theta, const double start_phi);
+RcppExport SEXP _castor_simulate_SBM_trajectory_CPP(SEXP timesSEXP, SEXP radiusSEXP, SEXP diffusivitySEXP, SEXP start_thetaSEXP, SEXP start_phiSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type times(timesSEXP);
+    Rcpp::traits::input_parameter< const double >::type radius(radiusSEXP);
+    Rcpp::traits::input_parameter< const double >::type diffusivity(diffusivitySEXP);
+    Rcpp::traits::input_parameter< const double >::type start_theta(start_thetaSEXP);
+    Rcpp::traits::input_parameter< const double >::type start_phi(start_phiSEXP);
+    rcpp_result_gen = Rcpp::wrap(simulate_SBM_trajectory_CPP(times, radius, diffusivity, start_theta, start_phi));
+    return rcpp_result_gen;
+END_RCPP
+}
 // simulate_TSBM_on_tree_CPP
 Rcpp::List simulate_TSBM_on_tree_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const double radius, const std::vector<double>& time_grid, const std::vector<double>& diffusivities, const long splines_degree, const double root_theta, const double root_phi);
 RcppExport SEXP _castor_simulate_TSBM_on_tree_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP radiusSEXP, SEXP time_gridSEXP, SEXP diffusivitiesSEXP, SEXP splines_degreeSEXP, SEXP root_thetaSEXP, SEXP root_phiSEXP) {
@@ -2835,6 +2850,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_all_pairwise_geodesic_angles_CPP", (DL_FUNC) &_castor_get_all_pairwise_geodesic_angles_CPP, 4},
     {"_castor_draw_SBM_geodesic_angle_CPP", (DL_FUNC) &_castor_draw_SBM_geodesic_angle_CPP, 1},
     {"_castor_simulate_SBM_on_tree_CPP", (DL_FUNC) &_castor_simulate_SBM_on_tree_CPP, 9},
+    {"_castor_simulate_SBM_trajectory_CPP", (DL_FUNC) &_castor_simulate_SBM_trajectory_CPP, 5},
     {"_castor_simulate_TSBM_on_tree_CPP", (DL_FUNC) &_castor_simulate_TSBM_on_tree_CPP, 11},
     {"_castor_move_points_on_sphere_CPP", (DL_FUNC) &_castor_move_points_on_sphere_CPP, 5},
     {"_castor_SBM_LLs_of_transitions_CPP", (DL_FUNC) &_castor_SBM_LLs_of_transitions_CPP, 6},

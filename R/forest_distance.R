@@ -1,14 +1,15 @@
-# Calculate distance (single number) between two sets of exchangeable unlabeled trees
+# Calculate distance (single number) between two sets of exchangeable unlabeled trees.
+# Hence, the distance calculated does not depend in the ordering/labeling of tips in each tree, nor on the order of trees in each tree set.
 # The trees may include multifurcations and monofurcations.
 # If normalized==TRUE, the distance will always be within 0 and 1. However, it is no longer guaranteed that the normalized distance function satisfies the triangle inequality, as required for actual metrics.
-forest_distance = function(	treesA, 
-							treesB, 
+forest_distance = function(	treesA, 		# list of phylo trees
+							treesB, 		# list of phylo trees
 							metric			= "WassersteinNodeAges",	# which distance function to use
 							combine			= "mean_pairwise",			# how the pairwise distances between trees should be combined to form a single distance between the forests.
 							normalized		= FALSE,
 							NLeigenvalues	= 10){	# number of top eigenvalues to consider of the Laplacian Spectrum (e.g., for the metric "WassersteinLaplacianSpectrum"). If <=0, all eigenvalues are considered, which can substantially increase computation time for large trees.
-	NtreesA 	= length(treesA)
-	NtreesB 	= length(treesB)
+	NtreesA = length(treesA)
+	NtreesB	= length(treesB)
 	
 	distances = matrix(0, ncol=NtreesA, nrow=NtreesB)
 	intermediatesA = vector(mode="list", NtreesA) # temporary storage for any intermediate results for treesA (will be filled as we go)
@@ -16,7 +17,7 @@ forest_distance = function(	treesA,
 	for(a in seq_len(NtreesA)){
 		treeA = treesA[[a]]
 		NcladesA = length(treeA$tip.label) + treeA$Nnode
-		for(b in seq_len(a-1)){
+		for(b in seq_len(NtreesB)){
 			treeB = treesB[[b]]
 			NcladesB = length(treeB$tip.label) + treeB$Nnode
 			if(metric=="WassersteinNodeAges"){
@@ -54,7 +55,7 @@ forest_distance = function(	treesA,
 				# This metric is similar to that proposed by Lewitus and Morlon (2016, Systematic Biology. 65:495-507), with the difference that the latter calculates a smoothened version of the spectrum (via a Gaussian convolution kernel) and then calculates the Kullback-Leibler divergence between the smoothened densities.
 				# Note that if not all eigenvalues are used (i.e. NLeigenvalues>0 and NLeigenvalues<max(NcladesA,NcladesB)), then this is not even a metric on the space of unlabeled unrooted trees. 
 				if(is.null(intermediatesA[[a]])){
-					LaplacianA 	= weighted_graph_Laplacian_of_tree(treeA, sparse=((NLeigenvalues>0) && (NLeigenvalues<NcladesA)))
+					LaplacianA = weighted_graph_Laplacian_of_tree(treeA, sparse=((NLeigenvalues>0) && (NLeigenvalues<NcladesA)))
 					if((NLeigenvalues>0) && (NLeigenvalues<NcladesA)){
 						spectrumA = RSpectra::eigs(A=LaplacianA, k=NLeigenvalues, which="LM", opts=list(retvec=FALSE))$values
 					}else{
@@ -65,9 +66,9 @@ forest_distance = function(	treesA,
 					spectrumA = intermediatesA[[a]]$spectrum
 				}
 				if(is.null(intermediatesB[[b]])){
-					LaplacianB 	= weighted_graph_Laplacian_of_tree(treeB, sparse=((NLeigenvalues>0) && (NLeigenvalues<NcladesB)))
+					LaplacianB = weighted_graph_Laplacian_of_tree(treeB, sparse=((NLeigenvalues>0) && (NLeigenvalues<NcladesB)))
 					if((NLeigenvalues>0) && (NLeigenvalues<NcladesB)){
-						spectrumB = RSpectra::eigs(B=LaplacianB, k=NLeigenvalues, which="LM", opts=list(retvec=FALSE))$values
+						spectrumB = RSpectra::eigs(A=LaplacianB, k=NLeigenvalues, which="LM", opts=list(retvec=FALSE))$values
 					}else{
 						spectrumB = eigen(x=LaplacianB, symmetric=TRUE, only.values=TRUE)$values
 					}
@@ -87,17 +88,18 @@ forest_distance = function(	treesA,
 			}else{
 				stop(sprintf("Unknown metric '%s'",metric))
 			}
-			distances[b,a] = distances[a,b]	
 		}
 	}
 	
 	# combine pairwise distances
 	if(combine=="mean_pairwise"){
-		distance = mean(distances[row(distances)!=col(distances)])
+		distance = mean(distances)
 	}else if(combine=="max_pairwise"){
 		distance = max(distances)
 	}else{
-		stop(sprintf("Unknown option '%s' for combine",combine))
+		return(list(succes=FALSE, error=sprintf("forest_distance: Unknown option '%s' for combine",combine)))
 	}
-	return(distance)
+	return(list(success		= TRUE,
+				distance 	= distance,
+				distances	= distances))
 }

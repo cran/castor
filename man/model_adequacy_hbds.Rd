@@ -168,10 +168,11 @@ K.T. Shao, R. R. Sokal (1990). Tree Balance. Systematic Biology. 39:266-276.
 \dontrun{
 # generate a tree based on a simple HBDS process
 max_time = 10
-gen = castor::generate_tree_hbds(max_time   = max_time,
-                                 lambda     = 1,
-                                 mu         = 0.1,
-                                 psi        = 0.1)
+gen = castor::generate_tree_hbds(max_time           = max_time,
+                                 lambda             = 1,
+                                 mu                 = 0.1,
+                                 psi                = 0.1,
+                                 no_full_extinction = TRUE)
 if(!gen$success) stop(sprintf("Could not generate tree: \%s",gen$error))
 tree     = gen$tree
 root_age = castor::get_tree_span(tree)$max_distance

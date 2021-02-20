@@ -553,6 +553,10 @@ simulate_SBM_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_leng
     .Call(`_castor_simulate_SBM_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, diffusivity, root_theta, root_phi)
 }
 
+simulate_SBM_trajectory_CPP <- function(times, radius, diffusivity, start_theta, start_phi) {
+    .Call(`_castor_simulate_SBM_trajectory_CPP`, times, radius, diffusivity, start_theta, start_phi)
+}
+
 simulate_TSBM_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi) {
     .Call(`_castor_simulate_TSBM_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, radius, time_grid, diffusivities, splines_degree, root_theta, root_phi)
 }

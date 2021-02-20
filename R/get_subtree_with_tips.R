@@ -1,7 +1,7 @@
 # extract the subtree spanning the set of tips specified
 # this function guarantees that the root will be kept in the subtree
 # if the original tree$edge_length was empty or NULL, then subtree$edge_length[e] will be the number of combined edges making up the new edge e
-get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_monofurcations=TRUE, force_keep_root=FALSE){ 
+get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_monofurcations=TRUE, force_keep_root=FALSE){
 	Ntips  = length(tree$tip.label);
 	Nnodes = tree$Nnode;
 		

@@ -30,6 +30,7 @@ fit_hbds_model_on_grid = function(	tree,
 									fixed_kappa				= NULL,		# optional fixed kappa values, on one or more of the age grid points. Either NULL (none of the kappas are fixed), or a single scalar (all kappas are fixed) or a numeric vector of size NG (some or all kappas are fixed, can include NAs).
 									fixed_CSA_probs			= NULL,		# optional fixed CSA_prob values, on one or more of the CSAs. Either NULL (none of the CSA_probs are fixed), or a single scalar (all CSA_probs are fixed) or a numeric vector of size NCSA (some or all CSA_probs are fixed, can include NAs).
 									fixed_CSA_kappas		= NULL,		# optional fixed CSA_kappa values, on one or more of the CSAs. Either NULL (none of the CSA_kappas are fixed), or a single scalar (all CSA_kappas are fixed) or a numeric vector of size NCSA (some or all CSA_kappas are fixed, can include NAs).
+									fixed_age_grid			= NULL,		# optional age grid on which fixed_lambda, fixed_mu, fixed_psi and fixed_kappa are defined (rather than on the age_grid). If provided, then any fixed_lambda, fixed_mu, fixed_psi and fixed_kappa must be defined on the entire fixed_age_grid. This may be useful if you want to fit some parameters on a coarse grid, but want to specify (fix) some other parameters on a much finer grid. Entries in fixed_age_grid[] must be in ascending order.
 									const_lambda			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									const_mu				= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant for those lambdas that are fitted (i.e. fixed lambda values are kept as is).
 									const_psi				= FALSE,	# logical, whether to enforce a constant (time-independent) fitted sampling rate psi. Only relevant for those psis that are fitted (i.e. fixed psi values are kept as is).
@@ -50,7 +51,7 @@ fit_hbds_model_on_grid = function(	tree,
 									fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 									focal_param_values		= NULL,		# optional list, each element of which is a named list containing lambda, mu, psi, kappa, CSA_probs and CSA_kappas of particular interest and for which to calculate the loglikelihood. Can be used e.g. to explore the shape of the loglikelihood function.
 									verbose					= FALSE,	# boolean, specifying whether to print informative messages
-									diagnostics				= FALSE,		# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
+									diagnostics				= FALSE,	# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
 									verbose_prefix			= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
 	# basic error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
@@ -82,6 +83,14 @@ fit_hbds_model_on_grid = function(	tree,
 	max_start_attempts 	= (if(is.null(max_start_attempts)) 1 else max(1,max_start_attempts))
 	Ntrials  = (if(is.null(Ntrials)) 1 else max(1,Ntrials))
 	Nthreads = (if(is.null(Nthreads)) 1 else max(1,Nthreads))
+	original_fixed_lambda 	= fixed_lambda
+	original_fixed_mu 		= fixed_mu
+	original_fixed_psi	 	= fixed_psi
+	original_fixed_kappa 	= fixed_kappa
+	has_fixed_lambda 		= (!is.null(fixed_lambda)) && any(is.finite(fixed_lambda))
+	has_fixed_mu 			= (!is.null(fixed_mu)) && any(is.finite(fixed_mu))
+	has_fixed_psi 			= (!is.null(fixed_psi)) && any(is.finite(fixed_psi))
+	has_fixed_kappa 		= (!is.null(fixed_kappa)) && any(is.finite(fixed_kappa))
 
 	if(is.null(age_grid) || (length(age_grid)<=1)){
 		if((!is.null(guess_lambda)) && (length(guess_lambda)>1)) return(list(success = FALSE, error = sprintf("Invalid number of guessed lambdas; since no age grid was provided, you must provide a single (constant) guess_lambda or none at all")));
@@ -92,7 +101,7 @@ fit_hbds_model_on_grid = function(	tree,
 		NG = 1
 	}else{
 		NG = length(age_grid)
-		if((!is.null(oldest_age)) && (!is.null(age_grid)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g)",oldest_age)))
+		if((!is.null(oldest_age)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g)",oldest_age)))
 		if(any(diff(age_grid)<=0)) return(list(success=FALSE, error=sprintf("age_grid must list ages in strictly ascending order")))
 		if((!is.null(guess_lambda)) && (length(guess_lambda)!=1) && (length(guess_lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed lambdas (%d); since an age grid of size %d was provided, you must either provide one or %d lambdas",length(guess_lambda),NG)));
 		if((!is.null(guess_mu)) && (length(guess_mu)!=1) && (length(guess_mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed mus (%d); since an age grid of size %d was provided, you must either provide one or %d mus",length(guess_mu),NG)));
@@ -104,6 +113,13 @@ fit_hbds_model_on_grid = function(	tree,
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Extected one of 0,1,2,3.")));
 	if(NG==1) splines_degree = 1; # no point in using splines since lambda & mu & psi & kappa are assumed to be time-independent
 	if((NCSA>0) && is.null(CSA_age_epsilon)) CSA_age_epsilon = (if(NCSA>1) min(tree_span,min(diff(CSA_ages))) else tree_span)/1000
+	if(!is.null(fixed_age_grid)){
+		if(fixed_age_grid[1]>tail(fixed_age_grid,1)) return(list(success=FALSE, error="fixed_age_grid must be strictly increasing"))
+		if(tail(fixed_age_grid,1)<oldest_age) return(list(success=FALSE, error=sprintf("fixed_age_grid must cover oldest_age (%g)",oldest_age)))
+		if(fixed_age_grid[1]>0) return(list(success=FALSE, error=sprintf("fixed_age_grid must cover present-day (age 0)")))
+		if(verbose && (length(fixed_age_grid)<NG)) cat(sprintf("%sWARNING: fixed_age_grid should generally be finer than age_grid",verbose_prefix))
+		NFG = length(fixed_age_grid)
+	}
 	
 	# reformat shape of input params to an internally standardized format
 	if(length(min_lambda)==1) min_lambda 	= rep(min_lambda,times=NG);
@@ -148,25 +164,97 @@ fit_hbds_model_on_grid = function(	tree,
 	}else if(length(guess_CSA_kappas)==1){
 		guess_CSA_kappas = rep(guess_CSA_kappas,times=NCSA);
 	}
-	if(is.null(fixed_lambda)){
-		fixed_lambda = rep(NA,times=NG);
-	}else if(length(fixed_lambda)==1){
-		fixed_lambda = rep(fixed_lambda,times=NG);
+	if(!has_fixed_lambda){
+		fixed_lambda = rep(NA,times=NG)
+	}else{
+		if(is.null(fixed_age_grid)){
+			if(length(fixed_lambda)==1){
+				fixed_lambda = rep(fixed_lambda,times=NG)
+			}else if(length(fixed_lambda)!=NG){
+				return(list(success=FALSE, error=sprintf("fixed_lambda has invalid length (%d); expected either length 1 or %d",length(fixed_lambda),NG)))
+			}
+		}else{
+			if(length(fixed_lambda)==1){
+				full_fixed_lambda = rep(fixed_lambda,times=NFG)
+				fixed_lambda = rep(fixed_lambda,times=NG)
+			}else if(length(fixed_lambda)!=NFG){
+				return(list(success=FALSE, error=sprintf("fixed_lambda has invalid length (%d); expected either length 1 or %d",length(fixed_lambda),NFG)))
+			}else if(any(!is.finite(fixed_lambda))){
+				return(list(success=FALSE, error=sprintf("fixed_lambda must be defined and finite on the entire fixed_age_grid, since the latter was provided")))
+			}else{
+				full_fixed_lambda 	= fixed_lambda
+				fixed_lambda 		= approx(x=fixed_age_grid, y=fixed_lambda, xout=age_grid, rule=2)$y
+			}
+		}
 	}
-	if(is.null(fixed_mu)){
-		fixed_mu = rep(NA,times=NG);
-	}else if(length(fixed_mu)==1){
-		fixed_mu = rep(fixed_mu,times=NG);
+	if(!has_fixed_mu){
+		fixed_mu = rep(NA,times=NG)
+	}else{
+		if(is.null(fixed_age_grid)){
+			if(length(fixed_mu)==1){
+				fixed_mu = rep(fixed_mu,times=NG)
+			}else if(length(fixed_mu)!=NG){
+				return(list(success=FALSE, error=sprintf("fixed_mu has invalid length (%d); expected either length 1 or %d",length(fixed_mu),NG)))
+			}
+		}else{
+			if(length(fixed_mu)==1){
+				full_fixed_mu = rep(fixed_mu,times=NFG)
+				fixed_mu = rep(fixed_mu,times=NG)
+			}else if(length(fixed_mu)!=NFG){
+				return(list(success=FALSE, error=sprintf("fixed_mu has invalid length (%d); expected either length 1 or %d",length(fixed_mu),NFG)))
+			}else if(any(!is.finite(fixed_mu))){
+				return(list(success=FALSE, error=sprintf("fixed_mu must be defined and finite on the entire fixed_age_grid, since the latter was provided")))
+			}else{
+				full_fixed_mu 	= fixed_mu
+				fixed_mu 		= approx(x=fixed_age_grid, y=fixed_mu, xout=age_grid, rule=2)$y
+			}
+		}
 	}
-	if(is.null(fixed_psi)){
-		fixed_psi = rep(NA,times=NG);
-	}else if(length(fixed_psi)==1){
-		fixed_psi = rep(fixed_psi,times=NG);
+	if(!has_fixed_psi){
+		fixed_psi = rep(NA,times=NG)
+	}else{
+		if(is.null(fixed_age_grid)){
+			if(length(fixed_psi)==1){
+				fixed_psi = rep(fixed_psi,times=NG)
+			}else if(length(fixed_psi)!=NG){
+				return(list(success=FALSE, error=sprintf("fixed_psi has invalid length (%d); expected either length 1 or %d",length(fixed_psi),NG)))
+			}
+		}else{
+			if(length(fixed_psi)==1){
+				full_fixed_psi = rep(fixed_psi,times=NFG)
+				fixed_psi = rep(fixed_psi,times=NG)
+			}else if(length(fixed_psi)!=NFG){
+				return(list(success=FALSE, error=sprintf("fixed_psi has invalid length (%d); expected either length 1 or %d",length(fixed_psi),NFG)))
+			}else if(any(!is.finite(fixed_psi))){
+				return(list(success=FALSE, error=sprintf("fixed_psi must be defined and finite on the entire fixed_age_grid, since the latter was provided")))
+			}else{
+				full_fixed_psi 	= fixed_psi
+				fixed_psi 		= approx(x=fixed_age_grid, y=fixed_psi, xout=age_grid, rule=2)$y
+			}
+		}
 	}
-	if(is.null(fixed_kappa)){
-		fixed_kappa = rep(NA,times=NG);
-	}else if(length(fixed_kappa)==1){
-		fixed_kappa = rep(fixed_kappa,times=NG);
+	if(!has_fixed_kappa){
+		fixed_kappa = rep(NA,times=NG)
+	}else{
+		if(is.null(fixed_age_grid)){
+			if(length(fixed_kappa)==1){
+				fixed_kappa = rep(fixed_kappa,times=NG)
+			}else if(length(fixed_kappa)!=NG){
+				return(list(success=FALSE, error=sprintf("fixed_kappa has invalid length (%d); expected either length 1 or %d",length(fixed_kappa),NG)))
+			}
+		}else{
+			if(length(fixed_kappa)==1){
+				full_fixed_kappa = rep(fixed_kappa,times=NFG)
+				fixed_kappa = rep(fixed_kappa,times=NG)
+			}else if(length(fixed_kappa)!=NFG){
+				return(list(success=FALSE, error=sprintf("fixed_kappa has invalid length (%d); expected either length 1 or %d",length(fixed_kappa),NFG)))
+			}else if(any(!is.finite(fixed_kappa))){
+				return(list(success=FALSE, error=sprintf("fixed_kappa must be defined and finite on the entire fixed_age_grid, since the latter was provided")))
+			}else{
+				full_fixed_kappa 	= fixed_kappa
+				fixed_kappa 		= approx(x=fixed_age_grid, y=fixed_kappa, xout=age_grid, rule=2)$y
+			}
+		}
 	}
 	if(is.null(fixed_CSA_probs)){
 		fixed_CSA_probs = rep(NA,times=NCSA);
@@ -335,6 +423,14 @@ fit_hbds_model_on_grid = function(	tree,
 			input_mus 		= param_values$mu
 			input_psis 		= param_values$psi
 			input_kappas	= param_values$kappa
+		}
+		if(!is.null(fixed_age_grid)){
+			# use parameter profiles defined on fixed_age_grid (if available) or interpolate onto fixed_age_grid
+			input_lambdas 	= (if(has_fixed_lambda) full_fixed_lambda else evaluate_spline(Xgrid=input_age_grid, Ygrid=input_lambdas, splines_degree=splines_degree, Xtarget=fixed_age_grid, extrapolate="const"))
+			input_mus 		= (if(has_fixed_mu) full_fixed_mu else evaluate_spline(Xgrid=input_age_grid, Ygrid=input_mus, splines_degree=splines_degree, Xtarget=fixed_age_grid, extrapolate="const"))
+			input_psis 		= (if(has_fixed_psi) full_fixed_psi else evaluate_spline(Xgrid=input_age_grid, Ygrid=input_psis, splines_degree=splines_degree, Xtarget=fixed_age_grid, extrapolate="const"))
+			input_kappas 	= (if(has_fixed_kappa) full_fixed_kappa else evaluate_spline(Xgrid=input_age_grid, Ygrid=input_kappas, splines_degree=splines_degree, Xtarget=fixed_age_grid, extrapolate="const"))
+			input_age_grid	= fixed_age_grid
 		}
 		results = get_HBDS_model_loglikelihood_CPP(	branching_ages					= tree_events$branching_ages,
 													Ptip_ages						= tree_events$Ptip_ages,
@@ -527,12 +623,13 @@ fit_hbds_model_on_grid = function(	tree,
 											guess_kappa				= guess_kappa,
 											guess_CSA_probs			= guess_CSA_probs,
 											guess_CSA_kappas		= guess_CSA_kappas,
-											fixed_lambda			= fixed_lambda,
-											fixed_mu				= fixed_mu,
-											fixed_psi				= fixed_psi,
-											fixed_kappa				= fixed_kappa,
+											fixed_lambda			= original_fixed_lambda,
+											fixed_mu				= original_fixed_mu,
+											fixed_psi				= original_fixed_psi,
+											fixed_kappa				= original_fixed_kappa,
 											fixed_CSA_probs			= fixed_CSA_probs,
 											fixed_CSA_kappas		= fixed_CSA_kappas,
+											fixed_age_grid			= fixed_age_grid,
 											const_lambda			= const_lambda,
 											const_mu				= const_mu,
 											const_psi				= const_psi,

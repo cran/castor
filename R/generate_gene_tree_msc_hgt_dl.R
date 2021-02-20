@@ -1,7 +1,7 @@
 # generate a random gene tree, based on an extension of the multi-species coalescent (MSC) model to account for horizontal gene transfer and gene duplicatio/loss
 # Main input:
 #   Rooted time-calibrated species tree (not necessarily ultrametric, i.e. extinct lineages are allowed)
-#   Effective population sizes and generation times for each clade (incoming edge) in the species tree
+#   Effective population sizes and generation times for each clade (incoming edge) in the species tree. Note that only the product (generation_time*effective_population_size = expected coalescence time for 2 habloid lineages) matters
 #   HGT, D/L rates for each clade (incoming edge) in the species tree
 #   Number of alleles (individuals) sampled at each tip
 generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree, with NStips tips and NSedges edges. May (and typically should) include extinct lineages.

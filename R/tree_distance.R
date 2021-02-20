@@ -56,7 +56,7 @@ tree_distance = function(	treeA,
 		}
 	}else if(metric=="WassersteinNodeAges"){
 		# First Wasserstein ("1-Wasserstein") distance between the empirical distributions of node ages
-		# This distance depends on branch lengths, but not on tip labeling nor topology (only on the ages of the nodes)
+		# This distance depends on branch lengths and the root placement, but not on tip labeling nor topology (only on the ages of the nodes)
 		# Hence, this is strictly speaking only a pseudometric, even in the space of unlabeled trees. It is a metric in the space of tree equivalence classes, where two trees are equivalent iff they have the same node ages.
 		root_ageA 	= get_tree_span(treeA)$max_distance
 		root_ageB 	= get_tree_span(treeB)$max_distance

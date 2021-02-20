@@ -1,7 +1,7 @@
 \name{fit_sbm_const}
 \alias{fit_sbm_const}
 \title{
-Fit a Spherical Brownian Motion model on a tree.
+Fit a phylogeographic Spherical Brownian Motion model.
 }
 \description{
 Given one or more rooted phylogenetic trees and geographic coordinates (latitudes & longitudes) for the tips of each tree, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012). Estimation is done via maximum-likelihood and using independent contrasts between sister lineages.
@@ -18,6 +18,7 @@ fit_sbm_const(trees,
         only_distant_tip_pairs  = FALSE,
         min_MRCA_time           = 0,
         max_MRCA_age            = Inf,
+        max_phylodistance       = Inf,
         no_state_transitions    = FALSE,
         only_state              = NULL,
         min_diffusivity         = NULL,
@@ -62,6 +63,9 @@ Numeric, specifying the minimum allowed time (distance from root) of the most re
 \item{max_MRCA_age}{
 Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
 }
+\item{max_phylodistance}{
+Numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting. Set \code{max_phylodistance=Inf} to disable this filter.
+}
 \item{no_state_transitions}{
 Logical, specifying whether to omit independent contrasts between tips whose shortest connecting paths include state transitions. If \code{TRUE}, only tips within the same state and with no transitions between them (as specified in \code{clade_states}) are compared. If \code{TRUE}, then \code{clade_states} must be provided.
 }
@@ -90,7 +94,7 @@ Optional numeric vector, listing diffusivities of particular interest and for wh
 
 
 \details{
-For short expected transition distances this function uses the approximation formula by Ghosh et al. (2012). For longer expected transition distances the function uses a truncated approximation of the series representation of SBM transition densities (Perrin 1928).
+For short expected transition distances this function uses the approximation formula by Ghosh et al. (2012). For longer expected transition distances the function uses a truncated approximation of the series representation of SBM transition densities (Perrin 1928). It is assumed that tips are sampled randomly without any biases for certain geographic regions. If you suspect strong geographic sampling biases, consider using the function \code{\link{fit_sbm_geobiased_const}}.
 
 This function can use multiple trees to fit the diffusivity under the assumption that each tree is an independent realization of the same SBM process, i.e. all lineages in all trees dispersed with the same diffusivity.
 
@@ -159,10 +163,11 @@ A. Ghosh, J. Samuel, S. Sinha (2012). A Gaussian for diffusion on the sphere. Eu
 
 A. Lindholm, D. Zachariah, P. Stoica, T. B. Schoen (2019). Data consistency approach to model validation. IEEE Access. 7:59788-59796.
 
-S. Louca (in review as of 2020). Phylogeographic estimation and simulation of global diffusive dispersal. Systematic Biology.
+S. Louca (2021). Phylogeographic estimation and simulation of global diffusive dispersal. Systematic Biology. 70:340-359.
 }
 
 \seealso{
+\code{\link{fit_sbm_geobiased_const}},
 \code{\link{simulate_sbm}},
 \code{\link{fit_sbm_parametric}},
 \code{\link{fit_sbm_linear}},

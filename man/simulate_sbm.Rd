@@ -78,6 +78,8 @@ F. Perrin (1928). Etude mathematique du mouvement Brownien de rotation. 45:1-51.
 D. R. Brillinger (2012). A particle migrating randomly on a sphere. in Selected Works of David Brillinger. Springer.
 
 A. Ghosh, J. Samuel, S. Sinha (2012). A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003.
+
+S. Louca (2021). Phylogeographic estimation and simulation of global diffusive dispersal. Systematic Biology. 70:340-359.
 }
 
 \seealso{

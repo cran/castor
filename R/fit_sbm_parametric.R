@@ -14,6 +14,7 @@ fit_sbm_parametric = function(	tree,
 								only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 								min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
 								max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+								max_phylodistance		= Inf,		# numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting
 								no_state_transitions	= FALSE,	# if TRUE, only tip pairs without state transitions along their shortest paths are considered. In particular, only tips in the same state are considered. Requires that clade_states[] is provided.
 								only_state				= NULL,		# optional integer, specifying the state in which tip pairs (and their connecting ancestors) must be in order to be considered. Requires that clade_states[] is provided.
 								param_min				= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
@@ -89,6 +90,7 @@ fit_sbm_parametric = function(	tree,
 										only_distant_tip_pairs	= only_distant_tip_pairs,
 										min_MRCA_time			= min_MRCA_time,
 										max_MRCA_age			= max_MRCA_age,
+										max_phylodistance		= max_phylodistance,
 										no_state_transitions	= no_state_transitions,
 										only_state				= only_state)
 	if(!ICs$success) return(list(success=FALSE, error=ICs$error))
@@ -245,6 +247,7 @@ fit_sbm_parametric = function(	tree,
 										only_distant_tip_pairs	= only_distant_tip_pairs,
 										min_MRCA_time			= min_MRCA_time,
 										max_MRCA_age			= max_MRCA_age,
+										max_phylodistance		= max_phylodistance,
 										no_state_transitions	= no_state_transitions,
 										param_guess				= param_guess,
 										param_min				= param_min,

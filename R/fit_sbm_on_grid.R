@@ -10,6 +10,7 @@ fit_sbm_on_grid = function(	tree,
 							only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 							min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
 							max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+							max_phylodistance		= Inf,		# numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting
 							no_state_transitions	= FALSE,	# if TRUE, only tip pairs without state transitions along their shortest paths are considered. In particular, only tips in the same state are considered. Requires that clade_states[] is provided.
 							only_state				= NULL,		# optional integer, specifying the state in which tip pairs (and their connecting ancestors) must be in order to be considered. Requires that clade_states[] is provided.
 							time_grid				= 0,		# numeric vector of length NG, specifying the time points on which to fit the diffusivity. Between time points the diffusivity is assumed to vary polynomially (e.g., linearly or quadratically, see option splines_degree). If NULL or a single number, then the diffusivity is assumed to be time-independent. If the grid does not cover the entire interval [0,root_age], constant extrapolation is used beyond the time_grid's limits.
@@ -82,6 +83,7 @@ fit_sbm_on_grid = function(	tree,
 									only_basal_tip_pairs= only_basal_tip_pairs,
 									min_MRCA_time		= min_MRCA_time,
 									max_MRCA_age		= max_MRCA_age,
+									max_phylodistance	= max_phylodistance,
 									no_state_transitions= no_state_transitions,
 									only_state			= only_state,
 									min_diffusivity		= (if(is.null(min_diffusivity) || all(!is.finite(min_diffusivity))) NULL else min(min_diffusivity,na.rm=TRUE)),
@@ -140,6 +142,7 @@ fit_sbm_on_grid = function(	tree,
 								only_distant_tip_pairs	= only_distant_tip_pairs,
 								min_MRCA_time			= min_MRCA_time,
 								max_MRCA_age			= max_MRCA_age,
+								max_phylodistance		= max_phylodistance,
 								no_state_transitions	= no_state_transitions,
 								only_state				= only_state,
 								param_min				= min_diffusivity,

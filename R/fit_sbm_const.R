@@ -17,6 +17,7 @@ fit_sbm_const = function(	trees, 								# either a single tree in phylo format,
 							only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 							min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
 							max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+							max_phylodistance		= Inf,		# numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting
 							no_state_transitions	= FALSE,	# if TRUE, only tip pairs without state transitions along their shortest paths are considered. In particular, only tips in the same state are considered. Requires that clade_states[] is provided.
 							only_state				= NULL,		# optional integer, specifying the state in which tip pairs (and their connecting ancestors) must be in order to be considered. Requires that clade_states[] is provided.
 							min_diffusivity			= NULL,		# numeric, specifying the lower bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
@@ -139,6 +140,7 @@ fit_sbm_const = function(	trees, 								# either a single tree in phylo format,
 		# also omit tips whose shortest path includes state transitions, if requested
 		keep_pair = (is.finite(phylodistances_this_tree) & (phylodistances_this_tree>0))
 		if(only_distant_tip_pairs) keep_pair = keep_pair & (geodistances_this_tree>0)
+		if(max_phylodistance<Inf) keep_pair  = keep_pair & (phylodistances_this_tree<=max_phylodistance)
 		if(no_state_transitions || (!is.null(only_state))){
 			Ntransitions = count_transitions_between_clades(tree=tree, A=tip_pairs[,1], B=tip_pairs[,2], states=clade_states_this_tree, check_input=TRUE)
 			if(no_state_transitions) keep_pair = keep_pair & (Ntransitions==0)

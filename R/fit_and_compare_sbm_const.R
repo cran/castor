@@ -15,6 +15,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 										only_distant_tip_pairs	= FALSE,	# logical, whether to only consider tip pairs located at distinct geographic locations
 										min_MRCA_time			= 0,		# numeric, specifying the minimum allowed height (distance from root) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at least this distance from the root. Set min_MRCA_time=0 to disable this filter.
 										max_MRCA_age			= Inf,		# numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set max_MRCA_age=Inf to disable this filter.
+										max_phylodistance		= Inf,		# numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting
 										min_diffusivity			= NULL,		# numeric, specifying the lower bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
 										max_diffusivity			= NULL,		# numeric, specifying the upper bound of allowed diffusivities. If omitted, it will be automatically chosen. Only relevant if planar_approximation==FALSE.
 										Nbootstraps				= 0,		# integer, number of bootstraps to perform for estimating confidence intervals. Set to <=0 for no bootstrapping.
@@ -33,6 +34,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 							only_distant_tip_pairs	= only_distant_tip_pairs,
 							min_MRCA_time			= min_MRCA_time,
 							max_MRCA_age			= max_MRCA_age,
+							max_phylodistance		= max_phylodistance,
 							min_diffusivity			= min_diffusivity,
 							max_diffusivity			= max_diffusivity,
 							Nbootstraps				= Nbootstraps,
@@ -50,6 +52,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 							only_distant_tip_pairs	= only_distant_tip_pairs,
 							min_MRCA_time			= min_MRCA_time,
 							max_MRCA_age			= max_MRCA_age,
+							max_phylodistance		= max_phylodistance,
 							min_diffusivity			= min_diffusivity,
 							max_diffusivity			= max_diffusivity,
 							Nbootstraps				= Nbootstraps,
@@ -80,6 +83,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 									only_distant_tip_pairs	= only_distant_tip_pairs,
 									min_MRCA_time			= min_MRCA_time,
 									max_MRCA_age			= max_MRCA_age,
+									max_phylodistance		= max_phylodistance,
 									min_diffusivity			= min_diffusivity,
 									max_diffusivity			= max_diffusivity,
 									Nbootstraps				= 0,
@@ -127,6 +131,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 										only_distant_tip_pairs	= only_distant_tip_pairs,
 										min_MRCA_time			= min_MRCA_time,
 										max_MRCA_age			= max_MRCA_age,
+										max_phylodistance		= max_phylodistance,
 										min_diffusivity			= min_diffusivity,
 										max_diffusivity			= max_diffusivity,
 										Nbootstraps				= 0,
@@ -145,6 +150,7 @@ fit_and_compare_sbm_const = function(	trees1, 				# either a single tree in phyl
 										only_distant_tip_pairs	= only_distant_tip_pairs,
 										min_MRCA_time			= min_MRCA_time,
 										max_MRCA_age			= max_MRCA_age,
+										max_phylodistance		= max_phylodistance,
 										min_diffusivity			= min_diffusivity,
 										max_diffusivity			= max_diffusivity,
 										Nbootstraps				= 0,

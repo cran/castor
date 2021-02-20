@@ -1,7 +1,7 @@
 \name{fit_sbm_parametric}
 \alias{fit_sbm_parametric}
 \title{
-Fit a time-dependent Spherical Brownian Motion model on a tree.
+Fit a time-dependent phylogeographic Spherical Brownian Motion model.
 }
 \description{
 Given a rooted phylogenetic tree and geographic coordinates (latitudes & longitudes) for its tips, this function estimates the diffusivity of a Spherical Brownian Motion (SBM) model with time-dependent diffusivity for the evolution of geographic location along lineages (Perrin 1928; Brillinger 2012). Estimation is done via maximum-likelihood and using independent contrasts between sister lineages. This function is designed to estimate the diffusivity over time, by fitting a finite number of parameters defining the diffusivity as a function of time. The user thus provides the general functional form of the diffusivity that depends on time and NP parameters, and \code{fit_sbm_parametric} estimates each of the free parameters.
@@ -21,6 +21,7 @@ fit_sbm_parametric(tree,
               only_distant_tip_pairs= FALSE,
               min_MRCA_time         = 0,
               max_MRCA_age          = Inf,
+              max_phylodistance     = Inf,
               no_state_transitions  = FALSE,
               only_state            = NULL,
               param_min             = -Inf,
@@ -81,6 +82,9 @@ Numeric, specifying the minimum allowed time (distance from root) of the most re
 }
 \item{max_MRCA_age}{
 Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
+}
+\item{max_phylodistance}{
+Numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting. Set \code{max_phylodistance=Inf} to disable this filter.
 }
 \item{no_state_transitions}{
 Logical, specifying whether to omit independent contrasts between tips whose shortest connecting paths include state transitions. If \code{TRUE}, only tips within the same state and with no transitions between them (as specified in \code{clade_states}) are compared.
@@ -257,6 +261,8 @@ F. Perrin (1928). Etude mathematique du mouvement Brownien de rotation. 45:1-51.
 D. R. Brillinger (2012). A particle migrating randomly on a sphere. in Selected Works of David Brillinger. Springer.
 
 A. Ghosh, J. Samuel, S. Sinha (2012). A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003.
+
+S. Louca (2021). Phylogeographic estimation and simulation of global diffusive dispersal. Systematic Biology. 70:340-359.
 }
 
 \seealso{

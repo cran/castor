@@ -36,6 +36,7 @@ fit_hbds_model_on_grid( tree,
                         fixed_kappa             = NULL,
                         fixed_CSA_probs         = NULL,
                         fixed_CSA_kappas        = NULL,
+                        fixed_age_grid          = NULL,
                         const_lambda            = FALSE,
                         const_mu                = FALSE,
                         const_psi               = FALSE,
@@ -130,22 +131,27 @@ Initial guess for the \eqn{\rho_1}, \eqn{\rho_2}, ... at each concentrated sampl
 Initial guess for the \eqn{\kappa_1}, \eqn{\kappa_2}, ... at each concentrated sampling attempt. Either \code{NULL} (an initial guess will be computed automatically), or a single numeric (guessing the same value at every CSA) or a numeric vector of size NCSA specifying a separate guess at each CSA. To omit an initial guess for some but not all CSAs, set their guess values to \code{NA}. Guess values are ignored for non-fitted (i.e., fixed) parameters.
 }
 \item{fixed_lambda}{
-Optional fixed (i.e. non-fitted) \eqn{\lambda} values on one or more age-grid points. Either \code{NULL} (\eqn{\lambda} is not fixed anywhere), or a single numeric (\eqn{\lambda} fixed to the same value at all grid points) or a numeric vector of size Ngrid (\eqn{\lambda} fixed on one or more age-grid points, use \code{NA} for non-fixed values).
+Optional fixed (i.e. non-fitted) \eqn{\lambda} values on one or more age-grid points. Either \code{NULL} (\eqn{\lambda} is not fixed anywhere), or a single numeric (\eqn{\lambda} fixed to the same value at all grid points) or a numeric vector of size Ngrid (if \code{fixed_age_grid=NULL}; \eqn{\lambda} fixed on one or more age-grid points, use \code{NA} for non-fixed values) or a numeric vector of the same size as \code{fixed_age_grid} (if \code{fixed_age_grid!=NULL}, in which case all entries in \code{fixed_lambda} must be finite numbers).
 }
 \item{fixed_mu}{
-Optional fixed (i.e. non-fitted) \eqn{\mu} values on one or more age-grid points. Either \code{NULL} (\eqn{\mu} is not fixed anywhere), or a single numeric (\eqn{\mu} fixed to the same value at all grid points) or a numeric vector of size Ngrid (\eqn{\mu} fixed on one or more age-grid points, use \code{NA} for non-fixed values).
+Optional fixed (i.e. non-fitted) \eqn{\mu} values on one or more age-grid points. Either \code{NULL} (\eqn{\mu} is not fixed anywhere), or a single numeric (\eqn{\mu} fixed to the same value at all grid points) or a numeric vector of size Ngrid (if \code{fixed_age_grid=NULL}; \eqn{\mu} fixed on one or more age-grid points, use \code{NA} for non-fixed values) or a numeric vector of the same size as \code{fixed_age_grid} (if \code{fixed_age_grid!=NULL}, in which case all entries in \code{fixed_mu} must be finite numbers).
 }
 \item{fixed_psi}{
-Optional fixed (i.e. non-fitted) \eqn{\psi} values on one or more age-grid points. Either \code{NULL} (\eqn{\psi} is not fixed anywhere), or a single numeric (\eqn{\psi} fixed to the same value at all grid points) or a numeric vector of size Ngrid (\eqn{\psi} fixed on one or more age-grid points, use \code{NA} for non-fixed values).
+Optional fixed (i.e. non-fitted) \eqn{\psi} values on one or more age-grid points. Either \code{NULL} (\eqn{\psi} is not fixed anywhere), or a single numeric (\eqn{\psi} fixed to the same value at all grid points) or a numeric vector of size Ngrid (if \code{fixed_age_grid=NULL}; \eqn{\psi} fixed on one or more age-grid points, use \code{NA} for non-fixed values) or a numeric vector of the same size as \code{fixed_age_grid} (if \code{fixed_age_grid!=NULL}, in which case all entries in \code{fixed_psi} must be finite numbers).
 }
 \item{fixed_kappa}{
-Optional fixed (i.e. non-fitted) \eqn{\kappa} values on one or more age-grid points. Either \code{NULL} (\eqn{\kappa} is not fixed anywhere), or a single numeric (\eqn{\kappa} fixed to the same value at all grid points) or a numeric vector of size Ngrid (\eqn{\kappa} fixed on one or more age-grid points, use \code{NA} for non-fixed values).
+Optional fixed (i.e. non-fitted) \eqn{\kappa} values on one or more age-grid points. Either \code{NULL} (\eqn{\kappa} is not fixed anywhere), or a single numeric (\eqn{\kappa} fixed to the same value at all grid points) or a numeric vector of size Ngrid (if \code{fixed_age_grid=NULL}; \eqn{\kappa} fixed on one or more age-grid points, use \code{NA} for non-fixed values) or a numeric vector of the same size as \code{fixed_age_grid} (if \code{fixed_age_grid!=NULL}, in which case all entries in \code{fixed_kappa} must be finite numbers).
 }
 \item{fixed_CSA_probs}{
 Optional fixed (i.e. non-fitted) \eqn{\rho_1}, \eqn{\rho_2}, ... values on one or more age-grid points. Either \code{NULL} (none of the \eqn{\rho_1}, \eqn{\rho_2},... are fixed), or a single numeric (\eqn{\rho_1}, \eqn{\rho_2},... are fixed to the same value at all CSAs) or a numeric vector of size NCSA (one or more of the \eqn{\rho_1}, \eqn{\rho_2}, ... are fixed, use \code{NA} for non-fixed values).
 }
 \item{fixed_CSA_kappas}{
 Optional fixed (i.e. non-fitted) \eqn{\kappa_1}, \eqn{\kappa_2}, ... values on one or more age-grid points. Either \code{NULL} (none of the \eqn{\kappa_1}, \eqn{\kappa_2},... are fixed), or a single numeric (\eqn{\kappa_1}, \eqn{\kappa_2},... are fixed to the same value at all CSAs) or a numeric vector of size NCSA (one or more of the \eqn{\kappa_1}, \eqn{\kappa_2}, ... are fixed, use \code{NA} for non-fixed values).
+}
+\item{fixed_age_grid}{
+Optional numeric vector, specifying an age grid on which \code{fixed_lambda}, \code{fixed_mu}, \code{fixed_psi} and \code{fixed_kappa} (whichever is provided) are defined instead of on the \code{age_grid}. If \code{fixed_age_grid} is provided, then each of \code{fixed_lambda}, \code{fixed_mu}, \code{fixed_psi} and \code{fixed_kappa} must be defined (i.e. have a finite non-negative value) on every point in \code{fixed_age_grid}. Entries in \code{fixed_age_grid} must be in ascending order and must cover at least the ages 0 to \code{oldest_age}.
+
+This option may be useful if you want to fit some parameters on a coarse grid, but want to specify (fix) some other parameters on a much finer grid. Also note that if \code{fixed_age_grid} is used, all parameters \code{lambda}, \code{mu}, \code{psi} and \code{kappa} are internally re-interpolated onto \code{fixed_age_grid} when evaluating the likelihood; hence, in general \code{fixed_age_grid} should be much finer than \code{age_grid}. In most situations you would probably want to keep the default \code{fixed_age_grid=NULL}.
 }
 \item{const_lambda}{
 Logical, specifying whether \eqn{\lambda} should be assumed constant across the grid, i.e. time-independent. Setting \code{const_lambda=TRUE} reduces the number of free (i.e., independently fitted) parameters. If \eqn{\lambda} is fixed on some grid points (i.e. via \code{fixed_lambda}), then only the non-fixed lambdas are assumed to be identical to one another.

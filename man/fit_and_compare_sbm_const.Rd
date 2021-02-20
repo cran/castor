@@ -19,6 +19,7 @@ fit_and_compare_sbm_const(  trees1,
                             only_distant_tip_pairs  = FALSE,
                             min_MRCA_time           = 0,
                             max_MRCA_age            = Inf,
+                            max_phylodistance       = Inf,
                             min_diffusivity         = NULL,
                             max_diffusivity         = NULL,
                             Nbootstraps             = 0,
@@ -64,6 +65,9 @@ Numeric, specifying the minimum allowed time (distance from root) of the most re
 }
 \item{max_MRCA_age}{
 Numeric, specifying the maximum allowed age (distance from youngest tip) of the MRCA of sister tips considered in the fitting. In other words, an independent contrast is only considered if the two sister tips' MRCA has at most this age (time to present). Set \code{max_MRCA_age=Inf} to disable this filter.
+}
+\item{max_phylodistance}{
+Numeric, maximum allowed geodistance for an independent contrast to be included in the SBM fitting. Set \code{max_phylodistance=Inf} to disable this filter.
 }
 \item{min_diffusivity}{
 Non-negative numeric, specifying the minimum possible diffusivity. If NULL, this is automatically chosen.

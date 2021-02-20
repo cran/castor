@@ -16972,7 +16972,7 @@ Rcpp::List get_Robinson_Foulds_distance_CPP(const long				Ntips,
 	const long rootA = get_root_from_clade2parent(Ntips, clade2parentA);
 	const long rootB = get_root_from_clade2parent(Ntips, clade2parentB);
 
-	// get tree traversal route (root --> tips) in depth-first-search mode (DFS is important, to ensure a certain traversal order of tips and nodes)
+	// get tree traversal route (root --> tips) in depth-first-search mode, for each tree (DFS is important, to ensure a certain traversal order of tips and nodes)
 	std::vector<long> traversal_queueA, traversal_node2first_edgeA, traversal_node2last_edgeA, traversal_edgesA;
 	get_tree_traversal_depth_first_search(	Ntips,
 											NnodesA,
@@ -17678,6 +17678,7 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 	// estimate number of tips, nodes & edges for pre-allocation purposes
 	const long estimated_Nclades  = count_occurrences(input, ',', interpret_quotes) + count_occurrences(input, ')', interpret_quotes);
 	const long estimated_Nedges = estimated_Nclades - 1;
+	if(estimated_Nclades==0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Input string does not appear to be a valid Newick tree");
 	
 	// pre-allocate space
 	std::vector<std::string> clade_names, edge_names;
@@ -17741,9 +17742,7 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 	}
 	
 	// nothing left to parse, so check if we came back to level 0
-	if(!clade_stack.empty()){
-		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Unbalanced parentheses, missing "+makeString(clade_stack.size())+" closing parentheses '(' on the left end");
-	}
+	if(!clade_stack.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Unbalanced parentheses, missing "+makeString(clade_stack.size())+" closing parentheses '(' on the left end");
 		
 	// re-index clades (tips & nodes) consistent with the phylo format
 	const long Nclades = clade_names.size();
@@ -29324,7 +29323,7 @@ void simulate_SBM_on_tree(	const long 					Ntips,			// (INPUT)
 
 
 
-// Dimulate a spherical Brownian motion process with constant diffusivity along a phylogenetic tree
+// Simulate a spherical Brownian motion process with constant diffusivity along a phylogenetic tree
 // This is basically a wrapper for the function simulate_SBM_on_tree()
 // [[Rcpp::export]]
 Rcpp::List simulate_SBM_on_tree_CPP(	const long 					Ntips,			// (INPUT)
@@ -29351,6 +29350,31 @@ Rcpp::List simulate_SBM_on_tree_CPP(	const long 					Ntips,			// (INPUT)
 	return Rcpp::List::create(	Rcpp::Named("clade_theta")	= clade_theta,
 								Rcpp::Named("clade_phi") 	= clade_phi);
 }
+
+
+
+
+// Simulate a spherical Brownian motion process with constant diffusivity, as a single trajectory over time
+// [[Rcpp::export]]
+Rcpp::List simulate_SBM_trajectory_CPP(	const std::vector<double>	&times,			// (INPUT) 1D array listing times at which to evaluate the trajectory, in ascending order
+										const double				radius,			// (INPUT) radius of the sphere
+										const double				diffusivity,	// (INPUT) diffusivity, in distance units^2 per time
+										const double				start_theta,	// (INPUT) initial latitude in radians, from -pi/2 to pi/2
+										const double				start_phi){		// (INPUT) initial longitude in radians, from -pi to pi
+	const long Ntimes = times.size();
+	dvector thetas(Ntimes), phis(Ntimes), omegas(Ntimes);
+	thetas[0] 	= start_theta;
+	phis[0] 	= start_phi;
+	omegas[0] 	= NAN_D;
+	double tD;
+	for(long t=1; t<times.size(); ++t){
+		tD = (times[t]-times[t-1]) * diffusivity/SQ(radius);
+		draw_SBM_transition(tD,	thetas[t-1], phis[t-1], thetas[t], phis[t], omegas[t]);
+	}
+	return Rcpp::List::create(	Rcpp::Named("thetas")	= thetas,
+								Rcpp::Named("phis") 	= phis);
+}
+
 
 
 // Dimulate a spherical Brownian motion process with time-dependent diffusivity along a phylogenetic tree
