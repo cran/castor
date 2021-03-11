@@ -14,6 +14,7 @@ model_adequacy_hbds(tree,
                     Nbootstraps         = 1000,
                     max_sim_attempts    = 1000,
                     Nthreads            = 1,
+                    max_extant_tips     = NULL,
                     max_model_runtime   = NULL)
 }
 %- maybe also 'usage' for other objects documented here.
@@ -50,6 +51,9 @@ Integer, maximum number of simulation attempts per bootstrap, before giving up. 
 }
 \item{Nthreads}{
 Integer, number of parallel threads to use for bootstrapping. Note that on Windows machines this option is ignored.
+}
+\item{max_extant_tips}{
+Integer, optional maximum number of extant tips per simulation. A simulation is aborted (and that bootstrap iteration skipped) if the number of extant tips exceeds this threshold. Use this to avoid occasional explosions of runtimes, for example due to very large generated trees.
 }
 \item{max_model_runtime}{
 Numeric, optional maximum computation time (in seconds) to allow for each HBDS model simulation (per bootstrap). Use this to avoid occasional explosions of runtimes, for example due to very large generated trees. Aborted simulations will be omitted from the bootstrap statistics. If \code{NULL} or <=0, this option is ignored.

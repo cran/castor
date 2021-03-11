@@ -18,6 +18,7 @@ model_adequacy_hbds = function(	tree,
 								Nbootstraps 		= 1000,		# integer, number of bootstraps to perform e.g. for checking statistical significances
 								max_sim_attempts 	= 1000,		# integer, maximum number of simulation attempts per bootstrap, before giving up. Multiple attempts may be needed if the HBDS model has a high probability of leading to extinction early on
 								Nthreads			= 1,		# integer, number of parallel threads to use
+								max_extant_tips		= NULL,		# optional maximum number of extant tips per simulation. A simulation is aborted (and that bootstrap iteration skipped) if the number of extant tips exceeds this threshold. Use this to avoid occasional explosions of runtimes (e.g., due to very large generated trees).
 								max_model_runtime	= NULL){	# optional maximum time (in seconds) to allocate for each HBDS model simulation (i.e. each bootstrap simulation). Use this to avoid occasional explosions of runtimes (e.g., due to very large generated trees).
 	Nbootstraps 	= max(2,Nbootstraps)
 	Nthreads 		= max(1,Nthreads)
@@ -96,6 +97,7 @@ model_adequacy_hbds = function(	tree,
 		while(TRUE){
 			sim_attempts = sim_attempts + 1
 			bootstrap = tryCatch({ generate_tree_hbds(	max_time				= model$stem_age - model$end_age,
+														max_extant_tips			= (if(is.null(max_extant_tips)) NULL else 1+max_extant_tips),
 														include_extant			= FALSE,
 														include_extinct			= FALSE,
 														time_grid				= model$times,
@@ -112,7 +114,7 @@ model_adequacy_hbds = function(	tree,
 														include_birth_times		= FALSE,
 														include_death_times		= FALSE)
 								}, error = function(e){ list(success=FALSE, error="An unknown error occurred") })
-			if(!bootstrap$success){
+			if((!bootstrap$success) || ((!is.null(max_extant_tips)) && (length(bootstrap$tree$tip.label)>max_extant_tips))){
 				# this simulation failed
 				if(sim_attempts>=max_sim_attempts){
 					return(list(success=FALSE, error=sprintf("Failed to simulate bootstrap tree%s after %d attempts: %s",(if(Nmodels>1) sprintf(" (model %d)",m) else ""),sim_attempts,bootstrap$error)))

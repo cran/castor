@@ -331,6 +331,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 				Nevaluations		= fits[[best]]$Nevaluations, # may be NA, depending on the optimization algorithm
 				converged			= fits[[best]]$converged,
 				guess_rate			= first_guess_rate,
+				AIC					= 2*Nrates - 2*loglikelihood,
 				standard_errors		= (if(Nbootstraps>0) standard_errors else NULL),
 				CI50lower			= (if(Nbootstraps>0) CI50lower else NULL),
 				CI50upper			= (if(Nbootstraps>0) CI50upper else NULL),

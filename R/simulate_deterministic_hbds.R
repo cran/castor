@@ -5,7 +5,7 @@
 #	Deterministic total population size
 #   Pulled diversification rate (PDR)
 #	Basic reproduction ratio (R0)
-simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector listing grid ages in ascending order, on which the various model parameters (lambda, mu, rho, kappa) are specified. The age grid must generally cover the maximum possible simulation period (i.e. from 0 to max(requested_ages)).
+simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector listing grid ages in ascending order, on which the various model parameters (lambda, mu, rho, kappa) are specified. The age grid must generally cover the maximum possible simulation period (i.e. from 0 to max(requested_ages)), unless splines_degree=0 (in which case everything is extrapolated as constant if needed)
 										lambda							= NULL,		# numeric vector of the same length as age_grid[], listing per-capita birth rates (speciation rates) at each age_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
 										mu								= NULL,		# numeric vector of the same length as age_grid[], listing per-capita death rates (extinction rates) at each age_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
 										psi								= NULL,		# numeric vector of the same length as age_grid[], listing per-capita sampling rates (Poissonian detection rates) at each age_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
@@ -60,8 +60,8 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 	}else{
 		NG = length(age_grid);
 		if(any(diff(age_grid)<0))return(list(success = FALSE, error = sprintf("Values in age_grid must be strictly increasing")))
-		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
-		if((age_grid[1]>0) || (age_grid[NG]<0)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including present-day (age 0)")))
+		if((splines_degree>0) && ((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age))) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g), when splines_degree>0",oldest_age)))
+		if((splines_degree>0) && ((age_grid[1]>0) || (age_grid[NG]<0))) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including present-day (age 0), when splines_degree>0")))
 		if(is.null(lambda)){
 			lambda = rep(0,times=NG)
 		}else if(length(lambda)==1){
@@ -113,6 +113,8 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 		# represent the time-curves on a time-grid as piecewise-linear functions, because simulate_deterministic_HBDS_CPP() cannot work directly with splines_degree 0
 		refinement_factor	= 100
 		refined_age_grid 	= c(unlist(lapply(seq_len(NG-1), FUN=function(g) seq(from=age_grid[g],to=age_grid[g+1]*(1-1/refinement_factor),length.out=refinement_factor))),age_grid[NG])
+		if(refined_age_grid[1]>0) refined_age_grid = c(0,refined_age_grid)
+		if(tail(refined_age_grid,1)<oldest_age) refined_age_grid = c(refined_age_grid,oldest_age)
 		lambda 				= evaluate_spline(Xgrid = age_grid, Ygrid = lambda, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)
 		mu 					= evaluate_spline(Xgrid = age_grid, Ygrid = mu, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)
 		psi 				= evaluate_spline(Xgrid = age_grid, Ygrid = psi, splines_degree = 0, Xtarget = refined_age_grid, extrapolate="const", derivative = 0)

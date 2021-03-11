@@ -12422,7 +12422,6 @@ void get_distances_from_root(	const long 				Ntips,
 			distances[tree_edge[2*edge+1]] = distances[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
 	}
-
 }
 
 
@@ -16042,6 +16041,303 @@ Rcpp::List multifurcations_to_bifurcations_CPP(	const long			Ntips,
 								Rcpp::Named("new_edge_length") 	= Rcpp::wrap(new_edge_length),
 								Rcpp::Named("old2new_edge") 	= Rcpp::wrap(old2new_edge));
 }
+
+
+// Merge some nodes into their parent nodes (or with their children nodes), thus generating multifurcations
+// The input tree must be rooted
+// Terminology:
+//   An "absorbing ancestor" is a node that is not upward-merged but has children nodes merged into it.
+// [[Rcpp::export]]
+Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
+												const long 					Nnodes,
+												const long					Nedges,
+												const std::vector<long>		&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+												const std::vector<double>	&edge_length,			// (INPUT) 1D array of size Nedges listing edge lengths, or an empty vector (all edges have length 1)
+												const std::vector<long>		&nodes_to_merge,		// (INPUT) 1D array, listing the indices of nodes to be merged upwards (i.e., absorbed into their parents)
+												const bool					merge_with_parents,		// (INPUT) whether the nodes listed in nodes_to_merge[] should be merged with their parents. If false, the specified nodes will be merged with their children (whenever these are not tips).
+												const bool					keep_ancestral_ages){	// (INPUT) whether the generated multifurcations should have the same age as the absorbing ancestor. If false, then the age of a multifurcation will be the average of the absorbing ancestor's age and the ages of its merged child nodes, constrained from below by the ages of non-merged descendants.
+	const bool has_edge_lengths	= (edge_length.size()>0);
+	const long Nclades = Ntips + Nnodes;
+	
+	// determine parent clade and incoming edge for each clade
+	lvector clade2parent(Nclades,-1), clade2inedge(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		clade2parent[tree_edge[edge*2+1]] = tree_edge[edge*2+0];
+		clade2inedge[tree_edge[edge*2+1]] = edge;
+	}
+		
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+
+	// get tree traversal (root-->tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	
+	// tag nodes to be merged upwards and determine how many nodes & edges will remain after merging
+	// every node merging reduces the number of nodes and the number of edges by 1
+	std::vector<bool> merge_node(Nnodes, false);
+	long Nnodes_new=Nnodes, Nedges_new=Nedges; // will be updated (decreased) below
+	if(merge_with_parents){
+		// nodes_to_merge[] should be merged upwards into their parents
+		for(long n=0, node; n<nodes_to_merge.size(); ++n){
+			node = nodes_to_merge[n];
+			if(clade2parent[node+Ntips]>=0){
+				merge_node[node] = true; // make sure you don't tag the root
+				--Nnodes_new;
+				--Nedges_new;
+			}
+		}
+	}else{
+		// the child-nodes of nodes_to_merge[] should be merged into their parents
+		for(long n=0, e, pnode, child; n<nodes_to_merge.size(); ++n){
+			pnode = nodes_to_merge[n];
+			for(e=traversal.node2first_edge[pnode]; e<=traversal.node2last_edge[pnode]; ++e){
+				child = tree_edge[2*traversal.edge_mapping[e]+1];
+				if(child>=Ntips){
+					// this child is a node and should be merged into pnode
+					merge_node[child-Ntips] = true;
+					--Nnodes_new;
+					--Nedges_new;
+				}
+			}
+		}
+	}
+	const long new_root = Ntips;
+	
+	// determine time shifts for generated multifurcations (relative to the absorbing ancestor), if needed
+	dvector absorbing_node_time_shifts(Nnodes,0); // only entries for absorbing ancestors (non-upward-merged nodes with upward-merged children) will be relevant
+	if(!keep_ancestral_ages){
+		// determine maximum allowed time shifts based on non-merged nodes (whose ages are assumed solid), traverse tips-->root
+		dvector clade_times;
+		get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, clade_times);
+		dvector max_allowed_ancestor_times(Nclades,INFTY_D);
+		for(long q=traversal.queue.size()-1, clade, parent; q>=1; --q){
+			clade = traversal.queue[q];
+			if((clade<Ntips) || (!merge_node[clade-Ntips])){
+				// this clade will not be merged upwards, so consider its time solid. Hence, no ancestor can have a later time than this clade
+				max_allowed_ancestor_times[clade] = clade_times[clade];
+			}
+			parent = clade2parent[clade];
+			if(parent>=0) max_allowed_ancestor_times[parent] = min(max_allowed_ancestor_times[parent], max_allowed_ancestor_times[clade]);
+		}
+		double sum_merged_child_edges, max_allowed_time;
+		for(long node=0, clade, Nmerged_children, child, e, edge; node<Nnodes; ++node){
+			if(merge_node[node]) continue; // no need to determine age of upward-merged node, since this node will be lost anyway
+			clade					= node+Ntips;
+			Nmerged_children 		= 0;
+			sum_merged_child_edges 	= 0;
+			max_allowed_time		= INFTY_D;
+			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+				edge  = traversal.edge_mapping[e];
+				child = tree_edge[2*edge+1];
+				max_allowed_time = min(max_allowed_time, max_allowed_ancestor_times[child]);
+				if((child>=Ntips) && merge_node[child-Ntips]){
+					// this child will be merged upwards
+					++Nmerged_children;
+					sum_merged_child_edges += (has_edge_lengths ? edge_length[edge] : 1.0);
+				}
+			}
+			if(Nmerged_children>0){
+				absorbing_node_time_shifts[node] = min(max_allowed_time-clade_times[clade], (0+sum_merged_child_edges)/(Nmerged_children+1)); // shift this node so that its new age is the average between all participating nodes (focal node & its merged children), but prevent shifting past the maximum allowed time
+			}
+		}
+	}
+	
+	// traverse nodes root-->tips and merge tagged nodes upwards along the way
+	// whenever we merge a node upwards, we are modifying its parent's edge list, so we need to do this from root-->tips
+	// work with existing node & edge indices, eliminate resulting "ghosts" later
+	lvector modified_tree_edge = tree_edge;
+	dvector modified_edge_length;
+	if(has_edge_lengths){
+		modified_edge_length = edge_length;
+	}else{
+		modified_edge_length.assign(Nedges,1.0);
+	}
+	for(long q=0, clade, node, absorbing_ancestor, parent, child, e, edge, inedge; q<traversal.queue.size(); ++q){
+		clade = traversal.queue[q];
+		if(clade<Ntips) continue; // tips are never merged upwards
+		node  	= clade-Ntips;
+		inedge  = clade2inedge[clade];
+		if((!merge_node[node]) && (absorbing_node_time_shifts[node]!=0)){
+			// this is an absorbing ancestor that will be shifted in time, so adjust the length of its incoming edge, as well as its outgoing non-merged-child edges (so that the ages of unmerged children remain unchanged)
+			if(inedge>=0) modified_edge_length[inedge] += absorbing_node_time_shifts[node];
+			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+				edge  = traversal.edge_mapping[e];
+				child = tree_edge[2*edge+1];
+				if((child<Ntips) || (!merge_node[child-Ntips])){
+					modified_edge_length[edge] -= absorbing_node_time_shifts[node];
+				}
+			}
+		}else if(merge_node[node]){
+			// merge this node upwards into its parent, eventually eliminating its incoming edge
+			parent = clade2parent[clade];
+			absorbing_ancestor = modified_tree_edge[2*inedge+0]; // this may be an ancestor further back than the node's original parent, if the node's parent was also merged upwards
+			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+				edge = traversal.edge_mapping[e];
+				modified_tree_edge[2*edge+0] = absorbing_ancestor;
+				modified_edge_length[edge] += modified_edge_length[inedge] - (parent==absorbing_ancestor ? absorbing_node_time_shifts[absorbing_ancestor-Ntips] : 0.0);
+			}
+		}
+	}
+	
+	// re-index remaining nodes & edges (eliminate "ghosts")
+	lvector old2new_node(Nnodes,-1);
+	lvector new2old_node(Nnodes_new);
+	long next_new_node=0;
+	for(long old_node=0; old_node<Nnodes; ++old_node){
+		if(!merge_node[old_node]){
+			old2new_node[old_node] = next_new_node;
+			new2old_node[next_new_node] = old_node;
+			++next_new_node;
+		}
+	}
+	lvector new_tree_edge(2*Nedges_new);
+	dvector new_edge_length(Nedges_new);
+	long next_new_edge=0;
+	for(long edge=0, child; edge<Nedges; ++edge){
+		child = modified_tree_edge[2*edge+1];
+		if((child<Ntips) || (!merge_node[child-Ntips])){
+			// this edge does not point into an upward-merged node, so keep it
+			// make sure to use the new node indices
+			new_tree_edge[2*next_new_edge+1] = (child<Ntips ? child : Ntips+old2new_node[child-Ntips]);
+			new_tree_edge[2*next_new_edge+0] = Ntips+old2new_node[modified_tree_edge[2*edge+0]-Ntips];
+			new_edge_length[next_new_edge] 	 = modified_edge_length[edge];
+			++next_new_edge;
+		}
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("Nnodes_new") 		= Nnodes_new,
+								Rcpp::Named("Nedges_new") 		= Nedges_new,
+								Rcpp::Named("new_tree_edge") 	= Rcpp::wrap(new_tree_edge),
+								Rcpp::Named("new_edge_length") 	= Rcpp::wrap(new_edge_length),
+								Rcpp::Named("new_root") 		= Rcpp::wrap(new_root), // this is actually guaranteed to be Ntips
+								Rcpp::Named("new2old_node") 	= Rcpp::wrap(new2old_node),
+								Rcpp::Named("old2new_node") 	= Rcpp::wrap(old2new_node));
+}
+
+
+// Modify the times of specific tips & nodes, by adding or subtracting specific values
+// Here, "time" refers to time since the root
+// Excessive shifting can result in negative edge lengths, which are corrected in a variety of alternative ways (see option negative_edge_lengths). 
+// However, to avoid changing the overall span of the tree (root age and tip times), you should not shift a clade beyond the boundaries of the tree (i.e., resulting in a negative time or a time beyond its descending tips).
+// The input tree must be rooted
+// The input tree does not need to be ultrametric, but edge lengths are interpreted as time
+// [[Rcpp::export]]
+Rcpp::List shift_clade_times_CPP(const long					Ntips,
+								const long 					Nnodes,
+								const long					Nedges,
+								const std::vector<long>		&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+								const std::vector<double>	&edge_length,			// (INPUT) 1D array of size Nedges listing edge lengths
+								const std::vector<long>		&clades_to_shift,		// (INPUT) 1D array, listing the indices of clades whose ages should be shifted
+								const std::vector<double>	&time_shifts,			// (INPUT) 1D array, of the same length as clades_to_shift, listing the increments to be applied to the clade times. E.g. a positive value means that the clade's time is increased (the clade is moved towards the present)
+								const bool					shift_descendants,		// (INPUT) if true, then the subclade descending from a shifted clade will move along with it, thus shifting the time of all descendants by the same amount. If false, the descending tips & nodes retain their original time (unless negative edges are created, see option negative_edge_lengths)
+								const std::string			&negative_edge_lengths){// (INPUT) whether and how to fix negative edge lengths resulting from excessive shifting. Must be either "error", "allow" (allow negative edge lengths), "move_all_descendants", "move_all_ancestors", "move_child" (only move children to younger ages as needed, traversing the tree root-->tips) or "move_parent" (only move parents to older ages as needed, traversing the tree tips-->root). Note that "move_child" could result in tips moving, if an ancestral node is shifted too much towards younger ages. Similarly, "move_parent" could result in the root moving towards an older age if some descendant was shifted too far towards the root.
+	const long Nclades = Ntips + Nnodes;
+	
+	// determine parent clade and incoming edge for each clade
+	lvector clade2parent(Nclades,-1), clade2inedge(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		clade2parent[tree_edge[edge*2+1]] = tree_edge[edge*2+0];
+		clade2inedge[tree_edge[edge*2+1]] = edge;
+	}
+		
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal (root-->tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+
+	// shift clades
+	double time_shift;
+	dvector new_edge_length = edge_length;
+	for(long s=0, clade, inedge, node, e; s<clades_to_shift.size(); ++s){
+		clade 		= clades_to_shift[s];
+		node		= clade-Ntips;
+		time_shift	= time_shifts[s];
+		inedge 		= clade2inedge[clade];
+		// adjust edge lengths
+		new_edge_length[inedge] += time_shift;
+		if((clade>=Ntips) && (!shift_descendants)){
+			// also adjust outgoing edge lengths, so that descendant tips & nodes retain their original times
+			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+				new_edge_length[traversal.edge_mapping[e]] -= time_shift;
+			}
+		}
+	}
+	
+	// check and correct negative edge lengths if needed
+	if(negative_edge_lengths=="error"){
+		for(long edge=0; edge<Nedges; ++edge){
+			if(new_edge_length[edge]<0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Age shifts resulted in negative edge lengths, e.g. at edge %d (length %g)",edge,new_edge_length[edge]));
+		}
+	}else if(negative_edge_lengths=="move_child"){
+		// move root-->tips, moving nodes & tips away from the root as needed
+		double error;
+		for(long q=1, clade, node, inedge, e; q<traversal.queue.size(); ++q){
+			clade 	= traversal.queue[q];
+			inedge	= clade2inedge[clade];
+			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
+			error = abs(new_edge_length[inedge]);
+			new_edge_length[inedge] = 0;
+			if(clade<Ntips) continue; // clade is a tip, so no need to adjust outgoing edges
+			node = clade - Ntips;
+			// shorten outgoing edges, so that descendant times remain the same
+			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+				new_edge_length[traversal.edge_mapping[e]] -= error;
+			}
+		}
+	}else if(negative_edge_lengths=="move_parent"){
+		// move tips-->root, moving nodes & tips towards the root as needed
+		double error;
+		for(long q=traversal.queue.size()-1, clade, parent, pnode, inedge, e, edge; q>=1; --q){
+			clade 	= traversal.queue[q];
+			inedge	= clade2inedge[clade];
+			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
+			parent = clade2parent[clade];
+			error  = abs(new_edge_length[inedge]);
+			new_edge_length[inedge] = 0;
+			// extend sister edges, so that sister clades remain "parallel" to this subclade and the parent moves backward on its own
+			pnode = parent-Ntips;
+			for(e=traversal.node2first_edge[pnode]; e<=traversal.node2last_edge[pnode]; ++e){
+				edge = traversal.edge_mapping[e];
+				if(edge!=inedge) new_edge_length[edge] += error;
+			}
+			if(parent==root) continue; // parent is root, so no need to adjust its incoming edge
+			new_edge_length[clade2inedge[parent]] -= error; // shorten parent's incoming edge, so that descendant times remain the same
+		}
+	}else if(negative_edge_lengths=="move_all_descendants"){
+		// move root-->tips, moving descending subclades away from the root as needed
+		for(long q=1, clade, inedge; q<traversal.queue.size(); ++q){
+			clade 	= traversal.queue[q];
+			inedge	= clade2inedge[clade];
+			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
+			new_edge_length[inedge] = 0;
+		}
+	}else if(negative_edge_lengths=="move_all_ancestors"){
+		// move tips-->root, moving all ancestors towards the root as needed
+		double error;
+		for(long q=traversal.queue.size()-1, clade, inedge, e, edge; q>=1; --q){
+			clade 	= traversal.queue[q];
+			inedge	= clade2inedge[clade];
+			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
+			error = abs(new_edge_length[inedge]);
+			new_edge_length[inedge] = 0;
+			// extend sister edges of all ancestors, so that sister clades remain "parallel" to this subclade and the ancestors move backward on their own
+			while(clade2parent[clade]>=0){
+				inedge 	= clade2inedge[clade];
+				clade 	= clade2parent[clade];
+				for(e=traversal.node2first_edge[clade-Ntips]; e<=traversal.node2last_edge[clade-Ntips]; ++e){
+					edge = traversal.edge_mapping[e];
+					if(edge!=inedge) new_edge_length[edge] += error;
+				}
+			}
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("success") 			= true,
+								Rcpp::Named("new_edge_length") 	= Rcpp::wrap(new_edge_length));
+}
+
+
 
 
 // Eliminate short edges by merging affected nodes/tips into multifurcations
@@ -21867,7 +22163,7 @@ void propagate_MuSSE_flow(	const long					Nstates,		// (INPUT) number of MuSSE s
 
 
 
-// calculate log-likelihood of MuSSE model (Multiple State Speciation Extinction) on an ultrametric timetree
+// calculate log-likelihood of MuSSE model (Multiple State Speciation Extinction) on a timetree
 // initial conditions for D and E should be provided by the caller
 // Requirements:
 //   Tree can include multi- and mono-furcations.

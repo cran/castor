@@ -173,7 +173,7 @@ Logical, specifying whether the \eqn{\kappa_1}, \eqn{\kappa_2}, ... should be th
 }
 
 \item{splines_degree}{
-Integer between 0 and 3 (inclusive), specifying the polynomial degree of \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} between age-grid points. If 0, then \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} are considered piecewise constant, if 1 they are considered piecewise linear, if 2 or 3 they are considered to be splines of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended.
+Integer between 0 and 3 (inclusive), specifying the polynomial degree of \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} between age-grid points. If 0, then \eqn{\lambda}, \eqn{\mu}, \eqn{\psi} and \eqn{\kappa} are considered piecewise constant, if 1 they are considered piecewise linear, if 2 or 3 they are considered to be splines of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended. The case \code{splines_degree=0} is also known as ``skyline'' model.
 }
 \item{condition}{
 Character, either "crown", "stem", "none" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is generally not recommended. If "auto", the condition is chosen according to the above recommendations.
@@ -415,3 +415,4 @@ lines(x=fsim$ages, y=fsim$LTT, type='l', col='#000000', lwd=2)
 % R documentation directory.
 \keyword{tree model}
 \keyword{birth-death-sampling model}
+\keyword{skyline model}

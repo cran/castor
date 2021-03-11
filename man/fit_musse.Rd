@@ -234,16 +234,16 @@ Named list containing the final maximum-likelihood fitted model parameters. If \
 Named list containing the default start parameter values for the fitting. Structured similarly to \code{parameters}. Note that if \code{Ntrials>1}, only the first trial will have used these start values, all other trials will have used randomized start values. Will be defined even if \code{Ntrials==0}, and can thus be used to obtain a reasonable guess for the start parameters without actually fitting the model.
 }
 \item{loglikelihood}{
-The maximized log-likelihood of the model, if fitting succeeded.
+Numeric, the maximized log-likelihood of the model, if fitting succeeded.
 }
 \item{AIC}{
-The Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
+Numeric, the Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of fitted parameters and \eqn{L} is the maximized likelihood.
 }
 \item{Niterations}{
 The number of iterations needed for the best fit. Only relevant if the optimization method was "optim" or "nlminb".
 }
 \item{Nevaluations}{
-The number of function evaluations needed for the best fit. Only relevant if the optimization method was "nlminb" or "subplex".
+Integer, the number of function evaluations needed for the best fit. Only relevant if the optimization method was "nlminb" or "subplex".
 }
 \item{converged}{
 Logical, indicating whether convergence was successful during fitting. If convergence was not achieved, and the fitting was stopped due to one of the stopping criteria \code{optim_max_iterations} or \code{optim_max_evaluations}, the final likelihood will still be returned, but the fitted parameters may not be reasonable.

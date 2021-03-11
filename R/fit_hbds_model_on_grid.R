@@ -2,7 +2,7 @@
 # An HBDS model is defined by a time-dependent speciation rate (lambda), a time-dependent extinction rate (mu), a time-dependent sampling rate (psi), and a time-dependent retention rate (kappa).
 # Optionally, the model may include a finite set of "concentrated sampling attempts" that occurred at specific times t_1,..,t_NCSA with specific sampling probabilities psi_1,..,psi_NCSA and specific retenion probabilities kappa_1,..,kappa_NCSA
 fit_hbds_model_on_grid = function(	tree, 
-									root_age 				= NULL,		# optional numeric, the age of the root. Can be used to define a time offset, e.g. if the last tip was not actually sampled at the present. If NULL, this will be calculated from the tree and it will be assumed that the last tip was sampled at the present
+									root_age 				= NULL,		# optional numeric, the age of the root. Can be used to define a time offset, e.g. if the last tip was not actually sampled at the present. If NULL, this will be calculated from the tree and it will be assumed that the last tip was sampled at the present (age 0)
 									oldest_age				= NULL,		# numeric, specifying the oldest age to consider. Can also be NULL, in which case this is set to the root age
 									age_grid				= NULL,		# either NULL, or a numeric vector of size NG, listing ages in ascending order, on which lambda, mu, psi, kappa are defined as piecewise linear curves. If NULL, all model variables are assumed to be time-independent.
 									CSA_ages				= NULL,		# optional numeric vector of length NCSA, listing the ages of concentrated sampling attempts in strictly ascending order. These ages are assumed to be known, i.e. they are not fitted
@@ -56,6 +56,7 @@ fit_hbds_model_on_grid = function(	tree,
 	# basic error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
 	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Expected one of 0,1,2,3.")));
 	if(is.null(CSA_ages)){
 		NCSA = 0
 		CSA_ages = numeric(0)
@@ -101,7 +102,7 @@ fit_hbds_model_on_grid = function(	tree,
 		NG = 1
 	}else{
 		NG = length(age_grid)
-		if((!is.null(oldest_age)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g)",oldest_age)))
+		if((splines_degree>0) && (!is.null(oldest_age)) && (tail(age_grid,1)<oldest_age)) return(list(success=FALSE, error=sprintf("Provided age grid must cover oldest_age (%g) when splines_degree>0",oldest_age)))
 		if(any(diff(age_grid)<=0)) return(list(success=FALSE, error=sprintf("age_grid must list ages in strictly ascending order")))
 		if((!is.null(guess_lambda)) && (length(guess_lambda)!=1) && (length(guess_lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed lambdas (%d); since an age grid of size %d was provided, you must either provide one or %d lambdas",length(guess_lambda),NG)));
 		if((!is.null(guess_mu)) && (length(guess_mu)!=1) && (length(guess_mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of guessed mus (%d); since an age grid of size %d was provided, you must either provide one or %d mus",length(guess_mu),NG)));
@@ -110,7 +111,6 @@ fit_hbds_model_on_grid = function(	tree,
 		if((length(age_grid)>1) && (age_grid[NG]>oldest_age-1e-5*(age_grid[NG]-age_grid[NG-1]))) age_grid[NG] = max(age_grid[NG],oldest_age); # if age_grid "almost" covers oldest_age (i.e. up to rounding errors), then fix the remaining difference
 		if((length(age_grid)>1) && (age_grid[1]<1e-5*(age_grid[2]-age_grid[1]))) age_grid[1] = min(age_grid[1],0); # if age_grid "almost" covers present-day (i.e. up to rounding errors), then fix the remaining difference
 	}
-	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Extected one of 0,1,2,3.")));
 	if(NG==1) splines_degree = 1; # no point in using splines since lambda & mu & psi & kappa are assumed to be time-independent
 	if((NCSA>0) && is.null(CSA_age_epsilon)) CSA_age_epsilon = (if(NCSA>1) min(tree_span,min(diff(CSA_ages))) else tree_span)/1000
 	if(!is.null(fixed_age_grid)){
@@ -273,7 +273,7 @@ fit_hbds_model_on_grid = function(	tree,
 	tree_events = extract_HBDS_events_from_tree(tree, root_age = root_age, CSA_ages = CSA_ages, age_epsilon = CSA_age_epsilon)
 	if(any((tree_events$concentrated_node_counts+tree_events$concentrated_tip_counts>0) & (!is.na(fixed_CSA_probs)) & (fixed_CSA_probs==0))) return(list(success=FALSE, error=sprintf("Some CSAs include sampled tips and/or nodes, even though their sampling probability is fixed to 0")))
 	if(any((tree_events$concentrated_node_counts>0) & (!is.na(fixed_CSA_kappas)) & (fixed_CSA_kappas==0))) return(list(success=FALSE, error=sprintf("Some CSAs include ancestral sampled nodes, even though their kappa is fixed to 0")))
-						
+									
 	#################################
 	# PREPARE PARAMETERS TO BE FITTED
 
@@ -404,12 +404,8 @@ fit_hbds_model_on_grid = function(	tree,
 			if(any(is.nan(param_values_flat)) || any(is.infinite(param_values_flat))) return(Inf); # catch weird cases where params become NaN
 			param_values = unflatten_hbds_params(param_values_flat, NG, NCSA)
 		}
-		lambdas 		= param_values$lambda
-		mus 			= param_values$mu
-		psis 			= param_values$psi
-		kappas 			= param_values$kappa
-		CSA_probs		= param_values$CSA_probs
-		CSA_kappas		= param_values$CSA_kappas
+		CSA_probs	= param_values$CSA_probs
+		CSA_kappas	= param_values$CSA_kappas
 		if(length(age_grid)==1){
 			# while age-grid has only one point (i.e., lambda & mu are constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
 			input_age_grid 	= c(0,oldest_age)
@@ -423,6 +419,22 @@ fit_hbds_model_on_grid = function(	tree,
 			input_mus 		= param_values$mu
 			input_psis 		= param_values$psi
 			input_kappas	= param_values$kappa
+			if(tail(age_grid,1)<oldest_age){
+				# age_grid does not cover the oldest_age, so extend all profiles as a constant
+				input_age_grid 	= c(input_age_grid,oldest_age)
+				input_lambdas	= c(input_lambdas, tail(input_lambdas,1))
+				input_mus		= c(input_mus, tail(input_mus,1))
+				input_psis		= c(input_psis, tail(input_psis,1))
+				input_kappas	= c(input_kappas, tail(input_kappas,1))
+			}
+			if(age_grid[1]>0){
+				# age_grid does not cover the present-day, so extend all profiles as a constant
+				input_age_grid 	= c(0,input_age_grid)
+				input_lambdas	= c(input_lambdas[1], input_lambdas)
+				input_mus		= c(input_mus[1], input_mus)
+				input_psis		= c(input_psis[1], input_psis)
+				input_kappas	= c(input_kappas[1], input_kappas)
+			}
 		}
 		if(!is.null(fixed_age_grid)){
 			# use parameter profiles defined on fixed_age_grid (if available) or interpolate onto fixed_age_grid

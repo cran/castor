@@ -74,6 +74,7 @@ loglikelihood_hbd = function(	tree,
 	if(is.null(oldest_age)) oldest_age = root_age;
 	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
 	if(is.null(age_grid) || (length(age_grid)==0) || (length(age_grid)==1)){
+		constant_rates = TRUE
 		if(PDR_based){
 			if(length(PDR)!=1) return(list(success = FALSE, error = sprintf("Invalid number of PDR; since no non-trivial age grid was provided, you must provide a single (constant) PDR")))
 		}else if(PSR_based){
@@ -94,6 +95,7 @@ loglikelihood_hbd = function(	tree,
 			mu = rep(mu,times=NG);
 		}
 	}else{
+		constant_rates = FALSE
 		NG = length(age_grid);
 		if((age_grid[1]>0) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover all ages from age0 (%g) until oldest_age (%g)",age0,oldest_age+age0)))
 		if(PDR_based){
@@ -107,6 +109,7 @@ loglikelihood_hbd = function(	tree,
 			if((length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu (%d); since an age grid of size %d was provided, you must either provide one or %d mu",length(mu),NG,NG)));
 			if(length(lambda)==1) lambda = rep(lambda,times=NG);
 			if(length(mu)==1) mu = rep(mu,times=NG);
+			constant_rates = (length(unique(lambda))==1) && (length(unique(mu))==1)
 		}
 	}
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree: Extected one of 0,1,2,3.")));
@@ -134,16 +137,26 @@ loglikelihood_hbd = function(	tree,
 											relative_dt			= relative_dt,
 											runtime_out_seconds	= max_model_runtime);
 	}else{
-		results = HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												rarefaction			= rho0,
-												age_grid 			= age_grid,
-												lambdas 			= lambda,
-												mus					= mu,
-												splines_degree		= splines_degree,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime);
+		if(constant_rates){
+			# This is a constant-rates model (i.e., lambda & mu are constant over time), so use more specialized (efficient) loglikelihood routine
+			results = CR_HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
+														oldest_age			= oldest_age,
+														rarefaction			= rho0,
+														lambda	 			= lambda[1],
+														mu 					= mu[1],
+														condition			= condition);
+		}else{
+			results = HBD_model_loglikelihood_CPP(	branching_ages		= sorted_node_ages,
+													oldest_age			= oldest_age,
+													rarefaction			= rho0,
+													age_grid 			= age_grid,
+													lambdas 			= lambda,
+													mus					= mu,
+													splines_degree		= splines_degree,
+													condition			= condition,
+													relative_dt			= relative_dt,
+													runtime_out_seconds	= max_model_runtime);
+		}
 	}
 	if(!results$success) return(list(success = FALSE, error = sprintf("Could not calculate loglikelihood: %s",results$error)))
 	loglikelihood = results$loglikelihood;

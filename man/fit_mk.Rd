@@ -131,6 +131,9 @@ Logical, indicating whether the fitting algorithm converged. Note that \code{fit
 \item{guess_rate}{
 Numeric, the initial guess used for the average transition rate, prior to fitting.
 }
+\item{AIC}{
+Numeric, the Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of independent fitted parameters and \eqn{L} is the maximized likelihood.
+}
 \item{standard_errors}{
 Numeric matrix of size Nstates x Nstates, estimated standard error of the fitted transition rates, based on parametric bootstrapping. Only returned if \code{Nbootstraps>0}.
 }

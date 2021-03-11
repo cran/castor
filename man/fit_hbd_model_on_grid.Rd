@@ -90,7 +90,7 @@ If \eqn{\lambda} is fixed on some grid points (i.e. via \code{fixed_lambda}), th
 Logical, specifying whether \eqn{\mu} should be assumed constant across the grid, i.e. time-independent. Setting \code{const_mu=TRUE} reduces the number of free (i.e., independently fitted) parameters. If \eqn{\mu} is fixed on some grid points (i.e. via \code{fixed_mu}), then only the non-fixed mus are assumed to be identical to one another.
 }
 \item{splines_degree}{
-Integer between 0 and 3 (inclusive), specifying the polynomial degree of \eqn{\lambda} and \eqn{\mu} between age-grid points. If 0, then \eqn{\lambda} and \eqn{\mu} are considered piecewise constant, if 1 then \eqn{\lambda} and \eqn{\mu} are considered piecewise linear, if 2 or 3 then \eqn{\lambda} and \eqn{\mu} are considered to be splines of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended.
+Integer between 0 and 3 (inclusive), specifying the polynomial degree of \eqn{\lambda} and \eqn{\mu} between age-grid points. If 0, then \eqn{\lambda} and \eqn{\mu} are considered piecewise constant, if 1 then \eqn{\lambda} and \eqn{\mu} are considered piecewise linear, if 2 or 3 then \eqn{\lambda} and \eqn{\mu} are considered to be splines of degree 2 or 3, respectively. The \code{splines_degree} influences the analytical properties of the curve, e.g. \code{splines_degree==1} guarantees a continuous curve, \code{splines_degree==2} guarantees a continuous curve and continuous derivative, and so on. A degree of 0 is generally not recommended. The case \code{splines_degree=0} is also known as ``skyline'' model.
 }
 \item{condition}{
 Character, either "crown", "stem", "none" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. "none" is generally not recommended. If "auto", the condition is chosen according to the recommendations mentioned earlier.
@@ -267,3 +267,4 @@ if(!fit$success){
 % R documentation directory.
 \keyword{tree model}
 \keyword{birth-death model}
+\keyword{skyline model}

@@ -269,6 +269,14 @@ multifurcations_to_bifurcations_CPP <- function(Ntips, Nnodes, Nedges, tree_edge
     .Call(`_castor_multifurcations_to_bifurcations_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, dummy_edge_length)
 }
 
+merge_nodes_to_multifurcations_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, nodes_to_merge, merge_with_parents, keep_ancestral_ages) {
+    .Call(`_castor_merge_nodes_to_multifurcations_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, nodes_to_merge, merge_with_parents, keep_ancestral_ages)
+}
+
+shift_clade_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, clades_to_shift, time_shifts, shift_descendants, negative_edge_lengths) {
+    .Call(`_castor_shift_clade_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, clades_to_shift, time_shifts, shift_descendants, negative_edge_lengths)
+}
+
 merge_short_edges_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, edge_length_epsilon, force_keep_tips) {
     .Call(`_castor_merge_short_edges_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, edge_length_epsilon, force_keep_tips)
 }

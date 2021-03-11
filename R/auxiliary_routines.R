@@ -49,6 +49,7 @@ get_paths_root_to_tips = function(tree){
 
 
 
+# convert a name list to a list of tip or node indices, or retain the original index list if already in integer form
 # type can be 'tip', 'node' or 'both'
 map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_input=TRUE){
 	Ntips = length(tree$tip.label)
@@ -61,7 +62,10 @@ map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_inp
 		item_title 	= 'node';
 		Nmax_title 	= 'Nnodes'
 		Nmax 		= tree$Nnode;
-		if(is.character(A)) name_pool = tree$node.label;
+		if(is.character(A)){
+			if(is.null(tree$node.label)) stop(sprintf("ERROR: Tree must include node labels, for mapping %s to node indices",list_title))
+			name_pool = tree$node.label
+		}
 	}else{
 		item_title 	= 'tip or node'
 		Nmax_title 	= 'Ntips+Nnodes'
@@ -75,7 +79,7 @@ map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_inp
 		Ai = name2index[A]; 
 		if(check_input && any(is.na(Ai))) stop(sprintf("ERROR: Unknown %s name '%s'",item_title,A[which(is.na(Ai))[1]]));
 		A = Ai;
-	}else if(check_input){
+	}else if(check_input && (length(A)>0)){
 		minA = min(A); maxA = max(A);
 		if(minA<1 || maxA>Nmax) stop(sprintf("ERROR: %s must contain values between 1 and %s (%d); instead found values from %d to %d",list_title,Nmax_title,Nmax,minA,maxA));
 	}
@@ -1063,11 +1067,11 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 											max_mu				= +Inf,		# numeric, upper bound for the fitted mus (applying to all grid points).
 											min_rho0			= 1e-10,	# numeric, lower bound for the fitted rho. Note that rho is always within (0,1]
 											max_rho0			= 1,		# numeric, upper bound for the fitted rho.
-											guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages), or a function handle (for generating guesses at each grid point).
-											guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages), or a function handle (for generating guesses at each grid point).
+											guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages), or a function handle (for generating guesses at each grid point; this function may also return NA at some time points).
+											guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages), or a function handle (for generating guesses at each grid point; this function may also return NA at some time points).
 											guess_rho0			= 1,		# initial guess for rho. Either NULL (an initial guess will be computed automatically) or a single strictly-positive numeric.
-											fixed_lambda		= NULL,		# optional fixed lambda value. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed to this value) or a function handle specifying lambda for any arbitrary age (lambdas will be fixed at all ages).
-											fixed_mu			= NULL,		# optional fixed mu value. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed to this value) or a function handle specifying mu for any arbitrary age (mu will be fixed at all ages).
+											fixed_lambda		= NULL,		# optional fixed lambda value. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed to this value) or a function handle specifying lambda for any arbitrary age (lambdas will be fixed at any age for which this function returns a finite number). The function lambda() need not return finite values for all times.
+											fixed_mu			= NULL,		# optional fixed mu value. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed to this value) or a function handle specifying mu for any arbitrary age (mu will be fixed at any age for which this function returns a finite number). The function mu() need not return finite values for all times.
 											fixed_rho0			= NULL,		# optional fixed value for rho. If non-NULL and non-NA, then rho is not fitted. 
 											const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant if lambdas are non-fixed.
 											const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant if mus are non-fixed.
@@ -1085,61 +1089,53 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age
 	if(!is.null(guess_lambda)){
-		if(class(guess_lambda) == "function"){
-			# guess_lambda is already a function handle , so just check for validity
-			if(!is.finite(guess_lambda(age0))) return(list(success=FALSE, error=sprintf("Guess-lambda functor is not properly defined at age0 (%g)",age0)))
-			if(!is.finite(guess_lambda(oldest_age))) return(list(success=FALSE, error=sprintf("Guess-lambda functor is not properly defined at oldest_age (%g)",oldest_age)))
-		}else if(length(guess_lambda)!=1){
-			return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL, or a function handle"))
-		}else{
-			# convert guess_lambda to a function handle
-			guess_lambda_value = guess_lambda
-			guess_lambda = function(ages){ rep(guess_lambda_value, length(ages)) }
+		if(class(guess_lambda) != "function"){
+			if(length(guess_lambda)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL, or a function handle"))
+			}else{
+				# convert guess_lambda to a function handle
+				guess_lambda_value = guess_lambda
+				guess_lambda = function(ages){ rep(guess_lambda_value, length(ages)) }
+			}
 		}
 	}else{
 		guess_lambda = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(guess_mu)){
-		if(class(guess_mu) == "function"){
-			# guess_mu is already a function handle , so just check for validity
-			if(!is.finite(guess_mu(age0))) return(list(success=FALSE, error=sprintf("Guess-mu functor is not properly defined at age0 (%g)",age0)))
-			if(!is.finite(guess_mu(oldest_age))) return(list(success=FALSE, error=sprintf("Guess-mu functor is not properly defined at oldest_age (%g)",oldest_age)))
-		}else if(length(guess_mu)!=1){
-			return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL, or a function handle"))
-		}else{
-			# convert guess_mu to a function handle
-			guess_mu_value = guess_mu
-			guess_mu = function(ages){ rep(guess_mu_value, length(ages)) }
+		if(class(guess_mu) != "function"){
+			if(length(guess_mu)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL, or a function handle"))
+			}else{
+				# convert guess_mu to a function handle
+				guess_mu_value = guess_mu
+				guess_mu = function(ages){ rep(guess_mu_value, length(ages)) }
+			}
 		}
 	}else{
 		guess_mu = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_lambda)){
-		if(class(fixed_lambda) == "function"){
-			# fixed_lambda is already a function handle , so just check for validity
-			if(!is.finite(fixed_lambda(age0))) return(list(success=FALSE, error=sprintf("Fixed-lambda functor is not properly defined at age0 (%g)",age0)))
-			if(!is.finite(fixed_lambda(oldest_age))) return(list(success=FALSE, error=sprintf("Fixed-lambda functor is not properly defined at oldest_age (%g)",oldest_age)))
-		}else if(length(fixed_lambda)!=1){
-			return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL, or a function handle"))
-		}else{
-			# convert fixed_lambda to a function handle
-			fixed_lambda_value = fixed_lambda
-			fixed_lambda = function(ages){ rep(fixed_lambda_value, length(ages)) }
+		if(class(fixed_lambda) != "function"){
+			if(length(fixed_lambda)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL, or a function handle"))
+			}else{
+				# convert fixed_lambda to a function handle
+				fixed_lambda_value = fixed_lambda
+				fixed_lambda = function(ages){ rep(fixed_lambda_value, length(ages)) }
+			}
 		}
 	}else{
 		fixed_lambda = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_mu)){
-		if(class(fixed_mu) == "function"){
-			# mu is already a function handle , so just check for validity
-			if(!is.finite(fixed_mu(age0))) return(list(success=FALSE, error=sprintf("Fixed-mu functor is not properly defined at age0 (%g)",age0)))
-			if(!is.finite(fixed_mu(oldest_age))) return(list(success=FALSE, error=sprintf("Fixed-mu functor is not properly defined at oldest_age (%g)",oldest_age)))
-		}else if(length(fixed_mu)!=1){
-			return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL, or a function handle"))
-		}else{
-			# convert fixed_mu to a function handle
-			fixed_mu_value = fixed_mu
-			fixed_mu = function(ages){ rep(fixed_mu_value, length(ages)) }
+		if(class(fixed_mu) != "function"){
+			if(length(fixed_mu)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL, or a function handle"))
+			}else{
+				# convert fixed_mu to a function handle
+				fixed_mu_value = fixed_mu
+				fixed_mu = function(ages){ rep(fixed_mu_value, length(ages)) }
+			}
 		}
 	}else{
 		fixed_mu = function(ages){ rep(NA, length(ages)) }
@@ -1157,7 +1153,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 	
 	# determine order in which to examine models
 	if(exhaustive){
-		model_order = c(1:Nmodels)
+		model_order = seq_len(Nmodels)
 	}else{
 		# examine models in the order of increasing grid sizes
 		model_order = order(grid_sizes)
@@ -1224,6 +1220,265 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 				AICs		= AICs,
 				BICs		= BICs))
 }
+
+
+
+# fit a homogenous birth-death model on a grid to a given extant timetree, choosing the "best" grid size according to AIC or BIC
+fit_hbds_model_on_best_grid_size = function(tree, 
+											root_age 			= NULL,		# optional numeric, the age of the root. Can be used to define a time offset, e.g. if the last tip was not actually sampled at the present. If NULL, this will be calculated from the tree and it will be assumed that the last tip was sampled at the present (age 0).
+											oldest_age			= NULL,		# numeric, specifying the oldest age to consider. Can also be NULL, in which case this is set to the root age
+											grid_sizes			= c(1,10),	# integer vector, listing the grid sizes to consider
+											uniform_grid		= TRUE,		# logical, specifying whether the age grid should be uniform (equidistant age intervals). If FALSE, then the grid point density is chosen proportional to the square root of the LTT
+											criterion			= "AIC",	# character, how to choose the optimal grid point. Options are "AIC" or "BIC".
+											exhaustive			= TRUE,		# logical, whether to try all grid sizes for choosing the "best" one. If FALSE, the grid size is gradually increased until the selectin criterio (e.g., AIC) starts becoming worse, at which point the search is halted.
+											min_lambda			= 0,		# numeric, lower bound for the fitted lambdas (applying to all grid points).
+											max_lambda			= +Inf,		# numeric, upper bound for the fitted lambdas (applying to all grid points).
+											min_mu				= 0,		# numeric, lower bound for the fitted mus (applying to all grid points).
+											max_mu				= +Inf,		# numeric, upper bound for the fitted mus (applying to all grid points).
+											min_psi				= 0,		# numeric, lower bound for the fitted psis (applying to all grid points).
+											max_psi				= +Inf,		# numeric, upper bound for the fitted psis (applying to all grid points).
+											min_kappa			= 0,		# numeric, lower bound for the fitted kappas (applying to all grid points).
+											max_kappa			= +Inf,		# numeric, upper bound for the fitted kappas (applying to all grid points).
+											guess_lambda		= NULL,		# initial guess for the lambda. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant lambda at all ages), or a function handle (for generating guesses at each grid point; this function may also return NA at some time points).
+											guess_mu			= NULL,		# initial guess for the mu. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant mu at all ages), or a function handle (for generating guesses at each grid point; this function may also return NA at some time points).
+											guess_psi			= NULL,		# initial guess for the psi. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant psi at all ages), or a function handle (for generating guesses at each grid point; this function may also return NA at some time points).
+											guess_kappa			= NULL,		# initial guess for the kappa. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant kappa at all ages), or a function handle (for generating guesses at each grid point; this function may also return NA at some time points).
+											fixed_lambda		= NULL,		# optional fixed lambda value. Either NULL (none of the lambdas are fixed), or a single scalar (all lambdas are fixed to this value) or a function handle specifying lambda for any arbitrary age (lambdas will be fixed at any age for which this function returns a finite number). The function lambda() need not return finite values for all times.
+											fixed_mu			= NULL,		# optional fixed mu value. Either NULL (none of the mus are fixed), or a single scalar (all mus are fixed to this value) or a function handle specifying mu for any arbitrary age (mu will be fixed at any age for which this function returns a finite number). The function mu() need not return finite values for all times.
+											fixed_psi			= NULL,		# optional fixed psi value. Either NULL (none of the psis are fixed), or a single scalar (all psis are fixed to this value) or a function handle specifying psi for any arbitrary age (psi will be fixed at any age for which this function returns a finite number). The function psi() need not return finite values for all times.
+											fixed_kappa			= NULL,		# optional fixed kappa value. Either NULL (none of the kappas are fixed), or a single scalar (all kappas are fixed to this value) or a function handle specifying kappa for any arbitrary age (kappa will be fixed at any age for which this function returns a finite number). The function kappa() need not return finite values for all times.
+											const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant if lambdas are non-fixed.
+											const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant if mus are non-fixed.
+											const_psi			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted sampling rate. Only relevant if psis are non-fixed.
+											const_kappa			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted retention probability. Only relevant if kappas are non-fixed.
+											splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
+											condition			= "auto",	# one of "crown" or "stem" or "none" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age!=root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+											ODE_relative_dt		= 0.001,	# positive unitless number, relative integration time step for the ODE solvers. Relative to the typical time scales of the dynamics, as estimated from the theoretically maximum possible rate of change. Typical values are 0.001 - 0.1.
+											ODE_relative_dy		= 1e-3,		# positive unitless mumber, unitless number, relative step for interpolating simulated values over time. So a ODE_relative_dy of 0.001 means that E is recorded and interpolated between points between which E differs by roughy 0.001. Typical values are 0.01-0.0001. A smaller E_value_step increases interpolation accuracy, but also increases memory requirements and adds runtime (scales with the tree's age span, not Ntips).
+											Ntrials				= 1,
+											max_start_attempts	= 1,		# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
+											Nthreads			= 1,
+											max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
+											fit_control			= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
+											verbose				= FALSE,
+											verbose_prefix		= ""){
+	# basic error checking
+	if(verbose) cat(sprintf("%sChecking input parameters..\n",verbose_prefix))
+	if(is.null(root_age)) root_age = get_tree_span(tree)$max_distance
+	if(is.null(oldest_age)) oldest_age = root_age
+	if(!is.null(guess_lambda)){
+		if(class(guess_lambda) != "function"){
+			if(length(guess_lambda)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL, or a function handle"))
+			}else{
+				# convert guess_lambda to a function handle
+				guess_lambda_value = guess_lambda
+				guess_lambda = function(ages){ rep(guess_lambda_value, length(ages)) }
+			}
+		}
+	}else{
+		guess_lambda = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(guess_mu)){
+		if(class(guess_mu) != "function"){
+			if(length(guess_mu)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL, or a function handle"))
+			}else{
+				# convert guess_mu to a function handle
+				guess_mu_value = guess_mu
+				guess_mu = function(ages){ rep(guess_mu_value, length(ages)) }
+			}
+		}
+	}else{
+		guess_mu = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(guess_psi)){
+		if(class(guess_psi) != "function"){
+			if(length(guess_psi)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one guess_psi, or NULL, or a function handle"))
+			}else{
+				# convert guess_psi to a function handle
+				guess_psi_value = guess_psi
+				guess_psi = function(ages){ rep(guess_psi_value, length(ages)) }
+			}
+		}
+	}else{
+		guess_psi = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(guess_kappa)){
+		if(class(guess_kappa) != "function"){
+			if(length(guess_kappa)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one guess_kappa, or NULL, or a function handle"))
+			}else{
+				# convert guess_kappa to a function handle
+				guess_kappa_value = guess_kappa
+				guess_kappa = function(ages){ rep(guess_kappa_value, length(ages)) }
+			}
+		}
+	}else{
+		guess_kappa = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(fixed_lambda)){
+		if(class(fixed_lambda) != "function"){
+			if(length(fixed_lambda)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL, or a function handle"))
+			}else{
+				# convert fixed_lambda to a function handle
+				fixed_lambda_value = fixed_lambda
+				fixed_lambda = function(ages){ rep(fixed_lambda_value, length(ages)) }
+			}
+		}
+	}else{
+		fixed_lambda = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(fixed_mu)){
+		if(class(fixed_mu) != "function"){
+			if(length(fixed_mu)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL, or a function handle"))
+			}else{
+				# convert fixed_mu to a function handle
+				fixed_mu_value = fixed_mu
+				fixed_mu = function(ages){ rep(fixed_mu_value, length(ages)) }
+			}
+		}
+	}else{
+		fixed_mu = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(fixed_psi)){
+		if(class(fixed_psi) != "function"){
+			if(length(fixed_psi)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one fixed_psi, or NULL, or a function handle"))
+			}else{
+				# convert fixed_psi to a function handle
+				fixed_psi_value = fixed_psi
+				fixed_psi = function(ages){ rep(fixed_psi_value, length(ages)) }
+			}
+		}
+	}else{
+		fixed_psi = function(ages){ rep(NA, length(ages)) }
+	}
+	if(!is.null(fixed_kappa)){
+		if(class(fixed_kappa) != "function"){
+			if(length(fixed_kappa)!=1){
+				return(list(success=FALSE, error="Expecting either exactly one fixed_kappa, or NULL, or a function handle"))
+			}else{
+				# convert fixed_kappa to a function handle
+				fixed_kappa_value = fixed_kappa
+				fixed_kappa = function(ages){ rep(fixed_kappa_value, length(ages)) }
+			}
+		}
+	}else{
+		fixed_kappa = function(ages){ rep(NA, length(ages)) }
+	}
+	if(length(min_lambda)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one min_lambda; instead, received %d",length(min_lambda))))
+	if(length(max_lambda)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one max_lambda; instead, received %d",length(max_lambda))))
+	if(length(min_mu)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one min_mu; instead, received %d",length(min_mu))))
+	if(length(max_mu)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one max_mu; instead, received %d",length(max_mu))))
+	if(length(min_psi)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one min_psi; instead, received %d",length(min_psi))))
+	if(length(max_psi)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one max_psi; instead, received %d",length(max_psi))))
+	if(length(min_kappa)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one min_kappa; instead, received %d",length(min_kappa))))
+	if(length(max_kappa)!=1) return(list(success=FALSE, error=sprintf("Expecting exactly one max_kappa; instead, received %d",length(max_kappa))))
+	if(!(criterion %in% c("AIC", "BIC"))) return(list(success=FALSE, error=sprintf("Invalid model selection criterion '%s'. Expected 'AIC' or 'BIC'",criterion)))
+	Nmodels  = length(grid_sizes)
+	
+	# calculate tree LTT if needed
+	if(!uniform_grid){
+		LTT = count_lineages_through_time(tree=tree, Ntimes = max(100,10*max(grid_sizes)), regular_grid = TRUE)
+		LTT$ages = root_age - LTT$times
+	}
+	
+	# determine order in which to examine models
+	if(exhaustive){
+		model_order = seq_len(Nmodels)
+	}else{
+		# examine models in the order of increasing grid sizes
+		model_order = order(grid_sizes)
+	}
+	
+	# fit HBD model on various grid sizes, keeping track of the "best" Ngrid
+	if(verbose) cat(sprintf("%sFitting models with %s%d different grid sizes..\n",verbose_prefix,(if(exhaustive) "" else "up to "),Nmodels))
+	AICs 		= rep(NA, times=Nmodels)
+	BICs 		= rep(NA, times=Nmodels)
+	best_fit	= NULL
+	for(m in model_order){
+		Ngrid = grid_sizes[m]
+		if(splines_degree==0){
+			if(uniform_grid || (Ngrid==1)){
+				#age_grid = c(seq(from=0,to=root_age*(Ngrid-1)/Ngrid,length.out=Ngrid),root_age*2)
+				age_grid = seq(from=0,to=root_age*(Ngrid-1)/Ngrid,length.out=Ngrid)
+			}else{
+				#age_grid = c(get_inhomogeneous_grid_1D(Xstart=0, Xend=root_age*(Ngrid-1)/Ngrid, Ngrid=Ngrid, densityX = rev(LTT$ages), densityY=rev(sqrt(LTT$lineages)), extrapolate=TRUE),root_age*2)
+				age_grid = get_inhomogeneous_grid_1D(Xstart=0, Xend=root_age*(Ngrid-1)/Ngrid, Ngrid=Ngrid, densityX = rev(LTT$ages), densityY=rev(sqrt(LTT$lineages)), extrapolate=TRUE)
+			}
+		}else{
+			if(uniform_grid || (Ngrid==1)){
+				age_grid = seq(from=0,to=root_age,length.out=Ngrid)
+			}else{
+				age_grid = get_inhomogeneous_grid_1D(Xstart=0, Xend=root_age, Ngrid=Ngrid, densityX = rev(LTT$ages), densityY=rev(sqrt(LTT$lineages)), extrapolate=TRUE)
+			}
+		}
+		
+		if(verbose) cat(sprintf("%s  Fitting model with grid size %d..\n",verbose_prefix,Ngrid))
+		fit = fit_hbds_model_on_grid(	tree				= tree, 
+										root_age			= root_age,
+										oldest_age			= oldest_age,
+										age_grid			= age_grid,
+										min_lambda			= min_lambda,
+										max_lambda			= max_lambda,
+										min_mu				= min_mu,
+										max_mu				= max_mu,
+										min_psi				= min_psi,
+										max_psi				= max_psi,
+										min_kappa			= min_kappa,
+										max_kappa			= max_kappa,
+										guess_lambda		= guess_lambda(age_grid),
+										guess_mu			= guess_mu(age_grid),
+										guess_psi			= guess_psi(age_grid),
+										guess_kappa			= guess_kappa(age_grid),
+										fixed_lambda		= fixed_lambda(age_grid),
+										fixed_mu			= fixed_mu(age_grid),
+										fixed_psi			= fixed_psi(age_grid),
+										fixed_kappa			= fixed_kappa(age_grid),
+										const_lambda		= const_lambda,
+										const_mu			= const_mu,
+										const_psi			= const_psi,
+										const_kappa			= const_kappa,
+										splines_degree		= splines_degree,
+										condition			= condition,
+										ODE_relative_dt		= ODE_relative_dt,
+										ODE_relative_dy		= ODE_relative_dy,
+										Ntrials				= Ntrials,
+										max_start_attempts	= max_start_attempts,
+										Nthreads			= Nthreads,
+										max_model_runtime	= max_model_runtime,
+										fit_control			= fit_control,
+										verbose				= FALSE,
+										verbose_prefix		= paste0(verbose_prefix,"  "))
+		if(!fit$success) return(list(success=FALSE, error=sprintf("Fitting model with grid size %d failed: %s",Ngrid,fit$error)))
+		criterion_value = fit[[criterion]]
+		if(is.null(best_fit)){
+			best_fit = fit
+			worsened = FALSE
+		}else if(criterion_value<best_fit[[criterion]]){
+			best_fit = fit
+			worsened = FALSE
+		}else{
+			worsened = TRUE
+		}
+		AICs[m] = fit$AIC
+		BICs[m] = fit$BIC
+		if(verbose) cat(sprintf("%s  --> %s=%.10g. Best grid size so far: %d\n",verbose_prefix,criterion,criterion_value,length(best_fit$age_grid)))
+		if((!exhaustive) && worsened) break; # model selection criterion became worse compared to the previous grid size, so stop search and keep best model found so far
+	}
+	
+	return(list(success	 	= TRUE,
+				best_fit 	= best_fit,
+				grid_sizes	= grid_sizes,
+				AICs		= AICs,
+				BICs		= BICs))
+}
+
+
 
 
 # convert a list to a vector using unlist, after converting NULLs to NAs

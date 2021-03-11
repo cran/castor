@@ -1064,6 +1064,43 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// merge_nodes_to_multifurcations_CPP
+Rcpp::List merge_nodes_to_multifurcations_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<long>& nodes_to_merge, const bool merge_with_parents, const bool keep_ancestral_ages);
+RcppExport SEXP _castor_merge_nodes_to_multifurcations_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP nodes_to_mergeSEXP, SEXP merge_with_parentsSEXP, SEXP keep_ancestral_agesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type nodes_to_merge(nodes_to_mergeSEXP);
+    Rcpp::traits::input_parameter< const bool >::type merge_with_parents(merge_with_parentsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type keep_ancestral_ages(keep_ancestral_agesSEXP);
+    rcpp_result_gen = Rcpp::wrap(merge_nodes_to_multifurcations_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, nodes_to_merge, merge_with_parents, keep_ancestral_ages));
+    return rcpp_result_gen;
+END_RCPP
+}
+// shift_clade_times_CPP
+Rcpp::List shift_clade_times_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<long>& clades_to_shift, const std::vector<double>& time_shifts, const bool shift_descendants, const std::string& negative_edge_lengths);
+RcppExport SEXP _castor_shift_clade_times_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP clades_to_shiftSEXP, SEXP time_shiftsSEXP, SEXP shift_descendantsSEXP, SEXP negative_edge_lengthsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type clades_to_shift(clades_to_shiftSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type time_shifts(time_shiftsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type shift_descendants(shift_descendantsSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type negative_edge_lengths(negative_edge_lengthsSEXP);
+    rcpp_result_gen = Rcpp::wrap(shift_clade_times_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, clades_to_shift, time_shifts, shift_descendants, negative_edge_lengths));
+    return rcpp_result_gen;
+END_RCPP
+}
 // merge_short_edges_CPP
 Rcpp::List merge_short_edges_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const double edge_length_epsilon, const bool force_keep_tips);
 RcppExport SEXP _castor_merge_short_edges_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP edge_length_epsilonSEXP, SEXP force_keep_tipsSEXP) {
@@ -2779,6 +2816,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_split_tree_at_height_CPP", (DL_FUNC) &_castor_split_tree_at_height_CPP, 7},
     {"_castor_extend_tree_to_height_CPP", (DL_FUNC) &_castor_extend_tree_to_height_CPP, 6},
     {"_castor_multifurcations_to_bifurcations_CPP", (DL_FUNC) &_castor_multifurcations_to_bifurcations_CPP, 6},
+    {"_castor_merge_nodes_to_multifurcations_CPP", (DL_FUNC) &_castor_merge_nodes_to_multifurcations_CPP, 8},
+    {"_castor_shift_clade_times_CPP", (DL_FUNC) &_castor_shift_clade_times_CPP, 9},
     {"_castor_merge_short_edges_CPP", (DL_FUNC) &_castor_merge_short_edges_CPP, 7},
     {"_castor_pick_random_tips_CPP", (DL_FUNC) &_castor_pick_random_tips_CPP, 7},
     {"_castor_assign_clades_to_taxa_CPP", (DL_FUNC) &_castor_assign_clades_to_taxa_CPP, 5},

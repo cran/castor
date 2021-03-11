@@ -10,7 +10,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 								include_extant			= FALSE,	# logical, whether to include extant non-sampled tips in the final tree
 								include_extinct			= FALSE,	# logical, whether to include extinct non-sampled tips in the final tree
 								as_generations			= FALSE,	# if FALSE, then edge lengths correspond to time. If TRUE, then edge lengths correspond to generations (hence if include_extant==true and include_extinct==true, all edges will have unit length).
-								time_grid				= NULL,		# numeric vector listing grid times in ascending order. The time grid should generally cover the maximum possible simulation time, otherwise it will be polynomially extrapolated (according to splines_degree).
+								time_grid				= NULL,		# numeric vector listing grid times in ascending order. The time grid should generally cover the maximum possible simulation time, otherwise everything is polynomially extrapolated (according to splines_degree).
 								lambda					= NULL,		# numeric vector of the same length as time_grid[], listing per-capita birth rates (speciation rates) at each time_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
 								mu						= NULL,		# numeric vector of the same length as time_grid[], listing per-capita death rates (extinction rates) at each time_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
 								psi						= NULL,		# numeric vector of the same length as time_grid[], listing per-capita sampling rates (Poissonian detection rates) at each time_grid point. Can also be a single number. Can also be NULL, which is the same as being zero.
