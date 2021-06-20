@@ -569,6 +569,40 @@ get_inhomogeneous_grid_1D = function(	Xstart,
 
 
 
+# given some distribution of numbers, define a non-uniform X-grid so that the density of grid points reflects the density of the provided random numbers
+# This can be used for example to define an age grid, with the grid density reflecting the number of nodes in a timetree at any given age interval, e.g. for fitting purposes
+# The returned Xgrid is guaranteed to include Xstart and Xend, to have size Ngrid, and to be non-decreasing.
+# Note that if randomX does not cover the full requested interval [Xstart,Xend], then the first and last grid cells might deviate from the intended density
+# Also note that if the randomX data is has Dirac-distribution peaks (i.e., many values are equal), then the returned grid might also include multiple grid points at the same location (i.e., the grid is not strictly monotonic)
+get_inhomogeneous_grid_1D_from_samples = function(	Xstart,
+													Xend, 
+													Ngrid, 		# integer, number of grid points to return, including the edges Xstart & Xend
+													randomX){ 	# numeric vector, listing random values defining the target density. Must be sorted in ascending order. Typically randomX should roughly cover the full requested interval [Xstart,Xend]
+	if(Ngrid<2){
+		return(list(success=FALSE, error=sprintf("Ngrid must be at least 2")))
+	}else if(randomX[1]>=tail(randomX,1)){
+		return(list(success=FALSE, error=sprintf("Values in randomX must be strictly increasing")))
+	}
+	randomX 		= randomX[(randomX>=Xstart) & (randomX<=Xend)] # ignore samples outside of the requested range
+	if(length(randomX)==0) return(list(success=FALSE, error=sprintf("No randomX values found within requested interval")))
+	Nrandom			= length(randomX)
+	unique_randoms	= 1 + Nrandom - rev(c(1,1+which(diff(rev(randomX))<0))) # indices of unique values in randomX, keeping always the last instance of each value. Assuming that randomX is monotonically increasing.
+	randomCDF_X 	= randomX[unique_randoms]
+	randomCDF_P		= unique_randoms/Nrandom
+	if(Xstart<randomCDF_X[1]){
+		randomCDF_X = c(Xstart,randomCDF_X)
+		randomCDF_P = c(0,randomCDF_P)
+	}
+	if(Xend>randomCDF_X[length(randomCDF_X)]){
+		randomCDF_X = c(randomCDF_X,Xend)
+		randomCDF_P = c(randomCDF_P,1.0001)
+	}
+	Xgrid = approx(x=randomCDF_P, y=randomCDF_X, xout=seq(from=0,to=1,length.out=Ngrid), yleft=Xstart, yright=Xend)$y
+	return(list(success=TRUE,grid=Xgrid))
+}
+
+
+
 # calculate the pulled speciation rate (PSR) of an HBD congruence class for a given pulled diversification rate (PDR) and product rho*lambda(0)
 get_PSR_from_PDR_HBD = function(oldest_age,
 								age_grid,				# numeric vector of size NG, listing grid ages in ascending order. Must cover at least age0 and oldest_age.
@@ -941,9 +975,9 @@ get_expected_SBM_sinsquare = function(time_steps, diffusivity, radius){
 	return((2/3)*(1-mean(exp(-6*(diffusivity/(radius^2))*time_steps))))
 }
 
-get_expected_SBM_transition_angle = function(time_step, diffusivity, radius){
+expected_SBM_distance = function(time_step, diffusivity, radius){
 	tD = time_step * diffusivity/radius^2;
-	return(SBM_get_average_transition_angle_CPP(tD = tD, max_error = 1e-7, max_Legendre_terms = 200))
+	return(radius * SBM_get_average_transition_angle_CPP(tD = tD, max_error = 1e-7, max_Legendre_terms = 200))
 }
 
 
@@ -1866,47 +1900,59 @@ bootstraps_to_confidence_intervals = function(bootstrap_samples){		# 2D numeric 
 # Locally estimate the exponential growth rate of a time series in a sliding window
 fit_local_exponential_rate = function(	X,					# 1D numeric vector of length N, listing X values in ascending order
 										Y,					# 1D numeric vector of length N, listing non-negative Y-values corresponding to X[]
+										ref						= NULL,			# optional numeric vector of length N, listing reference values for judging the adequacy of data in a sliding window.
 										window_size				= 2,			# strictly positive integer, specifying the size of the sliding window (number of data points per fitting)
 										trim_window_at_bounds 	= TRUE,			# logical, specifying whether to trim the sliding window when hitting the data's X-bounds. If false, then the sliding window always has the specified size, but may not always be centered around the point of evaluation, and toward the left & right bound the fitted params will be constant. If TRUE, the window becomes smaller towards the edges, hence estimates towards the edges become more noisy.
 										normalize_by_Xstep		= FALSE,		# logical, specifying whether to divide each Y value by the corresponding X-step (this is only relevant if X is a non-regular grid). For example, if X are times and Y are new infections since the last time point, then the exponential growth rate of the disease should be calculated using the normalized Y.
 										model 					= "lognormal",	# character, specifying the stochastic model to assume for the Y values. Available options are "lognormal" and "Poisson" (only suitable for count data).
 										min_Npoints 			= 2,			# integer, specifying the minimum number of valid data points for fitting, per sliding window. If a sliding window covers fewer usable points than this threshold, the corresponding estimate is set to NA.
 										min_Npositives 			= 2,			# integer, specifying the minimum number of valid positive (Y>0) data points for fitting, per sliding window. If a sliding window covers fewer usable points than this threshold, the corresponding estimate is set to NA. Not relevant for the lognormal model, since zeros are always ignored for that model.
-										Nbootstraps 			= 0){			# integer, specifying the optional number of boostraps for estimating confidence intervals
+										min_Nref				= 0,			# integer, specifying the minimum sum of reference values in a sliding window, needed for fitting. If the sum of reference values in a sliding window is below this threshold, the corresponding estimate is set to NA.
+										Nbootstraps 			= 0,			# integer, specifying the optional number of boostraps for estimating confidence intervals
+										Nthreads				= 1){			# integer, number of parallel threads to use for bootstrapping
 	NX 				= length(X)
 	window_size 	= max(1,window_size)
 	min_Npoints 	= min(min_Npoints,window_size)
 	min_Npositives 	= min(min_Npositives,window_size)
 	
+	Ymodified = Y # may be further modified below, prior to estimation of exponential rates
 	if(model == "lognormal"){
 		if(normalize_by_Xstep && (NX>=2)){
 			# divide Y values by the X-step lengths. For Y[1] we don't know the X-step, so we can't normalize it, hence we set Y[1]=NA
-			Y = c(NA,Y[2:NX]/diff(X))
+			Ymodified = c(NA,Y[2:NX]/diff(X))
 		}
-		fit = fit_exp_LeastLogSquares_moving_window_CPP(X = X, Y = Y, window_size = window_size, trim_window_at_bounds = trim_window_at_bounds)
+		fit = fit_exp_LeastLogSquares_moving_window_CPP(X = X, Y = Ymodified, window_size = window_size, trim_window_at_bounds = trim_window_at_bounds)
 		fit$rate[fit$Npoints<min_Npoints] = NA
+		if(!is.null(ref)){
+			Nrefs_per_window = sapply(seq_len(length(fit$window_starts)), FUN=function(w) sum(ref[c(fit$window_starts[w]:fit$window_ends[w])],na.rm=TRUE))
+			fit$rate[Nrefs_per_window<min_Nref] = NA
+		}
 		valid_points_for_bootstrap = which(is.finite(fit$predicted_logY) & is.finite(fit$log_variance) & is.finite(X) & is.finite(Y) & (Y>0))
 	}else if(model=="Poisson"){
 		if(normalize_by_Xstep && (NX>=2)){
 			# the appropriate scalings must be passed to the max-likelihood fitting routine, i.e. we can't just rescale the Y-values
 			scalings = c(1, diff(X))
-			Y = c(NA, Y[2:NX])
+			Ymodified = c(NA, Y[2:NX])
 		}else{
 			scalings = rep(1, NX)
 		}
-		fit = fit_exp_Poisson_moving_window_CPP(X = X, Y = Y, scalings = scalings, window_size = window_size, trim_window_at_bounds = trim_window_at_bounds)	
+		fit = fit_exp_Poisson_moving_window_CPP(X = X, Y = Ymodified, scalings = scalings, window_size = window_size, trim_window_at_bounds = trim_window_at_bounds)	
 		fit$rate[(fit$Npoints<min_Npoints) | (fit$Npositives<min_Npositives)] = NA
+		if(!is.null(ref)){
+			Nrefs_per_window = sapply(seq_len(length(fit$window_starts)), FUN=function(w) sum(ref[c(fit$window_starts[w]:fit$window_ends[w])],na.rm=TRUE))
+			fit$rate[Nrefs_per_window<min_Nref] = NA
+		}
 		valid_points_for_bootstrap = which(is.finite(X) & is.finite(Y) & (Y>=0))
 	}else{
 		stop(sprintf("Invalid model '%s'",model))
 	}
 	
 	if(Nbootstraps>0){
-		bootstrap_Y 	= rep(NA, times=NX)
-		boostrap_rates 	= matrix(NA, nrow=Nbootstraps, ncol=NX)
+		boostrap_rates = matrix(NA, nrow=Nbootstraps, ncol=NX)
 		if(length(valid_points_for_bootstrap)>0){
-			for(b in seq_len(Nbootstraps)){
+			aux_bootstrap = function(b){
 				# generate random time series bootstrap_Y, according to the fitted model params 
+				bootstrap_Y = Y
 				if(model=="lognormal"){
 					# assuming a log-normal model, i.e. where log(Y) ~ normal(mean=fit$predicted_logY, variance=fit$log_variance)
 					bootstrap_Y[valid_points_for_bootstrap] = exp(rnorm(n=length(valid_points_for_bootstrap), mean=fit$predicted_logY[valid_points_for_bootstrap], sd=sqrt(pmax(0,fit$log_variance[valid_points_for_bootstrap]))))
@@ -1915,15 +1961,25 @@ fit_local_exponential_rate = function(	X,					# 1D numeric vector of length N, l
 				}
 				bfit = fit_local_exponential_rate(	X						= X,
 													Y						= bootstrap_Y,
+													ref						= ref,
 													window_size				= window_size,
 													trim_window_at_bounds	= trim_window_at_bounds,
 													model					= model,
 													min_Npoints				= min_Npoints,
-													Nbootstraps				= 0)
-				boostrap_rates[b,] = bfit$rate
+													min_Npositives			= min_Npositives,
+													min_Nref				= min_Nref,
+													Nbootstraps				= 0,
+													Nthreads				= 1)
+				return(bfit$rate)
+			}
+			if((Nthreads>1) && (Nbootstraps>1) && (.Platform$OS.type!="windows")){ # debug
+				boostrap_rates = matrix(unlist(parallel::mclapply(seq_len(Nbootstraps), FUN = function(b) aux_bootstrap(b), mc.cores=min(Nthreads, Nbootstraps), mc.preschedule=TRUE, mc.cleanup=TRUE)), nrow=Nbootstraps, byrow=TRUE)
+			}else{
+				boostrap_rates = t(sapply(seq_len(Nbootstraps), FUN = function(b) aux_bootstrap(b)))
 			}
 		}
-		rate_CI = bootstraps_to_confidence_intervals(bootstrap_samples=boostrap_rates)		
+		rate_CI = bootstraps_to_confidence_intervals(bootstrap_samples=boostrap_rates)
+		for(i in seq_len(length(rate_CI))) rate_CI[[i]][!is.finite(fit$rate)] = NA
 	}
 	
 	return(list(rate 	= fit$rate, 
@@ -2612,6 +2668,52 @@ weighted_graph_Laplacian_of_tree = function(tree, normalized=FALSE, sparse=FALSE
 		L[bidirectional_edges] = bidirectional_weights
 	}
 	return(L)
+}
+
+
+# Given a phylogenetic tree, extract a subset of pairwise tip distances (with replacement)
+sample_pairwise_tip_distances = function(	tree, 
+											Npairs,	# number of pairwise distances to consider
+											as_edge_counts	= FALSE){
+	Ntips  = length(tree$tip.label)
+	Nnodes = tree$Nnode
+	distances = get_distances_between_clades_CPP(	Ntips 			= Ntips,
+													Nnodes 			= Nnodes,
+													Nedges 			= nrow(tree$edge),
+													tree_edge 		= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
+													edge_length		= (if(as_edge_counts || is.null(tree$edge.length)) numeric() else tree$edge.length),
+													cladesA			= sample.int(n=Ntips,size=Npairs, replace=TRUE)-1,
+													cladesB			= sample.int(n=Ntips,size=Npairs, replace=TRUE)-1,
+													verbose			= FALSE,
+													verbose_prefix	= "")
+	return(distances)
+}
+
+
+
+
+eliminate_bifurcating_root = function(tree){
+	Ntips  = length(tree$tip.label)
+	Nnodes = tree$Nnode
+	if(Ntips<=2) return(list(success=FALSE, error="Input tree must have at least 3 tips"))
+	results = eliminate_bifurcating_root_CPP(	Ntips 			= Ntips,
+												Nnodes 			= Nnodes,
+												Nedges 			= nrow(tree$edge),
+												tree_edge 		= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
+												edge_length		= (if(is.null(tree$edge.length)) numeric() else tree$edge.length));
+	if(!results$changed){
+		return(list(success=TRUE, changed=FALSE, tree=tree))
+	}else{
+		new2old_clade = results$new2old_clade+1
+		new_tree = list(Nnode 		= results$Nnodes,
+						tip.label 	= (if(is.null(tree$tip.label)) NULL else tree$tip.label[new2old_clade[1:Ntips]]),
+						node.label 	= (if(is.null(tree$node.label)) NULL else tree$node.label[new2old_clade[(Ntips+1):results$Nclades]-Ntips]),
+						edge 		= matrix(as.integer(results$new_tree_edge),ncol=2,byrow=TRUE) + 1L,
+						edge.length = results$new_edge_length)
+		class(new_tree) = "phylo"
+		attr(new_tree,"order") = "none"
+		return(list(success=TRUE, changed=TRUE, tree=new_tree, new2old_clade=new2old_clade))
+	}
 }
 
 

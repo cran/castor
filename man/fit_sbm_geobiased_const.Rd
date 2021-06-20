@@ -26,6 +26,7 @@ fit_sbm_geobiased_const(trees,
                         Nbootstraps            = 0,
                         NQQ                    = 0,
                         Nthreads               = 1,
+                        include_simulations    = FALSE,
                         SBM_PD_functor         = NULL,
                         verbose                = FALSE,
                         verbose_prefix         = "")
@@ -89,6 +90,9 @@ Integer, optional number of simulations to perform for creating QQ plots of the 
 }
 \item{Nthreads}{
 Integer, number of parallel threads to use. Ignored on Windows machines.
+}
+\item{include_simulations}{
+Logical, whether to include the trees and tip coordinates simulated under the final fitted SBM model, in the returned results. May be useful e.g. for checking model adequacy.
 }
 \item{SBM_PD_functor}{
 SBM probability density functor object. Used internally for efficiency and for debugging purposes, and should be kept at its default value \code{NULL}.
@@ -176,8 +180,11 @@ Numeric, upper bound of the 95\% confidence interval for the estimated true diff
 \item{QQplot}{
 Numeric matrix of size Ncontrasts x 2, listing the computed QQ-plot. The first column lists quantiles of geodistances in the original dataset, the 2nd column lists quantiles of hypothetical geodistances simulated based on the estimated true diffusivity.
 }
+\item{simulations}{
+List, containing the trees and tip coordinates simulated under the final fitted SBM model, accounting for geographic biases. Each entry is itself a named list, containing the simulations corresponding to a specific input tree. In particular, \code{simulations[[t]]$sims[[r]]} is the r-th simulation performed that corresponds to the t-th input tree. Each simulation is again a named list, containing the elements \code{success} (logical), \code{tree} (of class \code{phylo}), \code{latitudes} (numeric vector) and \code{longitudes} (numeric vector). This data structure may be useful for testing the adequacy of the fitted SBM model; only use this if you know what you are doing. Only returned if \code{include_simulations} was \code{TRUE}.
+}
 \item{SBM_PD_functor}{
-SBM probability density functor object. Used internally for efficiency and for debugging purposes.
+SBM probability density functor object. Used internally for efficiency and for debugging purposes. Most users can ignore this.
 }
 }
 

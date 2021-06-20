@@ -9,20 +9,20 @@ Ancestral state reconstruction of a discrete trait using a fixed-rates continuou
 \usage{
 asr_mk_model( tree, 
               tip_states, 
-              Nstates = NULL, 
-              tip_priors = NULL, 
-              rate_model = "ER", 
-              transition_matrix = NULL, 
+              Nstates               = NULL, 
+              tip_priors            = NULL, 
+              rate_model            = "ER", 
+              transition_matrix     = NULL, 
               include_ancestral_likelihoods = TRUE, 
-              reroot = TRUE,
-              root_prior = "empirical", 
-              Ntrials = 1, 
-              optim_algorithm = "nlminb",
-              optim_max_iterations = 200,
-              optim_rel_tol = 1e-8,
-              store_exponentials = TRUE,
-              check_input =TRUE, 
-              Nthreads = 1)
+              reroot                = TRUE,
+              root_prior            = "auto", 
+              Ntrials               = 1, 
+              optim_algorithm       = "nlminb",
+              optim_max_iterations  = 200,
+              optim_rel_tol         = 1e-8,
+              store_exponentials    = TRUE,
+              check_input           = TRUE, 
+              Nthreads              = 1)
 }
 \arguments{
 \item{tree}{
@@ -92,9 +92,9 @@ The tree is either assumed to be complete (i.e. include all possible species), o
 }
 where \eqn{Q} is the transition rate matrix and \eqn{\pi} is the stationary distribution of the model. The rate models ``ER'', `SYM'', ``SUEDE'' and ``SRD'' are reversible. For example, for ``SUEDE'' or ``SRD'' choose \eqn{\pi_{i+1}=\pi_{i}Q_{i,i+1}/Q_{i+1,i}}. In contrast, ``ARD'' models are generally not reversible.
 
-
-
 If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). This function is similar to \code{rerootingMethod} in the \code{phytools} package (v0.5-64) and similar to \code{ape::ace} (v4.1) with options \code{method="ML", type="discrete"} and \code{marginal=FALSE}, but tends to be much faster than \code{rerootingMethod} and \code{ace} for large trees.
+
+Internally, this function uses \code{\link{fit_mk}} to estimate the transition matrix if the latter is not provided. If you only care about estimating the transition matrix but not the ancestral states, consider using the more versatile function \code{\link{fit_mk}}.
 }
 
 
@@ -111,6 +111,9 @@ A numeric quadratic matrix of size Nstates x Nstates, containing the transition 
 }
 \item{loglikelihood}{
 Log-likelihood of the observed tip states under the fitted (or provided) Mk model. If \code{transition_matrix} was \code{NULL} in the input, then this will be the log-likelihood maximized during fitting.
+}
+\item{AIC}{
+Numeric, the Akaike Information Criterion for the fitted Mk model (if applicable), defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of independent fitted parameters and \eqn{L} is the maximized likelihood. If the transition matrix was provided as input, then no fitting was performed and hence AIC will be \code{NULL}.
 }
 \item{ancestral_likelihoods}{
 Optional, only returned if \code{include_ancestral_likelihoods} was \code{TRUE}. A 2D numeric matrix, listing the likelihood of each state at each node (marginal ancestral likelihoods). This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument, or inferred from \code{tip_states} or \code{tip_priors} (whichever was non-\code{NULL}). The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the likelihood of the s-th state at the n-th node. For example, \code{likelihoods[1,3]} will store the likelihood of observing the tree's tip states (if \code{reroot=TRUE}) or the descending subtree's tip states (if \code{reroot=FALSE}), if the first node was in state 3. Note that likelihoods are rescaled (normalized) to sum to 1 for convenience and numerical stability. The marginal likelihoods at a node should not, however, be interpreted as a probability distribution among states.
@@ -130,7 +133,8 @@ Z. Yang, S. Kumar and M. Nei (1995). A new method for inference of ancestral nuc
 \code{\link{asr_max_parsimony}},
 \code{\link{asr_squared_change_parsimony}},
 \code{\link{hsp_max_parsimony}},
-\code{\link{map_to_state_space}}
+\code{\link{map_to_state_space}},
+\code{\link{fit_mk}}
 }
 
 \examples{\dontrun{

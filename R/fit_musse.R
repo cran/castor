@@ -31,7 +31,7 @@ fit_musse = function(	tree,
 						proxy_map				= NULL,			# optional 1D integer vector of size Nstates, mapping states to proxy-states. Hence, proxy_map[s] is an integer in 1:NPstates, specifying which proxy-state the state s belongs to. Only relevant if NPstates!=NULL and NPstates!=Nstates.
 						state_names				= NULL,			# optional 1D character vector of size Nstates, specifying a name/description for each state. This does not influence any of the calculations, and is merely used to add human-readable names (rather than integers) to the returned vectors/matrices.
 						tip_pstates				= NULL,			# 1D integer array of size Ntips, listing integers in 1:NPstates, specifying the proxy state at each tip. Can also be NULL. May include NA (unknown tip states).
-						tip_priors 				= NULL, 		# 2D numerical array of either size Ntips x Nstates or size Ntips x NPstates, listing the prior likelihood at each state (or proxy-state) at each tip. Specifically, tip_priors[i,s] is the likelihood of observing the data at tip i, if tip i had state (or proxy-state) s. Can be provided alternatively to tip_pstates.
+						tip_priors 				= NULL, 		# 2D numerical array of either size Ntips x Nstates or size Ntips x NPstates, listing the prior likelihood at each state (or proxy-state) at each tip. Specifically, tip_priors[i,s] is the likelihood of observing the data at tip i (sampling the tip and observing the observed state), if tip i had state (or proxy-state) s. Can be provided alternatively to tip_pstates.
 						sampling_fractions		= 1,			# optional numerical vector of size NPstates, indicating the present-day sampling fractions (fraction of extant species included as tips in the tree) conditional upon each species' proxy state. This can be used to incorporate detection biases for species, depending on their proxy state. Can also be NULL or a single number (in which case sampling fractions are assumed to be independent of proxy state).
 						reveal_fractions		= 1,			# optional numerical vector of size NPstates, indicating the resolved fractions (fraction of tree-tips with revealed, i.e. non hidden, state) conditional upon each tip's proxy state. Hence, reveal_fractions[s] is the probability that a species with proxy state s will have revealed state, conditional upon being included in the tree. This can be used to incorporate reveal biases for tips, depending on their proxy state. Can also be NULL or a single number (in which case reveal fractions are assumed to be independent of proxy state).
 						sampling_rates			= 0,			# optional numerical vector of size NPstates, indicating the Poissonian lineage sampling rates, conditional upon each species' proxy state. This can be used to account for tips sampled continuously through time rather than at present-day. Can also be a single number (in which case Poissonian sampling rates are assumed to be independent of proxy state). Can also be NULL, in which case Poissonian sampling is assumed to not have occurred.
@@ -95,7 +95,7 @@ fit_musse = function(	tree,
 	if(is_hisse_model && (length(proxy_map)!=Nstates)) stop("ERROR: proxy_map has length %d, but should have length %d (Nstates)",length(proxy_map),Nstates)
 	if(is_hisse_model && (length(unique(proxy_map))!=NPstates)) stop("ERROR: Not all %d proxy states are represented in proxy_map",NPstates)
 	if((!is_hisse_model) && (!is.null(proxy_map)) & ((length(proxy_map)!=Nstates) || (any(proxy_map!=(1:Nstates))))) stop("ERROR: Non-trivial proxy_map contradicts non-HiSSE model")
-	if(!is_hisse_model) proxy_map = (1:Nstates)
+	if(!is_hisse_model) proxy_map = c(1:Nstates)
 	if(is.character(transition_rate_model)){
 		if(!(transition_rate_model %in% c("ER", "SYM", "ARD", "SUEDE", "SRD"))) stop(sprintf("ERROR: Unknown transition_rate_model '%s'",transition_rate_model))
 		transition_indices = get_transition_index_matrix(Nstates,transition_rate_model)$index_matrix
@@ -157,10 +157,12 @@ fit_musse = function(	tree,
 		if(verbose && (Nknown_priors<Ntips)) cat(sprintf("%sNote: %d out of %d tips have unspecified priors\n",verbose_prefix,Ntips-Nknown_priors,Ntips))
 		# tip states are not explicitly given, but instead we got prior state likelihoods, so calculate number of known tips per pstate using a probabilistic averaging approach
 		# only tips with specified priors are counted; sum(Nknown_tips_per_pstate) will be equal to Nknown_priors
+		known_tip_prior_row_sums = rowSums(tip_priors[known_priors,])
+		if(check_input && any(known_tip_prior_row_sums==0)) stop(sprintf("ERROR: Some specified tip priors are all zero (e.g., for tip %d)",known_priors[which(known_tip_prior_row_sums==0)[1]]))
 		if(ncol(tip_priors)==NPstates){
-			Nknown_tips_per_pstate = colSums(tip_priors[known_priors,]/rowSums(tip_priors[known_priors,]))
+			Nknown_tips_per_pstate = colSums(tip_priors[known_priors,]/known_tip_prior_row_sums)
 		}else{
-			Nknown_tips_per_state  = colSums(tip_priors[known_priors,]/rowSums(tip_priors[known_priors,]))
+			Nknown_tips_per_state  = colSums(tip_priors[known_priors,]/known_tip_prior_row_sums)
 			Nknown_tips_per_pstate = sapply(1:NPstates, FUN=function(p) sum(Nknown_tips_per_state[proxy_map==p]))
 		}
 	}
@@ -642,7 +644,7 @@ fit_musse = function(	tree,
 				LL 				= -fit$objective
 				Nevaluations 	= NA
 				Niterations 	= (fit$iterations)
-				converged 		= (fit$status==0)
+				converged 		= (fit$status %in% c(0,3,4))
 				fit$par 		= fit$solution
 				#fit = subplex::subplex(par = initial_param_values[fitted_params], 
 				#						fn = function(pars){ objective_function(pars, trial) },

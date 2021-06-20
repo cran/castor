@@ -8991,7 +8991,7 @@ Rcpp::List fit_exp_LeastLogSquares_moving_window_CPP(	const std::vector<double> 
 	const long left_radius  = floor(window_size/2);
 	
 	dvector A(N,NAN_D), rate(N,NAN_D), S2(N,NAN_D), predicted_logY(N,NAN_D), Xshift(N,NAN_D);
-	lvector count(N,0);
+	lvector count(N,0), starts(N,0), ends(N,0);
 	double RSS;
 	long start, end, next_valid;
 	for(long n=0; n<N; ++n){
@@ -9008,6 +9008,8 @@ Rcpp::List fit_exp_LeastLogSquares_moving_window_CPP(	const std::vector<double> 
 				start = max(0l, end-window_size+1);
 			}
 		}
+		starts[n] = start;
+		ends[n]   = end;
 		
 		// find the next valid point to use as Xshift
 		next_valid = find_first_non_nan(X, start);
@@ -9025,6 +9027,8 @@ Rcpp::List fit_exp_LeastLogSquares_moving_window_CPP(	const std::vector<double> 
 								Rcpp::Named("rate")				= rate,
 								Rcpp::Named("Xshift")			= Xshift,
 								Rcpp::Named("Npoints")			= count,
+								Rcpp::Named("window_starts")	= starts,
+								Rcpp::Named("window_ends")		= ends,
 								Rcpp::Named("log_variance") 	= S2, // maximum-likelihood estimate of the error-variance on a log-scale, i.e. VAR(data_logY - expected_logY)
 								Rcpp::Named("predicted_logY") 	= predicted_logY);
 }
@@ -9095,7 +9099,7 @@ Rcpp::List fit_exp_Poisson_moving_window_CPP(	const std::vector<double> 	&X,				
 	rootant.scalings = scalings;
 
 	dvector A(N,NAN_D), rate(N,NAN_D), predicted_Y(N,NAN_D), Xshift(N,NAN_D);
-	lvector count(N,0), Npositives(N,0);
+	lvector count(N,0), Npositives(N,0), starts(N,0), ends(N,0);
 	double guess_rate, guess_A, RSS;
 	long start, end, next_valid, dummyL;
 	MathError fit_error;
@@ -9113,6 +9117,8 @@ Rcpp::List fit_exp_Poisson_moving_window_CPP(	const std::vector<double> 	&X,				
 				start = max(0l, end-window_size+1);
 			}
 		}
+		starts[n] = start;
+		ends[n]   = end;
 		
 		// find the next valid point to use as Xshift
 		next_valid = find_first_non_nan(X, start);
@@ -9176,12 +9182,14 @@ Rcpp::List fit_exp_Poisson_moving_window_CPP(	const std::vector<double> 	&X,				
 			if(A[n]==0) rate[n] = NAN_D; // if A=0, then the rate becomes non-identifiable
 		}
 	}
-	return Rcpp::List::create(	Rcpp::Named("A")			= A,
-								Rcpp::Named("rate")			= rate,
-								Rcpp::Named("Xshift")		= Xshift,
-								Rcpp::Named("Npoints")		= count,
-								Rcpp::Named("Npositives")	= Npositives,
-								Rcpp::Named("predicted_Y") 	= predicted_Y);
+	return Rcpp::List::create(	Rcpp::Named("A")				= A,
+								Rcpp::Named("rate")				= rate,
+								Rcpp::Named("Xshift")			= Xshift,
+								Rcpp::Named("Npoints")			= count,
+								Rcpp::Named("Npositives")		= Npositives,
+								Rcpp::Named("window_starts")	= starts,
+								Rcpp::Named("window_ends")		= ends,
+								Rcpp::Named("predicted_Y") 		= predicted_Y);
 }
 
 
@@ -12626,7 +12634,7 @@ Rcpp::List get_closest_tip_per_clade_CPP(	const long 			Ntips,
 
 
 
-// For each clade (tip & node) in a tree, find the most distant tip (in terms of cumulative branch length).
+// For each clade (tip & node) in a rooted tree, find the most distant tip (in terms of cumulative branch length).
 // Optionally, the search can be restricted to descending tips.
 // Optionally, the search can also be restricted to a subset of target tips.
 // If you want distances in terms of branch counts (instead of cumulative branch lengths), simply provide an empty edge_length[].
@@ -12679,17 +12687,19 @@ Rcpp::List get_farthest_tip_per_clade_CPP(	const long 			Ntips,
 
 	// Step 1: calculate farthest descending tip per clade (traverse tips --> root)
 	std::vector<long> farthest_descending_tip_per_clade(Nclades,-1);
-	std::vector<double> distance_to_farthest_descending_tip_per_clade(Nclades,0);
+	std::vector<double> distance_to_farthest_descending_tip_per_clade(Nclades,NAN_D);
 	if(onlyToTips.size()==0){
 		// consider all tips as potential targets
 		for(long tip=0; tip<Ntips; ++tip){
 			farthest_descending_tip_per_clade[tip] = tip;
+			distance_to_farthest_descending_tip_per_clade[tip] = 0;
 		}
 	}else{
 		// only consider provided tips as targets
 		for(long t=0; t<onlyToTips.size(); ++t){
 			tip = onlyToTips[t];
 			farthest_descending_tip_per_clade[tip] = tip;
+			distance_to_farthest_descending_tip_per_clade[tip] = 0;
 		}
 	}
 	for(long q=traversal_queue_root2tips.size()-1; q>=0; --q){
@@ -12700,7 +12710,7 @@ Rcpp::List get_farthest_tip_per_clade_CPP(	const long 			Ntips,
 		incoming_edge	= incoming_edge_per_clade[clade];
 		// propagate information about farthest descending tip, to parent (if more distant than already saved for the parent)
 		candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_descending_tip_per_clade[clade];
-		if((candidate_distance>distance_to_farthest_descending_tip_per_clade[parent]) || (farthest_descending_tip_per_clade[parent]<0)){
+		if((farthest_descending_tip_per_clade[parent]<0) || (candidate_distance>distance_to_farthest_descending_tip_per_clade[parent])){
 			distance_to_farthest_descending_tip_per_clade[parent] = candidate_distance;
 			farthest_descending_tip_per_clade[parent] = farthest_descending_tip_per_clade[clade];
 		}
@@ -12708,14 +12718,15 @@ Rcpp::List get_farthest_tip_per_clade_CPP(	const long 			Ntips,
 	
 	if(only_descending_tips){
 		// only descending tips allowed, so we're finished
-		return Rcpp::List::create(	Rcpp::Named("farthest_tips") 		= Rcpp::wrap(farthest_descending_tip_per_clade),
-									Rcpp::Named("farthest_distances") 	= Rcpp::wrap(distance_to_farthest_descending_tip_per_clade));
+		return Rcpp::List::create(	Rcpp::Named("farthest_descending_tips") 	 = Rcpp::wrap(farthest_descending_tip_per_clade),
+									Rcpp::Named("farthest_descending_distances") = Rcpp::wrap(distance_to_farthest_descending_tip_per_clade));
 	}
 	
 
-	// Step 2: calculate farthest upstream tip per clade
+	// Step 2: calculate farthest upstream tip per clade (traverse root --> tips)
+	// Note that for the root we keep this undefined (tip index -1)
 	std::vector<long> farthest_upstream_tip_per_clade(Nclades,-1);
-	std::vector<double> distance_to_farthest_upstream_tip_per_clade(Nclades,0);
+	std::vector<double> distance_to_farthest_upstream_tip_per_clade(Nclades,NAN_D);
 	for(long q=1; q<traversal_queue_root2tips.size(); ++q){
 		clade	= traversal_queue_root2tips[q];
 		parent	= clade2parent[clade];
@@ -12726,15 +12737,15 @@ Rcpp::List get_farthest_tip_per_clade_CPP(	const long 			Ntips,
 			child = tree_edge[2*edge+1];
 			if(farthest_descending_tip_per_clade[child]<0) continue;
 			candidate_distance = (unit_edge_lengths ? 1.0+1.0 : edge_length[edge]+edge_length[incoming_edge]) + distance_to_farthest_descending_tip_per_clade[child];
-			if((candidate_distance>distance_to_farthest_upstream_tip_per_clade[clade]) || (farthest_upstream_tip_per_clade[clade]<0)){
+			if((farthest_upstream_tip_per_clade[clade]<0) || (candidate_distance>distance_to_farthest_upstream_tip_per_clade[clade])){
 				farthest_upstream_tip_per_clade[clade] = farthest_descending_tip_per_clade[child];
 				distance_to_farthest_upstream_tip_per_clade[clade] = candidate_distance;
 			}
 		}
-		// check if going further up than the parrent leads to an even farther target tip
+		// check if going further up than the parent leads to an even farther target tip
 		if(farthest_upstream_tip_per_clade[parent]>=0){
 			candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_upstream_tip_per_clade[parent];
-			if((candidate_distance>distance_to_farthest_upstream_tip_per_clade[clade]) || (farthest_upstream_tip_per_clade[clade]<0)){
+			if((farthest_upstream_tip_per_clade[clade]<0) || (candidate_distance>distance_to_farthest_upstream_tip_per_clade[clade])){
 				farthest_upstream_tip_per_clade[clade] = farthest_upstream_tip_per_clade[parent];
 				distance_to_farthest_upstream_tip_per_clade[clade] = candidate_distance;
 			}
@@ -12757,8 +12768,124 @@ Rcpp::List get_farthest_tip_per_clade_CPP(	const long 			Ntips,
 		}
 	}
 	
-	return Rcpp::List::create(	Rcpp::Named("farthest_tips") 		= Rcpp::wrap(farthest_tip_per_clade),
-								Rcpp::Named("farthest_distances") 	= Rcpp::wrap(distance_to_farthest_tip_per_clade));
+	return Rcpp::List::create(	Rcpp::Named("farthest_descending_tips") 	 	= Rcpp::wrap(farthest_descending_tip_per_clade),
+								Rcpp::Named("farthest_descending_distances") 	= Rcpp::wrap(distance_to_farthest_descending_tip_per_clade),
+								Rcpp::Named("farthest_upstream_tips") 			= Rcpp::wrap(farthest_upstream_tip_per_clade),
+								Rcpp::Named("farthest_upstream_distances") 		= Rcpp::wrap(distance_to_farthest_upstream_tip_per_clade),
+								Rcpp::Named("farthest_tips") 					= Rcpp::wrap(farthest_tip_per_clade),
+								Rcpp::Named("farthest_distances") 				= Rcpp::wrap(distance_to_farthest_tip_per_clade));
+}
+
+
+
+
+// For each edge in a rooted tree, find the most distant tip (in terms of cumulative branch length) in either direction ("upstream" and "downstream").
+// Optionally, the search can also be restricted to a subset of target tips.
+// If you want distances in terms of branch counts (instead of cumulative branch lengths), simply provide an empty edge_length[].
+// Requirements:
+//   The input tree must be rooted (root will be determined automatically, as the node that has no incoming edge)
+//   The input tree can be multifurcating and/or monofurcating
+// [[Rcpp::export]]
+Rcpp::List get_farthest_tips_per_edge_CPP(	const long 					Ntips,
+											const long 					Nnodes,
+											const long 					Nedges,
+											const std::vector<long> 	&tree_edge,		// 2D array of size Nedges x 2 in row-major format
+											const std::vector<double> 	&edge_length, 	// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+											const std::vector<long>		&onlyToTips){	// 1D array listing target tips to restrict search to, or an empty std::vector (consider all tips as targets)
+	const long Nclades = Ntips + Nnodes;
+	long parent, clade, node, tip, incoming_edge;
+	double candidate_distance;
+	const bool unit_edge_lengths = (edge_length.size()==0);
+
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+
+	// Step 1: calculate farthest descending tip per clade (traverse tips --> root), and thus per edge
+	lvector farthest_descending_tip_per_clade(Nclades,-1);
+	dvector distance_to_farthest_descending_tip_per_clade(Nclades,NAN_D);
+	if(onlyToTips.size()==0){
+		// consider all tips as potential targets
+		for(long tip=0; tip<Ntips; ++tip){
+			farthest_descending_tip_per_clade[tip] = tip;
+			distance_to_farthest_descending_tip_per_clade[tip] = 0;
+		}
+	}else{
+		// only consider provided tips as targets
+		for(long t=0; t<onlyToTips.size(); ++t){
+			tip = onlyToTips[t];
+			farthest_descending_tip_per_clade[tip] = tip;
+			distance_to_farthest_descending_tip_per_clade[tip] = 0;
+		}
+	}
+	for(long q=traversal.queue.size()-1; q>=0; --q){
+		clade = traversal.queue[q];
+		if(clade==root) continue;
+		if(farthest_descending_tip_per_clade[clade]<0) continue; // no descending tip available from this clade
+		parent			= clade2parent[clade];
+		incoming_edge	= incoming_edge_per_clade[clade];
+		// propagate information about farthest descending tip, to parent (if more distant than already saved for the parent)
+		candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_descending_tip_per_clade[clade];
+		if((farthest_descending_tip_per_clade[parent]<0) || (candidate_distance>distance_to_farthest_descending_tip_per_clade[parent])){
+			distance_to_farthest_descending_tip_per_clade[parent] = candidate_distance;
+			farthest_descending_tip_per_clade[parent] = farthest_descending_tip_per_clade[clade];
+		}
+	}
+	lvector farthest_descending_tip_per_edge(Nedges,-1);
+	dvector distance_to_farthest_descending_tip_per_edge(Nedges,NAN_D);
+	for(long edge=0, child; edge<Nedges; ++edge){
+		child = tree_edge[2*edge+1];
+		farthest_descending_tip_per_edge[edge] 				= farthest_descending_tip_per_clade[child];
+		distance_to_farthest_descending_tip_per_edge[edge] 	= distance_to_farthest_descending_tip_per_clade[child];
+	}
+	
+	// Step 2: calculate farthest upstream tip per edge (traverse edges root --> tips)
+	lvector farthest_upstream_tip_per_edge(Nedges,-1);
+	dvector distance_to_farthest_upstream_tip_per_edge(Nedges,NAN_D);
+	for(long q=0; q<traversal.queue.size(); ++q){
+		clade = traversal.queue[q];
+		if(clade<Ntips) continue;
+		node = clade-Ntips;
+		for(long e=traversal.node2first_edge[node], edge; e<=traversal.node2last_edge[node]; ++e){
+			edge = traversal.edge_mapping[e];
+			// check incoming edge
+			if(clade!=root){
+				incoming_edge = incoming_edge_per_clade[clade];
+				if(farthest_upstream_tip_per_edge[incoming_edge]>=0){
+					farthest_upstream_tip_per_edge[edge] = farthest_upstream_tip_per_edge[incoming_edge];
+					distance_to_farthest_upstream_tip_per_edge[edge] = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_upstream_tip_per_edge[incoming_edge];
+				}
+			}
+			// check all sister edges in an attempt to find more distant upstream tips
+			for(long se=traversal.node2first_edge[node], sister_edge; se<=traversal.node2last_edge[node]; ++se){
+				sister_edge = traversal.edge_mapping[se];
+				if(sister_edge==edge) continue;
+				if(farthest_descending_tip_per_edge[sister_edge]<0) continue; // no valid tip descending from sister_edge
+				candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[sister_edge]) + distance_to_farthest_descending_tip_per_edge[sister_edge];
+				if((farthest_upstream_tip_per_edge[edge]<0) || (candidate_distance>distance_to_farthest_upstream_tip_per_edge[edge])){
+					distance_to_farthest_upstream_tip_per_edge[edge] = candidate_distance;
+					farthest_upstream_tip_per_edge[edge] = farthest_descending_tip_per_edge[sister_edge];
+				}
+			}
+		}
+	}
+	
+	return Rcpp::List::create(	Rcpp::Named("farthest_descending_tips") 	 	= Rcpp::wrap(farthest_descending_tip_per_edge),
+								Rcpp::Named("farthest_descending_distances") 	= Rcpp::wrap(distance_to_farthest_descending_tip_per_edge),
+								Rcpp::Named("farthest_upstream_tips") 			= Rcpp::wrap(farthest_upstream_tip_per_edge),
+								Rcpp::Named("farthest_upstream_distances") 		= Rcpp::wrap(distance_to_farthest_upstream_tip_per_edge));
 }
 
 
@@ -13019,6 +13146,70 @@ NumericVector get_distances_between_clades_CPP(	const long 					Ntips,
 	return Rcpp::wrap(distances);
 }
 
+
+
+// Given a phylogenetic tree, find the two tips that are furthest apart from each other
+// [[Rcpp::export]]
+Rcpp::List get_farthest_tip_pair_CPP(	const long 					Ntips,
+										const long 					Nnodes,
+										const long 					Nedges,
+										const std::vector<long>		&tree_edge,			// (INPUT) 2D array of size Nedges x 2, flattened in row-major format
+										const std::vector<double> 	&edge_length){ 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+	const long Nclades = Ntips + Nnodes;
+	const bool has_edge_lengths = (edge_length.size()>0);
+
+	// determine parent clade for each clade
+	lvector clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
+
+	// get incoming edge for each clade
+	lvector clade2incoming_edge;
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2incoming_edge);
+
+	// get tree traversal (root-->tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	
+	// determine farthest tip descending from each node, traversing tips-->root
+	// also simultaneously keep track of furthest tip pair found
+	lvector clade2farthest_tip(Nclades,-1);
+	dvector clade2max_tip_distance(Nclades,0);
+	long farthest_tip1=0, farthest_tip2=0;
+	double max_tip_distance=0;
+	for(long tip=0; tip<Ntips; ++tip){
+		clade2farthest_tip[tip] = tip;
+	}
+	double candidate_distance;
+	for(long q=traversal.queue.size()-1, clade, parent, edge; q>0; --q){
+		clade  	= traversal.queue[q];
+		parent	= clade2parent[clade];
+		edge	= clade2incoming_edge[clade];
+		candidate_distance = (has_edge_lengths ? edge_length[edge] : 1.0) + clade2max_tip_distance[clade];
+		if(clade2farthest_tip[parent]<0){
+			// no other child recorded its data for this parent yet
+			clade2max_tip_distance[parent] = candidate_distance;
+			clade2farthest_tip[parent] = clade2farthest_tip[clade];
+		}else{
+			// some other child of this parent recorded its data already, so check if it should be replaced, and also check if we can use that previously recorded data to define a more distant tip pair than found so far
+			if(clade2max_tip_distance[parent]+candidate_distance>=max_tip_distance){
+				// found a more distant tip pair
+				max_tip_distance = clade2max_tip_distance[parent]+candidate_distance;
+				farthest_tip1	 = clade2farthest_tip[parent];
+				farthest_tip2	 = clade2farthest_tip[clade];
+			}
+			if(candidate_distance>=clade2max_tip_distance[parent]){
+				clade2max_tip_distance[parent] = candidate_distance;
+				clade2farthest_tip[parent] = clade2farthest_tip[clade];
+			}
+		}
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("farthest_tip1") 	= farthest_tip1,
+								Rcpp::Named("farthest_tip2") 	= farthest_tip2,
+								Rcpp::Named("max_tip_distance")	= max_tip_distance);
+}
 
 
 // Given a state for each clade (tip or node), and a list of clade pairs (A[], B[]), count the number of state transitions along the shortest path connecting every clade-pair
@@ -15127,6 +15318,92 @@ void reroot_tree_at_node(	const long 			Ntips,
 	}
 }
 
+
+
+// Unroot a phylogenetic tree, by eliminating the root node if it is bifurcating (thus connecting its two child edges into a single edge)
+// Note that noting is done if the tree is not rooted, or if the root has more than 2 outgoing edges.
+// The number of tips and the tip indices are kept unchanged, and the number of nodes is reduced by at most 1
+// Requirements:
+//	 The original tree can include mono- and multi-furcations
+//   The original tree may or may not be rooted.
+//	 The original tree must have at least 3 tips.
+// [[Rcpp::export]]
+Rcpp::List eliminate_bifurcating_root_CPP(const long 					Ntips,
+									const long 					Nnodes,
+									const long 					Nedges,
+									const std::vector<long>		&tree_edge,		// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+									const std::vector<double> 	&edge_length){ 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+	const long Nclades = Ntips + Nnodes;
+	
+	// determine root (unique node with no incoming edge)
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+	if(root<0) return Rcpp::List::create(Rcpp::Named("changed") = false); // tree is already unrooted
+	
+	// find all edges descending from the root
+	lvector root_edges;
+	for(long edge=0; edge<Nedges; ++edge){
+		if(tree_edge[2*edge+0] == root) root_edges.push_back(edge);
+	}
+	if(root_edges.size()!=2) return Rcpp::List::create(Rcpp::Named("changed") = false); // root is not bifurcating
+	
+	// keeep track of the two root children, numbered such that upon removal of the root child2 will descend frm child1
+	// make sure that child1 is not a tip (since the original tree has at least 3 tips by assumption, it is guaranteed that one of the two root children is a node)
+	long root_child1 = tree_edge[2*root_edges[0]+1];
+	long root_child2 = tree_edge[2*root_edges[1]+1];
+	if(root_child1<Ntips)  std::swap(root_child1, root_child2);
+	
+	// renumber all clades > root by subtracting 1
+	const long Nclades_new = Nclades-1;
+	lvector new2old_clade(Nclades_new,-1), old2new_clade(Nclades,-1);
+	for(long clade=0; clade<root; ++clade){
+		new2old_clade[clade] = clade;
+		old2new_clade[clade] = clade;
+	}
+	for(long clade=root+1; clade<Nclades; ++clade){
+		new2old_clade[clade-1] = clade;
+		old2new_clade[clade]   = clade-1;
+	}
+	
+	// to satisfy some conventions of the ape package, make sure that the node gaining an extra child (due to edge merging) is the first node in the new tree
+	const long semiroot = root_child1;
+	const long swapped  = new2old_clade[Ntips];
+	if(swapped!=semiroot){
+		new2old_clade[Ntips] = semiroot;
+		new2old_clade[old2new_clade[semiroot]] = swapped;
+
+		long temp = old2new_clade[semiroot];
+		old2new_clade[semiroot] = Ntips;
+		old2new_clade[swapped]  = temp;		
+	}
+	
+	// redefine all edges, in terms of the new clade indices and with the two root edges merged
+	const long Nedges_new = Nedges-1;
+	lvector new_tree_edge;
+	new_tree_edge.reserve(Nedges_new*2);
+	dvector new_edge_length;
+	new_edge_length.reserve(Nedges_new);
+	for(long edge=0; edge<Nedges; ++edge){
+		if(tree_edge[2*edge+0]==root) continue; // skip root edges for now
+		new_tree_edge.push_back(old2new_clade[tree_edge[2*edge+0]]);
+		new_tree_edge.push_back(old2new_clade[tree_edge[2*edge+1]]);
+		new_edge_length.push_back(edge_length.empty() ? 1.0 : edge_length[edge]);
+	}
+	
+	// add merged root edges as one final edge, pointing from root_child1 to root_child2
+	new_tree_edge.push_back(old2new_clade[root_child1]);
+	new_tree_edge.push_back(old2new_clade[root_child2]);
+	new_edge_length.push_back(edge_length.empty() ? 2.0 : (edge_length[root_edges[0]]+edge_length[root_edges[1]]));
+
+
+	return Rcpp::List::create(	Rcpp::Named("changed") 			= true,
+								Rcpp::Named("Nnodes") 			= Nnodes-1,
+								Rcpp::Named("Nclades") 			= Nclades_new,
+								Rcpp::Named("Nedges") 			= Nedges_new,
+								Rcpp::Named("old2new_clade")	= old2new_clade,
+								Rcpp::Named("new2old_clade")	= new2old_clade,
+								Rcpp::Named("new_tree_edge") 	= new_tree_edge,
+								Rcpp::Named("new_edge_length")	= new_edge_length);
+}
 
 
 
@@ -17888,7 +18165,7 @@ bool aux_Newick_extract_next_edge(	const std::string 	&input,
 									long				&edge_number,		// (OUTPUT) edge number. Will be negative if not available
 									string				&error){			// (OUTPUT) error description in case of failure
 	long left = -1, split=-1;
-	bool single_quote_open = false, double_quote_open = false;
+	bool single_quote_open = false, double_quote_open = false, square_bracket_open = false;
 	for(long i=pointer; i>=0; --i){
 		if(interpret_quotes){
 			if((!single_quote_open) && (input[i]=='"')){
@@ -17899,7 +18176,14 @@ bool aux_Newick_extract_next_edge(	const std::string 	&input,
 				continue;
 			}
 		}
-		if((!single_quote_open) && (!double_quote_open)){
+		if(look_for_name && (!square_bracket_open) && (input[i]==']') && (!double_quote_open) && (!single_quote_open)){
+			square_bracket_open = true;
+			continue;
+		}else if(look_for_name && square_bracket_open && (input[i]=='[') && (!double_quote_open) && (!single_quote_open)){
+			square_bracket_open = false;
+			continue;
+		}
+		if((!single_quote_open) && (!double_quote_open) && (!square_bracket_open)){
 			if(input[i]==':'){
 				split = i;
 			}else if((input[i]=='(') || (input[i]==')') || (input[i]==',')){
@@ -17916,6 +18200,9 @@ bool aux_Newick_extract_next_edge(	const std::string 	&input,
 		return false;	
 	}else if(double_quote_open){
 		error = "Imbalanced single quotes";
+		return false;	
+	}else if(square_bracket_open){
+		error = "Imbalanced square brackets";
 		return false;	
 	}
 	if(left==pointer){
@@ -30244,7 +30531,7 @@ double SBM_get_average_transition_angle_CPP(const double	tD,					// (INPUT) prod
 		// use planar approximation
 		return sqrt(M_PI*tD);
 	}else if(tD<0.1){
-		// use approximation by [Gosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
+		// use approximation by [Ghosh et al. 2012, A Gaussian for diffusion on the sphere. Europhysics Letters. 98:30003]
 		double A = integrate1D(	[&] (const double omega) { return omega*sqrt(sin(omega)*omega)*exp(-SQ(omega)/(4*tD)); }, 
 								0, 		// xmin
 								M_PI, 	// xmax
@@ -30666,15 +30953,17 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 								const std::vector<double> 	&edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 								const std::vector<double>	&tip_latitudes,		// 1D array of size Ntips, listing the latitudes (decimal decrees from -90 to 90) of the tips
 								const std::vector<double>	&tip_longitudes,	// 1D array of size Ntips, listing the longitudes (decimal decrees from -180 to 180) of the tips
-								long						Npairs,				// number of random tip pairs for estimating the correlation function. If <=0, all possible pairs are used.
-								const long					Nbins,				// number of different distances x at which to estimate the correlation function. This is the number of bins spanning all possible phylogenetic distances.
+								const double				max_Npairs,			// maximum number of random tip pairs for estimating the correlation function. If INFTY_D, all possible pairs are used.
+								const std::vector<double>	&phylodistance_grid,// 1D array of size Nbins, specifying the left-edges of the phylodistance bins in which to estimate the ACF. Must be in strictly ascending order.
+								const double				max_phylodistance,	// maximum phylodistance to consider, i.e. the right-edge of the right-most phylodistance bin. Hence, the first bin extends from phylodistance_grid[1] to phylodistance_grid[2], while the last cell extends from phylodistance_grid.back() to max_phylodistance
+								const bool					grid_is_uniform,	// whether the provided phylodistance_grid[] is uniform (except perhaps for the last grid cell) 
 								bool 						verbose,
 								const std::string 			&verbose_prefix){	
 	// pick tip pairs to include
 	lvector tipsA, tipsB;
-	if(Npairs<=0){
+	long Npairs = Ntips*(Ntips-1)/2+Ntips;
+	if(max_Npairs >= Npairs){
 		// include every possible tip pair exactly once
-		Npairs = Ntips*(Ntips-1)/2+Ntips;
 		tipsA.resize(Npairs);
 		tipsB.resize(Npairs);
 		for(long n=0, p=0, m; n<Ntips; ++n){
@@ -30685,7 +30974,8 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 			}
 		}
 	}else{
-		// pick Npairs random tips
+		// pick a random subset of max_Npairs tips
+		Npairs = max_Npairs;
 		tipsA.resize(Npairs);
 		tipsB.resize(Npairs);
 		for(long p=0; p<Npairs; ++p){
@@ -30703,7 +30993,7 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 	}
 	
 	// calculate phylodistance for each tip pair
-	const dvector distances = Rcpp::as<std::vector<double> >(
+	const dvector phylodistances = Rcpp::as<std::vector<double> >(
 								get_distances_between_clades_CPP(	Ntips,
 																	Nnodes,
 																	Nedges,
@@ -30714,41 +31004,57 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 																	verbose,
 																	verbose_prefix));
 																		
-	// determine distance bins
-	const double min_distance = array_min(distances);
-	const double max_distance = array_max(distances);
-	const double dx = (max_distance-min_distance)/Nbins;
-	std::vector<double> distance_grid(Nbins);
-	for(long b=0; b<Nbins; ++b){
-		distance_grid[b] = min_distance + dx*(b+0.5);
-	}
+	// determine phylodistance bins
 																		
-	// calculate correlation within each distance-bin
+	// calculate correlation within each phylodistance-bin
+	const long Nbins = phylodistance_grid.size();
+	const double min_phylodistance = phylodistance_grid[0];
+	const double dx = ((grid_is_uniform && (Nbins>0)) ? phylodistance_grid[1]-phylodistance_grid[0] : NAN_D);
 	lvector pairs_per_bin(Nbins,0);
-	dvector autocorrelations(Nbins,0), mean_geodistances(Nbins,0);
-	for(long p=0, bin, tipA, tipB; p<Npairs; ++p){
+	dvector mean_autocorrelations(Nbins,0), mean_geodistances(Nbins,0), std_geodistances(Nbins,0), std_autocorrelations(Nbins,0), SS_geodistances(Nbins,0), SS_autocorrelations(Nbins,0);
+	double AC, geodistance;
+	long bin=-1;
+	for(long p=0, tipA, tipB; p<Npairs; ++p){
 		tipA 	= tipsA[p];
 		tipB 	= tipsB[p];
-		bin 	= max(0L,min(Nbins-1,long(floor((distances[p]-min_distance)/dx))));
-		autocorrelations[bin] 	+= tip_unit_vectors[tipA*3+0]*tip_unit_vectors[tipB*3+0] + tip_unit_vectors[tipA*3+1]*tip_unit_vectors[tipB*3+1] + tip_unit_vectors[tipA*3+2]*tip_unit_vectors[tipB*3+2];
-		mean_geodistances[bin]	+= geodesic_angle(M_PI*tip_latitudes[tipA]/180.0, M_PI*tip_longitudes[tipA]/180.0, M_PI*tip_latitudes[tipB]/180.0, M_PI*tip_longitudes[tipB]/180.0);
-		pairs_per_bin[bin] 		+= 1;
+		if((phylodistances[p]<min_phylodistance) || (phylodistances[p]>max_phylodistance)) continue; // this phylodistance is outside of the considered range
+		if(grid_is_uniform){
+			bin = max(0L,min(Nbins-1,long(floor((phylodistances[p]-min_phylodistance)/dx))));
+		}else{
+			bin = find_next_left_grid_point(phylodistance_grid, phylodistances[p], bin);
+		}
+		AC							= tip_unit_vectors[tipA*3+0]*tip_unit_vectors[tipB*3+0] + tip_unit_vectors[tipA*3+1]*tip_unit_vectors[tipB*3+1] + tip_unit_vectors[tipA*3+2]*tip_unit_vectors[tipB*3+2];
+		mean_autocorrelations[bin] 	+= AC;
+		SS_autocorrelations[bin] 	+= SQ(AC);
+		geodistance					= geodesic_angle(M_PI*tip_latitudes[tipA]/180.0, M_PI*tip_longitudes[tipA]/180.0, M_PI*tip_latitudes[tipB]/180.0, M_PI*tip_longitudes[tipB]/180.0);
+		mean_geodistances[bin]		+= geodistance;
+		SS_geodistances[bin]		+= SQ(geodistance);
+		pairs_per_bin[bin] 			+= 1;
 		if((p%1000)==0) Rcpp::checkUserInterrupt();
 	}
 	for(long bin=0; bin<Nbins; ++bin){
 		if(pairs_per_bin[bin]==0){
-			autocorrelations[bin] = NAN_D;
-			mean_geodistances[bin]= NAN_D;
+			mean_autocorrelations[bin] 	= NAN_D;
+			std_autocorrelations[bin]	= NAN_D;
+			SS_autocorrelations[bin]	= NAN_D;
+			mean_geodistances[bin]		= NAN_D;
+			std_geodistances[bin]		= NAN_D;
+			SS_geodistances[bin]		= NAN_D;
 		}else{
-			autocorrelations[bin] /= pairs_per_bin[bin];
-			mean_geodistances[bin]/= pairs_per_bin[bin];
+			mean_autocorrelations[bin] 	/= pairs_per_bin[bin];
+			std_autocorrelations[bin] 	= sqrt(SS_autocorrelations[bin]/pairs_per_bin[bin] - SQ(mean_autocorrelations[bin]));
+			mean_geodistances[bin]		/= pairs_per_bin[bin];
+			std_geodistances[bin] 		= sqrt(SS_geodistances[bin]/pairs_per_bin[bin] - SQ(mean_geodistances[bin]));
 		}
 	}
 	
-	return Rcpp::List::create(	Rcpp::Named("distance_grid")		= Rcpp::wrap(distance_grid),
-								Rcpp::Named("N_per_grid_point")		= Rcpp::wrap(pairs_per_bin),
-								Rcpp::Named("autocorrelations")		= Rcpp::wrap(autocorrelations),
-								Rcpp::Named("mean_geodistances") 	= Rcpp::wrap(mean_geodistances));
+	return Rcpp::List::create(	Rcpp::Named("N_per_grid_point")			= Rcpp::wrap(pairs_per_bin),
+								Rcpp::Named("mean_autocorrelations")	= Rcpp::wrap(mean_autocorrelations),
+								Rcpp::Named("std_autocorrelations")		= Rcpp::wrap(std_autocorrelations),
+								Rcpp::Named("SS_autocorrelations")		= Rcpp::wrap(SS_autocorrelations), // sum of squared autocorrelations per bin
+								Rcpp::Named("mean_geodistances") 		= Rcpp::wrap(mean_geodistances),
+								Rcpp::Named("std_geodistances") 		= Rcpp::wrap(std_geodistances),
+								Rcpp::Named("SS_geodistances") 			= Rcpp::wrap(SS_geodistances)); // sum of squared geodistances per bin
 }
 
 

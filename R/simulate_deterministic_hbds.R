@@ -161,7 +161,7 @@ simulate_deterministic_hbds = function(	age_grid						= NULL,		# numeric vector 
 				IPDR				= simulation$IPDR,	# age-integrated PDR, \int_0^t PDR(s) ds
 				PSR					= simulation$PSR,	# pulled speciation rate
 				PRP					= simulation$PRP,	# pulled retention probability
-				diversification_rate= simulation$diversification, # net diversification rate
+				diversification_rate= simulation$diversification, # net diversification rate, lambda-mu-psi
 				branching_density	= simulation$PSR * simulation$nLTT, # non-normalized probability density of branching points over time (in units 1/time)
 				sampling_density	= simulation$psi * simulation$total_diversity/LTT_AUC, # non-normalized probability density of sampling points over time (in units 1/time)
 				lambda_psi			= simulation$lambda * simulation$psi,

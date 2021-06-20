@@ -74,7 +74,7 @@ tree_distance = function(	treeA,
 		# First Wasserstein ("1-Wasserstein") distance between the eigenspectra of the modified graph Laplacians
 		# This distance depends on topology and branch lengths, but not on tip labeling nor on the rooting
 		# Hence, this is strictly speaking a metric in the space of unrooted unlabeled trees, but not a metric in the space of labeled trees.
-		# This metric is similar to that proposed by Lewitus and Morlon (2016, Systematic Biology. 65:495-507), with the difference that the latter calculates a smoothened version of the spectrum (via a Gaussian convolution kernel) and then calculates the Kullback-Leibler divergence between the smoothened densities.
+		# This distance is similar to that proposed by Lewitus and Morlon (2016, Systematic Biology. 65:495-507), with the difference that the latter calculates a smoothened version of the spectrum (via a Gaussian convolution kernel) and then calculates the Kullback-Leibler divergence between the smoothened densities.
 		# Note that if not all eigenvalues are used (i.e. NLeigenvalues>0 and NLeigenvalues<max(NcladesA,NcladesB)), then this is not even a metric on the space of unlabeled unrooted trees. 
 		LaplacianA 	= weighted_graph_Laplacian_of_tree(treeA, sparse=(if((NLeigenvalues>0) && (NLeigenvalues<NcladesA)) TRUE else FALSE))
 		LaplacianB 	= weighted_graph_Laplacian_of_tree(treeB, sparse=(if((NLeigenvalues>0) && (NLeigenvalues<NcladesB)) TRUE else FALSE))

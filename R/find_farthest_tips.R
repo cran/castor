@@ -17,6 +17,10 @@ find_farthest_tips = function(tree, only_descending_tips=FALSE, target_tips=NULL
 												only_descending_tips	= only_descending_tips,
 												verbose					= FALSE,
 												verbose_prefix			= "");
+	if(only_descending_tips){
+		results$farthest_tips 		= results$farthest_descending_tips;
+		results$farthest_distances 	= results$farthest_descending_distances;
+	}
 	results$farthest_tips[results$farthest_tips<0] = NA;
 	return(list(farthest_tip_per_tip		= (results$farthest_tips[1:Ntips] + 1), 
 				farthest_tip_per_node		= (results$farthest_tips[(Ntips+1):(Ntips+Nnodes)] + 1), 

@@ -13,7 +13,7 @@ asr_mk_model = function(tree,
 						transition_matrix 		= NULL,				# either NULL, or a transition matrix of size Nstates x Nstates, such that transition_matrix^T * p gives the rate of change of probability vector p. If NULL, the transition matrix will be fitted via maximum-likelihood. The convention is that [i,j] gives the transition rate i-->j.
 						include_ancestral_likelihoods = TRUE,		# (bool) include the marginal ancestral state likelihoods for all nodes in the returned values
 						reroot 					= TRUE,				# (bool) Use the rerooting method by [Yang 1995] to obtain the likelihoods for each node. This requires that the model be time-reversible. If FALSE, likelihoods will only be local, i.e. based on descending subtrees
-						root_prior 				= "empirical",		# can be 'auto', 'flat', 'stationary', 'empirical', 'likelihoods', 'max_likelihood' or a numeric vector of size Nstates, specifying the prior probabilities for the tree's root. Used to define the tree's likelihood, based on the root's marginal likelihoods
+						root_prior 				= "auto",			# can be 'auto', 'flat', 'stationary', 'empirical', 'likelihoods', 'max_likelihood' or a numeric vector of size Nstates, specifying the prior probabilities for the tree's root. Used to define the tree's likelihood, based on the root's marginal likelihoods
 						Ntrials 				= 1,				# (int) number of trials (starting points) for fitting the transition matrix. Only relevant if transition_matrix=NULL.
 						optim_algorithm		 	= "nlminb",			# either "optim" or "nlminb". What algorithm to use for fitting.
 						optim_max_iterations	= 200,				# maximum number of iterations of the optimization algorithm (per trial)
@@ -60,6 +60,7 @@ asr_mk_model = function(tree,
 
 
     # estimate transition matrix if needed
+    modelAIC = NULL
     if(is.null(transition_matrix)){
     	fit = fit_mk(	trees					= tree,
 						Nstates					= Nstates,
@@ -77,8 +78,9 @@ asr_mk_model = function(tree,
 		if(!fit$success){
 			return(list(success=FALSE, error=sprintf("Could not fit transition rate matrix: %s",fit$error)))
 		}
-		transition_matrix = fit$transition_matrix
-		loglikelihood = fit$loglikelihood
+		transition_matrix 	= fit$transition_matrix
+		loglikelihood 		= fit$loglikelihood
+		modelAIC			= fit$AIC
     }else{
 		if(check_input){
 			# make sure this is a valid transition matrix
@@ -155,11 +157,12 @@ asr_mk_model = function(tree,
 	}
 	
 	# return results
-	if(include_ancestral_likelihoods){
-		return(list(success=TRUE, Nstates=Nstates, transition_matrix=transition_matrix, loglikelihood=loglikelihood, ancestral_likelihoods=ancestral_likelihoods));
-	}else{
-		return(list(success=TRUE, Nstates=Nstates, transition_matrix=transition_matrix, loglikelihood=loglikelihood));
-	}
+	return(list(success					= TRUE, 
+				Nstates					= Nstates,
+				transition_matrix		= transition_matrix,
+				loglikelihood			= loglikelihood,
+				AIC						= modelAIC,
+				ancestral_likelihoods	= (if(include_ancestral_likelihoods) ancestral_likelihoods else NULL)))
 }
 
 

@@ -157,12 +157,20 @@ get_farthest_tip_per_clade_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edg
     .Call(`_castor_get_farthest_tip_per_clade_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips, only_descending_tips, verbose, verbose_prefix)
 }
 
+get_farthest_tips_per_edge_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips) {
+    .Call(`_castor_get_farthest_tips_per_edge_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips)
+}
+
 get_distance_matrix_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_clades, verbose, verbose_prefix) {
     .Call(`_castor_get_distance_matrix_between_clades_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_clades, verbose, verbose_prefix)
 }
 
 get_distances_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, cladesA, cladesB, verbose, verbose_prefix) {
     .Call(`_castor_get_distances_between_clades_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, cladesA, cladesB, verbose, verbose_prefix)
+}
+
+get_farthest_tip_pair_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
+    .Call(`_castor_get_farthest_tip_pair_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
 count_transitions_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, clade_states, cladesA, cladesB) {
@@ -239,6 +247,10 @@ get_subtrees_at_nodes_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, new_root
 
 get_subtree_with_specific_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tips_to_keep, collapse_monofurcations, force_keep_root) {
     .Call(`_castor_get_subtree_with_specific_tips_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tips_to_keep, collapse_monofurcations, force_keep_root)
+}
+
+eliminate_bifurcating_root_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
+    .Call(`_castor_eliminate_bifurcating_root_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
 find_root_for_monophyletic_clade_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, is_rooted, target_tips, as_MRCA) {
@@ -605,8 +617,8 @@ fit_SBM_from_sampled_transitions_CPP <- function(radius, time_steps, old_thetas,
     .Call(`_castor_fit_SBM_from_sampled_transitions_CPP`, radius, time_steps, old_thetas, old_phis, new_thetas, new_phis, Nlat, Nlon, sampling_rates, max_error, max_Legendre_terms, opt_epsilon, max_iterations, min_diffusivity, max_diffusivity, Nbootstraps)
 }
 
-ACF_spherical_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix) {
-    .Call(`_castor_ACF_spherical_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix)
+ACF_spherical_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, max_Npairs, phylodistance_grid, max_phylodistance, grid_is_uniform, verbose, verbose_prefix) {
+    .Call(`_castor_ACF_spherical_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, max_Npairs, phylodistance_grid, max_phylodistance, grid_is_uniform, verbose, verbose_prefix)
 }
 
 read_fasta_from_file_CPP <- function(fasta_path, include_headers, include_sequences) {

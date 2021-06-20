@@ -602,6 +602,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_farthest_tips_per_edge_CPP
+Rcpp::List get_farthest_tips_per_edge_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<long>& onlyToTips);
+RcppExport SEXP _castor_get_farthest_tips_per_edge_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP onlyToTipsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type onlyToTips(onlyToTipsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_farthest_tips_per_edge_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, onlyToTips));
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_distance_matrix_between_clades_CPP
 NumericMatrix get_distance_matrix_between_clades_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<long>& focal_clades, bool verbose, const std::string& verbose_prefix);
 RcppExport SEXP _castor_get_distance_matrix_between_clades_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP focal_cladesSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
@@ -636,6 +652,21 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
     rcpp_result_gen = Rcpp::wrap(get_distances_between_clades_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, cladesA, cladesB, verbose, verbose_prefix));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_farthest_tip_pair_CPP
+Rcpp::List get_farthest_tip_pair_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length);
+RcppExport SEXP _castor_get_farthest_tip_pair_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_farthest_tip_pair_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -944,6 +975,21 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type collapse_monofurcations(collapse_monofurcationsSEXP);
     Rcpp::traits::input_parameter< bool >::type force_keep_root(force_keep_rootSEXP);
     rcpp_result_gen = Rcpp::wrap(get_subtree_with_specific_tips_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, tips_to_keep, collapse_monofurcations, force_keep_root));
+    return rcpp_result_gen;
+END_RCPP
+}
+// eliminate_bifurcating_root_CPP
+Rcpp::List eliminate_bifurcating_root_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length);
+RcppExport SEXP _castor_eliminate_bifurcating_root_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(eliminate_bifurcating_root_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2714,8 +2760,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // ACF_spherical_CPP
-Rcpp::List ACF_spherical_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& tip_latitudes, const std::vector<double>& tip_longitudes, long Npairs, const long Nbins, bool verbose, const std::string& verbose_prefix);
-RcppExport SEXP _castor_ACF_spherical_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_latitudesSEXP, SEXP tip_longitudesSEXP, SEXP NpairsSEXP, SEXP NbinsSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
+Rcpp::List ACF_spherical_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& tip_latitudes, const std::vector<double>& tip_longitudes, const double max_Npairs, const std::vector<double>& phylodistance_grid, const double max_phylodistance, const bool grid_is_uniform, bool verbose, const std::string& verbose_prefix);
+RcppExport SEXP _castor_ACF_spherical_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_latitudesSEXP, SEXP tip_longitudesSEXP, SEXP max_NpairsSEXP, SEXP phylodistance_gridSEXP, SEXP max_phylodistanceSEXP, SEXP grid_is_uniformSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2726,11 +2772,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type tip_latitudes(tip_latitudesSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type tip_longitudes(tip_longitudesSEXP);
-    Rcpp::traits::input_parameter< long >::type Npairs(NpairsSEXP);
-    Rcpp::traits::input_parameter< const long >::type Nbins(NbinsSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_Npairs(max_NpairsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type phylodistance_grid(phylodistance_gridSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_phylodistance(max_phylodistanceSEXP);
+    Rcpp::traits::input_parameter< const bool >::type grid_is_uniform(grid_is_uniformSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
-    rcpp_result_gen = Rcpp::wrap(ACF_spherical_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, Npairs, Nbins, verbose, verbose_prefix));
+    rcpp_result_gen = Rcpp::wrap(ACF_spherical_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_latitudes, tip_longitudes, max_Npairs, phylodistance_grid, max_phylodistance, grid_is_uniform, verbose, verbose_prefix));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2788,8 +2836,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_distances_from_root_CPP", (DL_FUNC) &_castor_get_distances_from_root_CPP, 5},
     {"_castor_get_closest_tip_per_clade_CPP", (DL_FUNC) &_castor_get_closest_tip_per_clade_CPP, 9},
     {"_castor_get_farthest_tip_per_clade_CPP", (DL_FUNC) &_castor_get_farthest_tip_per_clade_CPP, 9},
+    {"_castor_get_farthest_tips_per_edge_CPP", (DL_FUNC) &_castor_get_farthest_tips_per_edge_CPP, 6},
     {"_castor_get_distance_matrix_between_clades_CPP", (DL_FUNC) &_castor_get_distance_matrix_between_clades_CPP, 8},
     {"_castor_get_distances_between_clades_CPP", (DL_FUNC) &_castor_get_distances_between_clades_CPP, 9},
+    {"_castor_get_farthest_tip_pair_CPP", (DL_FUNC) &_castor_get_farthest_tip_pair_CPP, 5},
     {"_castor_count_transitions_between_clades_CPP", (DL_FUNC) &_castor_count_transitions_between_clades_CPP, 7},
     {"_castor_count_clades_at_regular_times_CPP", (DL_FUNC) &_castor_count_clades_at_regular_times_CPP, 10},
     {"_castor_count_clades_at_times_CPP", (DL_FUNC) &_castor_count_clades_at_times_CPP, 7},
@@ -2809,6 +2859,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_subtree_at_node_CPP", (DL_FUNC) &_castor_get_subtree_at_node_CPP, 5},
     {"_castor_get_subtrees_at_nodes_CPP", (DL_FUNC) &_castor_get_subtrees_at_nodes_CPP, 5},
     {"_castor_get_subtree_with_specific_tips_CPP", (DL_FUNC) &_castor_get_subtree_with_specific_tips_CPP, 8},
+    {"_castor_eliminate_bifurcating_root_CPP", (DL_FUNC) &_castor_eliminate_bifurcating_root_CPP, 5},
     {"_castor_find_root_for_monophyletic_clade_CPP", (DL_FUNC) &_castor_find_root_for_monophyletic_clade_CPP, 7},
     {"_castor_find_edge_splitting_tree_CPP", (DL_FUNC) &_castor_find_edge_splitting_tree_CPP, 7},
     {"_castor_collapse_tree_at_resolution_CPP", (DL_FUNC) &_castor_collapse_tree_at_resolution_CPP, 8},
@@ -2900,7 +2951,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_TSBM_LL_of_sampled_transitions_CPP", (DL_FUNC) &_castor_TSBM_LL_of_sampled_transitions_CPP, 15},
     {"_castor_fit_SBM_diffusivity_from_transitions_CPP", (DL_FUNC) &_castor_fit_SBM_diffusivity_from_transitions_CPP, 11},
     {"_castor_fit_SBM_from_sampled_transitions_CPP", (DL_FUNC) &_castor_fit_SBM_from_sampled_transitions_CPP, 16},
-    {"_castor_ACF_spherical_CPP", (DL_FUNC) &_castor_ACF_spherical_CPP, 11},
+    {"_castor_ACF_spherical_CPP", (DL_FUNC) &_castor_ACF_spherical_CPP, 13},
     {"_castor_read_fasta_from_file_CPP", (DL_FUNC) &_castor_read_fasta_from_file_CPP, 3},
     {NULL, NULL, 0}
 };

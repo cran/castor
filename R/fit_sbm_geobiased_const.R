@@ -18,6 +18,7 @@ fit_sbm_geobiased_const = function(	trees, 								# either a single tree in phy
 									Nbootstraps				= 0,		# integer, number of boostraps to perform, in the final iteration. If <=0, no boostrapping is performed.
 									NQQ						= 0,		# integer, optional number of simulations to perform for creating Q-Q plots of the theoretically expected distribution of geodistances vs the empirical distribution of geodistances (across independent contrasts). The resolution of the returned QQ plot will be equal to the number of independent contrasts used for fitting.
 									Nthreads				= 1,		# integer, number of parallel thread to use whenever possible
+									include_simulations		= FALSE,	# logical, include the final simulated trees and coordinates in the returned results. This may be useful e.g. for checking the adequacy of the fitted model.
 									SBM_PD_functor			= NULL,		# optional object, internally used SBM probability density functor
 									verbose					= FALSE,
 									verbose_prefix			= ""){
@@ -56,7 +57,7 @@ fit_sbm_geobiased_const = function(	trees, 								# either a single tree in phy
 	max_iterations 	= max(1,max_iterations)
 	rarefaction 	= max(0,min(1,rarefaction))
 	
-	# get flattened set of coordinates (across all tips)
+	# get flattened set of reference coordinates (across all tips)
 	if(is.null(reference_latitudes) || is.null(reference_longitudes)){
 		reference_latitudes  = unlist(tip_latitudes)
 		reference_longitudes = unlist(tip_longitudes)
@@ -299,5 +300,6 @@ fit_sbm_geobiased_const = function(	trees, 								# either a single tree in phy
 				CI95lower					= fit0$CI95lower * correction_factor,
 				CI95upper					= fit0$CI95upper * correction_factor,
 				QQplot						= (if(NQQ>0) QQplot else NULL),
+				simulations					= (if(include_simulations) sims else NULL),
 				SBM_PD_functor				= fit0$SBM_PD_functor))
 }

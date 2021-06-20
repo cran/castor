@@ -4,12 +4,13 @@
 Root or re-root a tree in the middle of an edge.
 }
 \description{
-Given a tree (rooted or unrooted), this function places the new root in the middle of a specified edge, effectively adding one more node, one more edge and changing the direction of edges as required.
+Given a tree (rooted or unrooted), this function places the new root on some specified edge, effectively adding one more node, one more edge and changing the direction of edges as required.
 }
 \usage{
 root_in_edge( tree, 
               root_edge, 
-              new_root_name = NULL, 
+              location                = 0.5,
+              new_root_name           = NULL, 
               collapse_monofurcations = TRUE)
 }
 \arguments{
@@ -18,6 +19,9 @@ A tree object of class "phylo". Can be unrooted or rooted.
 }
 \item{root_edge}{
 Integer, index of the edge into which the new root is to be placed. Must be between 1 and Nedges.
+}
+\item{location}{
+Numeric, between 0 and 1, specifying the relative location along the \code{root_edge} at which to place the root (relative to the edge length, measured from the upstream node). For example, \code{location=0.5} means the root is placed in the middle of the edge, while \code{location=0.1} means that it will be place closer to the upstream node (i.e., closer to \code{tree$edge[root_edge,1]}).
 }
 \item{new_root_name}{
 Character, optional, specifying the node name to use for the new root. Only used if \code{tree$node.label} is not \code{NULL}.
