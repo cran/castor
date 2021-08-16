@@ -165,7 +165,8 @@ K.T. Shao, R. R. Sokal (1990). Tree Balance. Systematic Biology. 39:266-276.
 
 \seealso{
 \code{\link{simulate_deterministic_hbds}},
-\code{\link{generate_tree_hbds}}
+\code{\link{generate_tree_hbds}},
+\code{\link{model_adequacy_hbd}}
 }
 
 \examples{

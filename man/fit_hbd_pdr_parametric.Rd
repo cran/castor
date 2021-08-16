@@ -30,7 +30,7 @@ fit_hbd_pdr_parametric( tree,
 }
 \arguments{
 \item{tree}{
-An ultrametric timetree of class "phylo", representing the time-calibrated phylogeny of a set of extant species.
+A rooted ultrametric timetree of class "phylo", representing the time-calibrated phylogeny of a set of extant sampled species.
 }
 \item{param_values}{
 Numeric vector, specifying fixed values for a some or all model parameters. For fitted (i.e., non-fixed) parameters, use \code{NaN} or \code{NA}. For example, the vector \code{c(1.5,NA,40)} specifies that the 1st and 3rd model parameters are fixed at the values 1.5 and 40, respectively, while the 2nd parameter is to be fitted. The length of this vector defines the total number of model parameters. If entries in this vector are named, the names are taken as parameter names. Names should be included if you'd like returned parameter vectors to have named entries, or if the functions \code{PDR} or \code{rho} query parameter values by name (as opposed to numeric index).
@@ -64,7 +64,7 @@ Numeric vector, specifying ages at which the \code{PDR} function should be evalu
 Listed ages must be strictly increasing, and must cover at least the full considered age interval (from \code{age0} to \code{oldest_age}). Can also be \code{NULL} or a vector of size 1, in which case the PDR is assumed to be time-independent.
 }
 \item{condition}{
-Character, either "crown", "stem" or "auto", specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root. If "stem", the likelihood is conditioned on the survival of the stem lineage. Note that "crown" really only makes sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. If "auto", the condition is chosen according to the recommendations mentioned earlier.
+Character, either "crown", "stem", "auto", "stemN" or "crownN" (where N is an integer >=2), specifying on what to condition the likelihood. If "crown", the likelihood is conditioned on the survival of the two daughter lineages branching off at the root at that time. If "stem", the likelihood is conditioned on the survival of the stem lineage, with the process having started at \code{oldest_age}. Note that "crown" and "crownN"" really only make sense when \code{oldest_age} is equal to the root age, while "stem" is recommended if \code{oldest_age} differs from the root age. If "stem2", the condition is that the process yielded at least two sampled tips, and similarly for "stem3" etc. If "crown3", the condition is that a splitting occurred at the root age, both child clades survived, and in total yielded at least 3 sampled tips (and similarly for "crown4" etc). If "auto", the condition is chosen according to the recommendations mentioned earlier.
 }
 \item{relative_dt}{
 Strictly positive numeric (unitless), specifying the maximum relative time step allowed for integration over time, when calculating the likelihood. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
@@ -158,6 +158,8 @@ Integer vector of size \code{Ntrials}, listing the number of likelihood evaluati
 H. Morlon, T. L. Parsons, J. B. Plotkin (2011). Reconciling molecular phylogenies with the fossil record. Proceedings of the National Academy of Sciences. 108:16327-16332.
 
 S. Louca et al. (2018). Bacterial diversification through geological time. Nature Ecology & Evolution. 2:1458-1467.
+
+S. Louca and M. W. Pennell (2020). Extant timetrees are consistent with a myriad of diversification histories. Nature. 580:502-505.
 }
 
 \seealso{
@@ -170,6 +172,8 @@ S. Louca et al. (2018). Bacterial diversification through geological time. Natur
 \code{\link{fit_hbd_model_parametric}}
 
 \code{\link{fit_hbd_pdr_on_grid}}
+
+\code{\link{model_adequacy_hbd}}
 }
 
 \examples{

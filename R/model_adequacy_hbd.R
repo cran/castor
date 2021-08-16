@@ -46,7 +46,7 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 		}
 	}	
 	if(!(splines_degree %in% c(0,1,2,3))) return(list(success = FALSE, error = sprintf("Invalid splines_degree (%d): Expected one of 0,1,2,3.",splines_degree)))
-	
+
 	# calculate various statistics for the provided tree
 	tree_gamma 		= gamma_statistic(tree)
 	tree_Colless	= tree_imbalance(tree, type="Colless")
@@ -54,7 +54,9 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 	tree_LTT		= count_lineages_through_time(tree,Ntimes=10*log2(Ntips));
 	tree_LTT$ages 	= pmax(0,root_age-tree_LTT$times)
 	tree_node_ages	= root_age - get_all_distances_to_root(tree)[(1+Ntips):(2*Ntips-1)]
-	
+	tree_node_sizes	= as.numeric(count_tips_per_node(tree))
+	tree_Blum		= sum(log(tree_node_sizes))
+		
 	# simulate bootstrap trees
 	# for every unique model, perform all replicate simulations at once for efficiency
 	bootstrap_trees = vector(mode="list", Nbootstraps)
@@ -75,9 +77,12 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 		
 	# analyze bootstrap trees in parallel										
 	analyze_bootstrap = function(b){
-		bootstrap_tree = bootstrap_trees[[b]]		
+		bootstrap_tree = bootstrap_trees[[b]]	
+		node_sizes = count_tips_per_node(bootstrap_tree)
 		return(list(edge_lengths	= bootstrap_tree$edge.length,
 					node_ages		= root_age - get_all_distances_to_root(bootstrap_tree)[(1+Ntips):(2*Ntips-1)],
+					node_sizes		= as.numeric(node_sizes),
+					Blum			= sum(log(node_sizes)), # Blum and Francois (2006). Which random processes describe the Tree of Life? A large-scale study of phylogenetic tree imbalance. Systematic Biology. 55:685-691.
 					gamma 			= gamma_statistic(bootstrap_tree),
 					Colless			= tree_imbalance(bootstrap_tree, type="Colless"),
 					Sackin			= tree_imbalance(bootstrap_tree, type="Sackin"),
@@ -114,6 +119,11 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 	bootstrap_Sackin		= sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$Sackin)
 	bootstrap_mean_Sackin	= mean(bootstrap_Sackin, na.rm=TRUE)
 	PSackin					= mean(abs(bootstrap_Sackin-bootstrap_mean_Sackin)>=abs(tree_Sackin-bootstrap_mean_Sackin),na.rm=TRUE)
+
+	# calculate P-value of Blum imbalance statistic
+	bootstrap_Blum		= sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$Blum)
+	bootstrap_mean_Blum	= mean(bootstrap_Blum, na.rm=TRUE)
+	PBlum				= mean(abs(bootstrap_Blum-bootstrap_mean_Blum)>=abs(tree_Blum-bootstrap_mean_Blum),na.rm=TRUE)
 	
 	# calculate confidence intervals of bootstrap LTTs
 	bootstrap_LTTs		= t(sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$LTT))
@@ -128,6 +138,10 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 	# this is essentially a comparison of LTTs, since the LTT is the (non-normalized) cumulative distribution function of node ages
 	bootstrap_node_ages 	= lapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$node_ages)
 	node_Kolmogorov_Smirnov = bootstrap_Kolmogorov_Smirnov_test(bootstraps=bootstrap_node_ages, empirical=tree_node_ages)
+
+	# compare node sizes (Ntips per node) of tree to bootstraps using Kolmogorov-Smirnov test
+	bootstrap_node_sizes 	= lapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$node_sizes)
+	size_Kolmogorov_Smirnov = bootstrap_Kolmogorov_Smirnov_test(bootstraps=bootstrap_node_sizes, empirical=tree_node_sizes)
 	
 	# wrap all results into a "report" list
 	return(list(success						= TRUE,
@@ -141,16 +155,22 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 				tree_Sackin					= tree_Sackin,
 				bootstrap_mean_Sackin 		= bootstrap_mean_Sackin,
 				PSackin						= PSackin,
+				tree_Blum					= tree_Blum,
+				bootstrap_mean_Blum 		= bootstrap_mean_Blum,
+				PBlum						= PBlum,
 				tree_edgeKS					= edge_Kolmogorov_Smirnov$empirical_KS,
 				bootstrap_mean_edgeKS 		= edge_Kolmogorov_Smirnov$mean_bootstrap_KS,
 				PedgeKS						= edge_Kolmogorov_Smirnov$Pvalue,
 				tree_nodeKS					= node_Kolmogorov_Smirnov$empirical_KS,
 				bootstrap_mean_nodeKS 		= node_Kolmogorov_Smirnov$mean_bootstrap_KS,
 				PnodeKS						= node_Kolmogorov_Smirnov$Pvalue,
-				statistical_tests			= data.frame(	statistic			= c("gamma", "Colless", "Sackin", "edge-lengths Kolmogorov-Smirnov", "node-ages Kolmogorov-Smirnov"),
-															tree_value	 		= c(tree_gamma, tree_Colless, tree_Sackin, edge_Kolmogorov_Smirnov$empirical_KS, node_Kolmogorov_Smirnov$empirical_KS),
-															bootstrap_mean		= c(bootstrap_mean_gamma, bootstrap_mean_Colless, bootstrap_mean_Sackin, edge_Kolmogorov_Smirnov$mean_bootstrap_KS, node_Kolmogorov_Smirnov$mean_bootstrap_KS),
-															Pvalue	 			= c(Pgamma, PColless, PSackin, edge_Kolmogorov_Smirnov$Pvalue, node_Kolmogorov_Smirnov$Pvalue)),
+				tree_sizeKS					= size_Kolmogorov_Smirnov$empirical_KS,
+				bootstrap_mean_sizeKS 		= size_Kolmogorov_Smirnov$mean_bootstrap_KS,
+				PsizeKS						= size_Kolmogorov_Smirnov$Pvalue,
+				statistical_tests			= data.frame(	statistic			= c("gamma", "Colless", "Sackin", "Blum", "edge-lengths Kolmogorov-Smirnov", "node-ages Kolmogorov-Smirnov", "node-sizes Kolmogorov-Smirnov"),
+															tree_value	 		= c(tree_gamma, tree_Colless, tree_Sackin, tree_Blum, edge_Kolmogorov_Smirnov$empirical_KS, node_Kolmogorov_Smirnov$empirical_KS, size_Kolmogorov_Smirnov$empirical_KS),
+															bootstrap_mean		= c(bootstrap_mean_gamma, bootstrap_mean_Colless, bootstrap_mean_Sackin, bootstrap_mean_Blum, edge_Kolmogorov_Smirnov$mean_bootstrap_KS, node_Kolmogorov_Smirnov$mean_bootstrap_KS, size_Kolmogorov_Smirnov$mean_bootstrap_KS),
+															Pvalue	 			= c(Pgamma, PColless, PSackin, PBlum, edge_Kolmogorov_Smirnov$Pvalue, node_Kolmogorov_Smirnov$Pvalue, size_Kolmogorov_Smirnov$Pvalue)),
 				LTT_ages				= tree_LTT$ages,
 				tree_LTT				= tree_LTT$lineages,
 				bootstrap_LTT_CI		= bootstrap_LTT_CIs,

@@ -59,7 +59,7 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 						edge 		= matrix(as.integer(results$new_tree_edge),ncol=2,byrow=TRUE) + 1L,
 						edge.length = results$new_edge_length,
 						root 		= results$new_root+1L,
-						root.edge	= (if(force_keep_root && (!is.null(tree$root.edge))) tree$root.edge else NULL));
+						root.edge	= (if(results$old_stem_edge<0) (if(!is.null(tree$root.edge)) tree$root.edge else NULL) else (if(!is.null(tree$edge.length)) tree$edge.length[results$old_stem_edge+1L] else NULL)))
 		class(subtree) = "phylo"
 		attr(subtree,"order") = "none"
 		

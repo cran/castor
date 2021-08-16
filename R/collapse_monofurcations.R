@@ -1,4 +1,4 @@
-# remove monofurcations by connecting their incoming and outgoing edges
+# remove monofurcations (nodes with only one child) by connecting their incoming and outgoing edges
 # if force_keep_root==TRUE, then the root node is always kept even if it only has one child
 collapse_monofurcations = function(tree, force_keep_root=TRUE, as_edge_counts=FALSE){
 	Ntips 	= length(tree$tip.label)

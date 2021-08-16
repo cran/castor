@@ -1,10 +1,11 @@
 # generate a random phylogenetic tree, by randomly splitting tips at a certain rate and randomly killing tips at a certain rate
 # birth & death rates (=speciation & extintion rates) are themselves evolving under one of the following models:
 #	'BM': Constrained Brownian Motion model (constrained into an interval via reflection)
+#	'OU': Constrained Ornstein-Uhlenbeck model (constrained into an interval by cutting)
 #	'Mk': Discrete-state continuous-time Markov model, as defined by the transition rate matrix
 # The simulation is halted as soon as Ntips>=max_tips (if max_tips>0) and/or time>=max_time (if max_time>0) and/or time>=max_time_eq+equilibrium_time (if max_time_eq>=0)
 generate_tree_with_evolving_rates = function(parameters				= list(), 	# named list of model parameters. For entries and default values (different for each rate_model) see the main function body below
-											 rate_model				= 'BM',		# how speciation/extinction rates are evolving alogn lineages over time. Options are 'BM' (brownian motion) or 'Mk'.
+											 rate_model				= 'BM',		# how speciation/extinction rates are evolving along lineages over time. Options are 'BM' (Brownian motion) or 'OU' (Ornstein-Uhlenbeck) or 'Mk'.
 											 max_tips				= NULL, 
 											 max_time				= NULL,
 											 max_time_eq			= NULL,
@@ -28,6 +29,22 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 		if(is.null(parameters$max_death_rate_pc)) 		parameters$max_death_rate_pc = 1;
 		if(is.null(parameters$root_birth_rate_pc))		parameters$root_birth_rate_pc = runif(1, parameters$min_birth_rate_pc, parameters$max_birth_rate_pc);
 		if(is.null(parameters$root_death_rate_pc))		parameters$root_death_rate_pc = runif(1, parameters$min_death_rate_pc, parameters$max_death_rate_pc);
+		parameters$root_birth_rate_pc = max(parameters$min_birth_rate_pc, min(parameters$max_birth_rate_pc, parameters$root_birth_rate_pc))
+		parameters$root_death_rate_pc = max(parameters$min_death_rate_pc, min(parameters$max_death_rate_pc, parameters$root_death_rate_pc))
+	}else if(rate_model=="OU"){
+		parameter_names = c("birth_rate_pc_mean", "birth_rate_pc_decay_rate", "birth_rate_pc_std", "min_birth_rate_pc", "max_birth_rate_pc", "death_rate_pc_mean", "death_rate_pc_decay_rate", "death_rate_pc_std", "min_death_rate_pc", "max_death_rate_pc", "root_birth_rate_pc", "root_death_rate_pc", "rarefaction")
+		if(is.null(parameters$birth_rate_pc_mean)) 		 parameters$birth_rate_pc_mean = 1;
+		if(is.null(parameters$birth_rate_pc_decay_rate)) parameters$birth_rate_pc_decay_rate = 1;
+		if(is.null(parameters$birth_rate_pc_std)) 		 parameters$birth_rate_pc_std = 1;
+		if(is.null(parameters$min_birth_rate_pc)) 		 parameters$min_birth_rate_pc = 0;
+		if(is.null(parameters$max_birth_rate_pc)) 		 parameters$max_birth_rate_pc = 1;
+		if(is.null(parameters$death_rate_pc_mean)) 		 parameters$death_rate_pc_mean = 1;
+		if(is.null(parameters$death_rate_pc_decay_rate)) parameters$death_rate_pc_decay_rate = 1;
+		if(is.null(parameters$death_rate_pc_std)) 		 parameters$death_rate_pc_std = 1;
+		if(is.null(parameters$min_death_rate_pc))		 parameters$min_death_rate_pc = 0;
+		if(is.null(parameters$max_death_rate_pc)) 		 parameters$max_death_rate_pc = 1;
+		if(is.null(parameters$root_birth_rate_pc))		 parameters$root_birth_rate_pc = rnorm(1, mean=parameters$birth_rate_pc_mean, sd=parameters$birth_rate_pc_std)
+		if(is.null(parameters$root_death_rate_pc))		 parameters$root_death_rate_pc = rnorm(1, mean=parameters$death_rate_pc_mean, sd=parameters$death_rate_pc_std)
 		parameters$root_birth_rate_pc = max(parameters$min_birth_rate_pc, min(parameters$max_birth_rate_pc, parameters$root_birth_rate_pc))
 		parameters$root_death_rate_pc = max(parameters$min_death_rate_pc, min(parameters$max_death_rate_pc, parameters$root_death_rate_pc))
 	}else if(rate_model=="Mk"){
@@ -66,6 +83,27 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 													min_birth_rate_pc 			= parameters$min_birth_rate_pc,
 													max_birth_rate_pc 			= parameters$max_birth_rate_pc, 
 													death_rate_diffusivity 		= parameters$death_rate_diffusivity,
+													min_death_rate_pc			= parameters$min_death_rate_pc,
+													max_death_rate_pc			= parameters$max_death_rate_pc,
+													root_birth_rate_pc			= parameters$root_birth_rate_pc,
+													root_death_rate_pc			= parameters$root_death_rate_pc,
+													coalescent					= coalescent,
+													Nsplits						= 2,
+													as_generations				= as_generations,
+													include_event_times			= include_event_times,
+													include_rates				= include_rates);
+	}else if(rate_model=="OU"){
+		results = generate_random_tree_OU_rates_CPP(max_tips					= (if(is.null(max_tips)) -1 else max_tips),
+													max_time					= (if(is.null(max_time)) -1 else max_time),
+													max_time_since_equilibrium	= (if(is.null(max_time_eq)) -1 else max_time_eq),
+													birth_rate_pc_mean 			= parameters$birth_rate_pc_mean, 
+													birth_rate_pc_decay_rate	= parameters$birth_rate_pc_decay_rate, 
+													birth_rate_pc_std			= parameters$birth_rate_pc_std, 
+													min_birth_rate_pc 			= parameters$min_birth_rate_pc,
+													max_birth_rate_pc 			= parameters$max_birth_rate_pc, 
+													death_rate_pc_mean 			= parameters$death_rate_pc_mean, 
+													death_rate_pc_decay_rate	= parameters$death_rate_pc_decay_rate, 
+													death_rate_pc_std			= parameters$death_rate_pc_std, 
 													min_death_rate_pc			= parameters$min_death_rate_pc,
 													max_death_rate_pc			= parameters$max_death_rate_pc,
 													root_birth_rate_pc			= parameters$root_birth_rate_pc,

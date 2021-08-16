@@ -7,7 +7,12 @@ Calculate mean & standard deviation of a numeric trait on a dated tree over time
 Given a rooted and dated phylogenetic tree, and a scalar numeric trait with known value on each node and tip of the tree, calculate the mean and the variance of the trait's states across the tree at discrete time points. For example, if the trait represents "body size", then this function calculates the mean body size of extant clades over time.
 }
 \usage{
-get_trait_stats_over_time(tree, states, Ntimes=NULL, times=NULL, check_input=TRUE)
+get_trait_stats_over_time(tree,
+                          states, 
+                          Ntimes            = NULL,
+                          times             = NULL,
+                          include_quantiles = TRUE,
+                          check_input       = TRUE)
 }
 \arguments{
 \item{tree}{
@@ -21,6 +26,9 @@ Integer, number of equidistant time points for which to calculade clade counts. 
 }
 \item{times}{
 Integer vector, listing time points (in ascending order) for which to calculate clade counts. Can also be \code{NULL}, in which case \code{Ntimes} must be provided.
+}
+\item{include_quantiles}{
+Logical, specifying whether to include information on quantiles (e.g., median, CI95, CI50) of the trait over time, in addition to the means and standard deviations. This option increases computation time and memory needs for large trees, so if you only care about means and standard deviations you can set this to \code{FALSE}.
 }
 \item{check_input}{
 Logical, specifying whether to perform some basic checks on the validity of the input data. If you are certain that your input data are valid, you can set this to \code{FALSE} to reduce computation.
@@ -50,7 +58,22 @@ Integer vector of size Ntimes, listing the number of tips or nodes considered at
 Numeric vector of size Ntimes, listing the arithmetic mean of trait states at each time point.
 }
 \item{stds}{
-Numeric vector of size Ntimes, listing the population standard deviation of trait states at each time point.
+Numeric vector of size Ntimes, listing the standard deviation of trait states at each time point.
+}
+\item{medians}{
+Numeric vector of size Ntimes, listing the median trait state at each time point. Only returned if \code{include_uantiles=TRUE}.
+}
+\item{CI50lower}{
+Numeric vector of size Ntimes, listing the lower end of the equal-tailed 50\% range of trait states (i.e., the 25\% percentile) at each time point. Only returned if \code{include_uantiles=TRUE}.
+}
+\item{CI50upper}{
+Numeric vector of size Ntimes, listing the upper end of the equal-tailed 50\% range of trait states (i.e., the 75\% percentile) at each time point. Only returned if \code{include_uantiles=TRUE}.
+}
+\item{CI95lower}{
+Numeric vector of size Ntimes, listing the lower end of the equal-tailed 95\% range of trait states (i.e., the 2.5\% percentile) at each time point. Only returned if \code{include_uantiles=TRUE}.
+}
+\item{CI95upper}{
+Numeric vector of size Ntimes, listing the upper end of the equal-tailed 95\% range of trait states (i.e., the 97.5\% percentile) at each time point. Only returned if \code{include_uantiles=TRUE}.
 }
 }
 

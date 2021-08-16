@@ -131,10 +131,10 @@ Numeric vector, listing the times of speciation events during tree growth, in or
 Numeric vector, listing the times of extinction events during tree growth, in order of occurrence. Note that if \code{coalescent==TRUE}, then \code{speciation_times} may be greater than the phylogenetic distance to the coalescent root. Only returned if \code{include_event_times==TRUE}.
 }
 \item{birth_rates_pc}{
-Numeric vector, listing the per-capita birth rate of each tip and node in the tree. The length of an edge in the tree was thus drawn from an exponential distribution with rate equal to the per-capita birth rate of the child tip or node.
+Numeric vector of length Ntips+Nnodes, listing the per-capita birth rate of each tip and node in the tree. The length of an edge in the tree was thus drawn from an exponential distribution with rate equal to the per-capita birth rate of the child tip or node.
 }
 \item{death_rates_pc}{
-Numeric vector, listing the per-capita death rate of each tip and node in the tree.
+Numeric vector of length Ntips+Nnodes, listing the per-capita death rate of each tip and node in the tree.
 }
 \item{states}{
 Integer vector of size Ntips+Nnodes, listing the discrete state of each tip and node in the tree. Only included if \code{rate_model=="Mk"}.

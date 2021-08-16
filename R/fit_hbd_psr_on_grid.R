@@ -13,7 +13,7 @@ fit_hbd_psr_on_grid = function(	tree,
 								guess_PSR			= NULL,		# initial guess for the PSR. Either NULL (an initial guess will be computed automatically), or a single numeric (guessing a constant PSR at all ages) or a numeric vector of size NG specifying an initial guess for the PSR at each age-grid point (can include NAs)
 								fixed_PSR			= NULL,		# optional fixed PSR values, on one or more of the age grid points. Either NULL (none of the PSRs are fixed), or a single scalar (all PSRs are fixed) or a numeric vector of size NG (some or all PSRs are fixed, can include NAs).
 								splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by the PSR on the age grid.
-								condition			= "auto",	# either "crown" or "stem" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+								condition			= "auto",	# one of "crown" or "crown3" (or "crown4", .. etc) or "stem" or "stem2" (or "stem3", .. etc) or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age<root_age, "stem2" when oldest_age>root_age, or "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 								relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 								Ntrials					= 1,
 								Nbootstraps				= 0,		# (integer) optional number of parametric-bootstrap samples (random trees generated using the fitted PSR) for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
@@ -22,6 +22,7 @@ fit_hbd_psr_on_grid = function(	tree,
 								max_model_runtime		= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 								fit_control				= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 								verbose					= FALSE,		# boolean, specifying whether to print informative messages
+								diagnostics				= FALSE,		# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
 								verbose_prefix			= ""){			# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
 	# basic error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
@@ -34,8 +35,8 @@ fit_hbd_psr_on_grid = function(	tree,
 	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
 	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
-	if(!(condition %in% c("crown","stem","auto"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown' or 'auto'.",condition)));
-	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
+	if((!(condition %in% c("crown","stem","auto"))) && (!startsWith(condition,"stem")) && (!startsWith(condition,"crown"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Expected 'stem', 'stem2', 'stem<N>', 'crown', 'crown<N>', or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else (if(oldest_age>root_age) "stem2" else "stem"))
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
@@ -50,7 +51,7 @@ fit_hbd_psr_on_grid = function(	tree,
 	# pre-compute some tree stats
 	if(verbose) cat(sprintf("%sPrecomputing some stats about the tree..\n",verbose_prefix))
 	LTT0				= length(tree$tip.label);
-	lineage_counter 	= count_lineages_through_time(tree, Ntimes=log2(LTT0), include_slopes=TRUE);
+	lineage_counter 	= count_lineages_through_time(tree, Ntimes=log2(LTT0), include_slopes=TRUE, ultrametric=TRUE)
 	sorted_node_ages	= sort(get_all_branching_ages(tree));
 	root_age 		 	= tail(sorted_node_ages,1);
 	age_epsilon		 	= 1e-4*mean(tree$edge.length);
@@ -98,8 +99,8 @@ fit_hbd_psr_on_grid = function(	tree,
 	# PREPARE PARAMETERS TO BE FITTED
 	
 	# guess reasonable start params, if not provided
-	default_guess_PSR = mean(lineage_counter$relative_slopes); # a reasonable guesstimate for the PSR is the relative LTT-slope
-	if(default_guess_PSR==0) default_guess_PSR=log(LTT0)/root_age
+	default_guess_PSR = mean(lineage_counter$relative_slopes[lineage_counter$relative_slopes>=0]); # a reasonable guesstimate for the PSR is the relative LTT-slope. Omitting negative slopes likely due to numerical inaccuracies
+	if((!is.finite(default_guess_PSR)) || (default_guess_PSR==0)) default_guess_PSR=log(LTT0)/root_age
 	guess_PSR[!is.finite(guess_PSR)] = default_guess_PSR;
 	guess_PSR = pmin(max_PSR, pmax(min_PSR, guess_PSR)); # make sure initial guess is within the imposed bounds
 	
@@ -111,11 +112,11 @@ fit_hbd_psr_on_grid = function(	tree,
 	guess_param_values[fixed_params] = fixed_param_values[fixed_params] # make sure guessed param values are consistent with fixed param values
 	min_param_values	= c(min_PSR);
 	max_param_values	= c(max_PSR);
-	NFP					= length(fitted_params);
-	
+	NFP					= length(fitted_params)
+		
 	# determine typical parameter scales
 	scale_PSR = abs(guess_PSR); scale_PSR[scale_PSR==0] = mean(scale_PSR); scale_PSR[scale_PSR==0]=default_guess_PSR;
-	param_scales = c(rep(scale_PSR,times=NG));
+	param_scales = c(scale_PSR);
 
 	# set fit-control options, unless provided by the caller
 	if(is.null(fit_control)) fit_control = list()
@@ -130,7 +131,7 @@ fit_hbd_psr_on_grid = function(	tree,
 	
 	# objective function: negated log-likelihood
 	# input argument is the subset of fitted parameters, rescaled according to param_scales
-	objective_function = function(fparam_values){
+	objective_function = function(fparam_values, trial){
 		param_values = fixed_param_values; param_values[fitted_params] = fparam_values * param_scales[fitted_params];
 		if(any(is.nan(param_values)) || any(is.infinite(param_values))) return(Inf); # catch weird cases where params become NaN
 		PSRs = param_values[1:NG]; 
@@ -143,17 +144,25 @@ fit_hbd_psr_on_grid = function(	tree,
 			input_PSRs 		= PSRs
 		}
 		results = HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												age_grid 			= input_age_grid,
-												PSRs 				= input_PSRs,
-												splines_degree		= splines_degree,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime);
-		if(!results$success) return(Inf);
-		LL = results$loglikelihood;
-		if(is.na(LL) || is.nan(LL)) return(Inf);
-		return(-LL);
+											oldest_age			= oldest_age,
+											age_grid 			= input_age_grid,
+											PSRs 				= input_PSRs,
+											splines_degree		= splines_degree,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime);
+		if(!results$success){
+			loglikelihood = -Inf
+		}else if(is.na(results$loglikelihood) || is.nan(results$loglikelihood)){
+			loglikelihood = -Inf
+		}else{		
+			loglikelihood = results$loglikelihood
+		}
+		if(diagnostics){
+			if(results$success){ cat(sprintf("%s  Trial %d: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,trial,loglikelihood,results$runtime)) }
+			else{ cat(sprintf("%s  Trial %d: Model evaluation failed: %s\n",verbose_prefix,trial,results$error)) }
+		}
+		return(-loglikelihood)
 	}
 	
 
@@ -177,11 +186,14 @@ fit_hbd_psr_on_grid = function(	tree,
 		start_values = pmax(lower_bounds,pmin(upper_bounds,start_values))
 		# run fit
 		fit = stats::nlminb(start_values/scales, 
-							objective	= objective_function, 
+							objective	= function(fpars){ objective_function(fpars, trial) }, 
 							lower		= lower_bounds/scales, 
 							upper		= upper_bounds/scales, 
 							control		= fit_control)
-		return(list(objective_value=fit$objective, fparam_values = fit$par*scales, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[1]));
+		LL 			= -fit$objective
+		converged	= (fit$convergence==0)
+		if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
+		return(list(objective_value=fit$objective, fparam_values = fit$par*scales, converged=converged, Niterations=fit$iterations, Nevaluations=fit$evaluations[1]));
 	}
 	
 	################################
@@ -261,22 +273,23 @@ fit_hbd_psr_on_grid = function(	tree,
 
 			# fit PSR to simulated tree
 			fit = fit_hbd_psr_on_grid(	bootstrap_tree, 
-										oldest_age	= oldest_age,
-										age0		= age0,
-										age_grid	= age_grid,
-										min_PSR		= min_PSR,
-										max_PSR		= max_PSR,
-										guess_PSR	= guess_PSR,
-										fixed_PSR	= fixed_PSR,
+										oldest_age			= oldest_age,
+										age0				= age0,
+										age_grid			= age_grid,
+										min_PSR				= min_PSR,
+										max_PSR				= max_PSR,
+										guess_PSR			= guess_PSR,
+										fixed_PSR			= fixed_PSR,
 										splines_degree		= splines_degree,
 										condition			= condition,
 										relative_dt			= relative_dt,
 										Ntrials				= Ntrials_per_bootstrap,
 										Nbootstraps			= 0,
-										Nthreads			= 1,
+										Nthreads			= Nthreads,
 										max_model_runtime	= max_model_runtime,
 										fit_control			= fit_control,
 										verbose				= verbose,
+										diagnostics			= diagnostics,
 										verbose_prefix		= paste0(verbose_prefix,"    "))
 			if(!fit$success){
 				if(verbose) cat(sprintf("%s  WARNING: Fitting failed for this bootstrap: %s\n",verbose_prefix,fit$error))

@@ -15,7 +15,7 @@ tree_imbalance(tree, type)
 A rooted tree of class "phylo".
 }
 \item{type}{
-Character, specifying the statistic to be calculated. Must be one of "Colless" (Shao 1990), "Colless_normalized" (Colless normalized by the maximum possible value in the case of a bifurcating tree) or "Sackin" (Sackin 1972).
+Character, specifying the statistic to be calculated. Must be one of "Colless" (Shao 1990), "Colless_normalized" (Colless normalized by the maximum possible value in the case of a bifurcating tree), "Sackin" (Sackin 1972) or "Blum" (Blum and Francois 2006, Eq. 5).
 }
 }
 
@@ -35,6 +35,8 @@ Numeric, the requested imbalance statistic of the tree.
 M. J. Sackin (1972). "Good" and "Bad" Phenograms. Systematic Biology. 21:225-226.
 
 K.T. Shao, R. R. Sokal (1990). Tree Balance. Systematic Biology. 39:266-276.
+
+M. G. B. Blum and O. Francois (2006). Which random processes describe the Tree of Life? A large-scale study of phylogenetic tree imbalance. Systematic Biology. 55:685-691.
 }
 
 %\seealso{

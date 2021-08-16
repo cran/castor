@@ -9,6 +9,7 @@ count_lineages_through_time = function(	tree,
 										max_time		= NULL,		# maximum time to consider. If NULL, will be set to the maximum possible
 										times 			= NULL, 	# 1D numeric array of time points in increasing order, for which to calculate lineages
 										include_slopes	= FALSE,	# logical, specifying whether slopes & relative slopes of the LTT should be included in the returned values
+										ultrametric		= FALSE,	# logical, whether the input tree is guaranteed to be ultrametric (even in the presence of numerical inaccuracies)
 										degree			= 1,		# integer, degree n of the LTT curve: LTT_n(t) will be the number of lineages in the tree at time t that have at least n descending tips in the tree. Typically order=1, which corresponds to the classical LTT curve.
 										regular_grid	= TRUE){	# logical, specifying whether the time grid (if times[] is not specified) should be regular (equidistant). If FALSE, and times[] is not specified, the time grid will be irregular, with grid point density being roughly proportional to the number of lineages at any particular time
 										
@@ -37,6 +38,7 @@ count_lineages_through_time = function(	tree,
 													Ntimes			= Ntimes,
 													min_time		= (if(is.null(min_time)) 0 else min_time),
 													max_time		= (if(is.null(max_time)) Inf else max_time),
+													ultrametric		= ultrametric,
 													degree			= degree,
 													include_slopes 	= include_slopes);
 		return(list(Ntimes			= length(results$time_points),
@@ -57,6 +59,7 @@ count_lineages_through_time = function(	tree,
 														Ntimes			= Ntimes,
 														min_time		= (if(is.null(min_time)) 0 else min_time),
 														max_time		= (if(is.null(max_time)) Inf else max_time),
+														ultrametric		= ultrametric,
 														degree			= degree,
 														include_slopes 	= include_slopes);
 			times = get_inhomogeneous_grid_1D(	Xstart  	= results$time_points[1],

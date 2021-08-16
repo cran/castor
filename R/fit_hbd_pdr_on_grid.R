@@ -25,7 +25,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 								fixed_PDR				= NULL,		# optional fixed PDR values, on one or more of the age grid points. Either NULL (none of the PDRs are fixed), or a single scalar (all PDRs are fixed) or a numeric vector of size NG (some or all PDRs are fixed, can include NAs).
 								fixed_rholambda0		= NULL,		# optional fixed value for rholambda0. If non-NULL and non-NA, then rholambda0 is not fitted. 
 								splines_degree			= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by the PDR on the age grid.
-								condition				= "auto",	# one of "crown" or "stem" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age<root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+								condition				= "auto",	# one of "crown" or "stem" or "stem2" (or "stem3", "stem4", .. etc) or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age<root_age, "stem2" when oldest_age>root_age, or "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 								relative_dt				= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 								Ntrials					= 1,
 								Nbootstraps				= 0,		# (integer) optional number of parametric-bootstrap samples (random trees generated using the fitted PDR & rholambda0) for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.
@@ -38,21 +38,21 @@ fit_hbd_pdr_on_grid = function(	tree,
 	# basic error checking
 	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
 	original_Ntips = length(tree$tip.label)
-	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(tree$Nnode<1) return(list(success = FALSE, error="Input tree is too small"));
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age;
 	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
 	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
-	if(!(condition %in% c("crown","stem","auto"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown' or 'auto'.",condition)));
-	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
+	if((!(condition %in% c("crown","stem","auto"))) && (!startsWith(condition,"stem")) && (!startsWith(condition,"crown"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Expected 'stem', 'stem2', 'stem<N>', 'crown', 'crown<N>', or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else (if(oldest_age>root_age) "stem2" else "stem"))
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
 		if(verbose) cat(sprintf("%sTrimming tree at age0=%g..\n",verbose_prefix,age0))
 		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
-		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
+		if(tree$Nnode<1) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
 		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
 		if(!is.null(age_grid)) age_grid 	= age_grid - age0
 		root_age = root_age - age0
@@ -61,7 +61,7 @@ fit_hbd_pdr_on_grid = function(	tree,
 	# pre-compute some tree stats
 	if(verbose) cat(sprintf("%sPrecomputing some stats about the tree..\n",verbose_prefix))
 	LTT0				= length(tree$tip.label);
-	lineage_counter 	= count_lineages_through_time(tree, Ntimes=log2(LTT0), include_slopes=TRUE);
+	lineage_counter 	= count_lineages_through_time(tree, Ntimes=max(3,log2(LTT0)), include_slopes=TRUE, ultrametric=TRUE)
 	sorted_node_ages	= sort(get_all_branching_ages(tree));
 	root_age 		 	= tail(sorted_node_ages,1);
 	age_epsilon		 	= 1e-4*mean(tree$edge.length);
@@ -115,7 +115,8 @@ fit_hbd_pdr_on_grid = function(	tree,
 	# guess reasonable start params, if not provided
 	default_guess_PDR = mean(lineage_counter$relative_slopes); # a reasonable guesstimate for the average PDR is the average of the relative LTT-slope
 	guess_PDR[is.na(guess_PDR)] = default_guess_PDR;
-	if(is.na(guess_rholambda0)) guess_rholambda0 = tail(lineage_counter$relative_slopes,1);
+	if(is.na(guess_rholambda0)) guess_rholambda0 = tail(lineage_counter$relative_slopes[lineage_counter$relative_slopes>0],1)
+	if(is.null(guess_rholambda0) || (length(guess_rholambda0)==0) || (!is.finite(guess_rholambda0)) || (guess_rholambda0==0)) guess_rholambda0 = log(LTT0)/root_age
 	
 	# make sure initial guess is within the imposed bounds
 	guess_PDR = pmin(max_PDR, pmax(min_PDR, guess_PDR));
@@ -208,16 +209,16 @@ fit_hbd_pdr_on_grid = function(	tree,
 			diff_PDR = unlist(lapply(fitted_grid_params, FUN=function(p) diff_PDR_all[((NG+p-1)*NG*(diff_PDR_degree+1) + 1):((NG+p-1)*NG*(diff_PDR_degree+1) + NG*(diff_PDR_degree+1))])) # extract only differentials along fitted parameters. Note that the first NG differentials are always omitted, because they correspond to the grid ages themselves, which are held constant in this case.
 		}
 		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												rholambda0 			= rholambda0,
-												age_grid 			= input_age_grid,
-												PDRs 				= input_PDRs,
-												splines_degree		= splines_degree,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime,
-												diff_PDR			= diff_PDR,
-												diff_PDR_degree		= diff_PDR_degree);
+											oldest_age			= oldest_age,
+											rholambda0 			= rholambda0,
+											age_grid 			= input_age_grid,
+											PDRs 				= input_PDRs,
+											splines_degree		= splines_degree,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime,
+											diff_PDR			= diff_PDR,
+											diff_PDR_degree		= diff_PDR_degree);
 		if(!results$success) return(rep(Inf,times=NFP));
 		gradient_full = rep(NA, times=NP)
 		gradient_full[NG+1] = results$dLL_drholambda0

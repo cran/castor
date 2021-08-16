@@ -14,7 +14,7 @@ fit_hbd_pdr_parametric = function(	tree,
 									PDR,							# function handle, mapping age & model_parameters to the current pulled diversification rate, (age,param_values) --> PDR. Must be defined for all ages in [age0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
 									rholambda0,						# function handle, mapping model_parameters to the product rho(age0)*lambda(age0), where rho is the sampling fraction at age0 and lambda(age0) is the speciation rate at age0; (param_values) --> rholambda0. Must be defined for all parameters within the imposed bounds.
 									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the PDR functional should be evaluated. This age grid must be fine enough to capture the possible variation in PDR() over time. If NULL or of length 1, then the PDR is assumed to be time-independent.
-									condition			= "auto",	# one of "crown" or "stem" or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age>root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
+									condition			= "auto",	# one of "crown" or "stem" or "stem2" (or "stem3", "stem4", .. etc) or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age<root_age, "stem2" when oldest_age>root_age, or "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 									Ntrials				= 1,		# number of fitting trials to perform, each time starting with random parameter values
 									max_start_attempts	= 1,		# number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
@@ -22,14 +22,14 @@ fit_hbd_pdr_parametric = function(	tree,
 									max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 									fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 	# basic input error checking
-	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(tree$Nnode<1) return(list(success = FALSE, error="Input tree is too small"));
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age;
 	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
 	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
-	if(!(condition %in% c("crown","stem","auto"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown' or 'auto'.",condition)));
-	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
+	if((!(condition %in% c("crown","stem","auto"))) && (!startsWith(condition,"stem")) && (!startsWith(condition,"crown"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Expected 'stem', 'stem2', 'stem<N>', 'crown', 'crown<N>', or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else (if(oldest_age>root_age) "stem2" else "stem"))
 	max_start_attempts 	= max(1,max_start_attempts)
 	Ntrials 			= max(1,Ntrials)
 	Nthreads 			= max(1,Nthreads)
@@ -61,14 +61,14 @@ fit_hbd_pdr_parametric = function(	tree,
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
 		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
-		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
+		if(tree$Nnode<1) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
 		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
 		if(!is.null(age_grid)) age_grid 	= age_grid - age0
 		root_age = root_age - age0
 	}
 	
 	# pre-compute some tree stats
-	lineage_counter  = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), include_slopes=TRUE);
+	lineage_counter  = count_lineages_through_time(tree, Ntimes=max(3,log2(length(tree$tip.label))), include_slopes=TRUE, ultrametric=TRUE)
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1);
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
@@ -126,16 +126,16 @@ fit_hbd_pdr_parametric = function(	tree,
 			input_PDRs		= PDRs
 		}
 		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
-												oldest_age			= oldest_age,
-												rholambda0			= input_rholambda0,
-												age_grid 			= input_age_grid,
-												PDRs 				= input_PDRs,
-												splines_degree		= 1,
-												condition			= condition,
-												relative_dt			= relative_dt,
-												runtime_out_seconds	= max_model_runtime,
-												diff_PDR			= numeric(),
-												diff_PDR_degree		= 0);
+											oldest_age			= oldest_age,
+											rholambda0			= input_rholambda0,
+											age_grid 			= input_age_grid,
+											PDRs 				= input_PDRs,
+											splines_degree		= 1,
+											condition			= condition,
+											relative_dt			= relative_dt,
+											runtime_out_seconds	= max_model_runtime,
+											diff_PDR			= numeric(),
+											diff_PDR_degree		= 0);
 		if(!results$success) return(Inf)
 		LL = results$loglikelihood
 		if(is.na(LL) || is.nan(LL) || is.infinite(LL)) return(Inf);

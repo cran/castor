@@ -13,6 +13,7 @@ count_lineages_through_time(  tree,
                               max_time      = NULL,
                               times         = NULL, 
                               include_slopes= FALSE,
+                              ultrametric   = FALSE,
                               degree        = 1,
                               regular_grid  = TRUE)
 }
@@ -34,6 +35,9 @@ Integer vector, listing time points (in ascending order) at which to count linea
 }
 \item{include_slopes}{
 Logical, specifying whether the slope and the relative slope of the returned clades-per-time-point curve should also be returned.
+}
+\item{ultrametric}{
+Logical, specifying whether the input tree is guaranteed to be ultrametric, even in the presence of some numerical inaccuracies causing some tips not have exactly the same distance from the root. If you know the tree is ultrametric, then this option helps the function choose a better time grid for the LTT.
 }
 \item{degree}{
 Integer, specifying the "degree" of the LTT curve: LTT(t) will be the number of lineages in the tree at time t that have at least n descending tips in the tree. Typically \code{order=1}, which corresponds to the classical LTT curve.

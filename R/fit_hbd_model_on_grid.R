@@ -35,27 +35,27 @@ fit_hbd_model_on_grid = function(	tree,
 									max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 									fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
 	# basic error checking
-	if(tree$Nnode<2) return(list(success = FALSE, error="Input tree is too small"));
+	if(tree$Nnode<1) return(list(success = FALSE, error="Input tree is too small"));
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age;
 	if(root_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the root age (%g)",age0,root_age)));
 	if(oldest_age<age0) return(list(success=FALSE, error=sprintf("age0 (%g) is older than the oldest considered age (%g)",age0,oldest_age)));
 	if((!is.null(age_grid)) && (length(age_grid)>1) && ((age_grid[1]>age0) || (tail(age_grid,1)<oldest_age))) return(list(success = FALSE, error=sprintf("Provided age-grid range (%g - %g) does not cover entire required age range (%g - %g)",age_grid[1],tail(age_grid,1),age0,oldest_age)));
-	if(!(condition %in% c("crown","stem","auto","none"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Extected 'stem', 'crown', 'none' or 'auto'.",condition)));
-	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else "stem")
+	if((!(condition %in% c("crown","stem","auto"))) && (!startsWith(condition,"stem")) && (!startsWith(condition,"crown"))) return(list(success = FALSE, error = sprintf("Invalid condition '%s': Expected 'stem', 'stem2', 'stem<N>', 'crown', 'crown<N>', or 'auto'.",condition)));
+	if(condition=="auto") condition = (if(abs(oldest_age-root_age)<=1e-10*root_age) "crown" else (if(oldest_age>root_age) "stem2" else "stem"))
 
 	# trim tree at age0 if needed, while shifting time for the subsequent analyses (i.e. new ages will start counting at age0)
 	if(age0>0){
 		tree = trim_tree_at_height(tree,height=root_age-age0)$tree
-		if(tree$Nnode<2) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
+		if(tree$Nnode<1) return(list(success = FALSE, error=sprintf("Tree is too small after trimming at age0 (%g)",age0)));
 		if(!is.null(oldest_age)) oldest_age	= oldest_age - age0	
 		if(!is.null(age_grid)) age_grid 	= age_grid - age0
 		root_age = root_age - age0
 	}
 
 	# pre-compute some tree stats
-	lineage_counter  = count_lineages_through_time(tree, Ntimes=log2(length(tree$tip.label)), max_time=root_age*0.99, include_slopes=TRUE);
+	lineage_counter  = count_lineages_through_time(tree, Ntimes=max(3,log2(length(tree$tip.label))), include_slopes=TRUE, ultrametric=TRUE)
 	sorted_node_ages = sort(get_all_branching_ages(tree));
 	root_age 		 = tail(sorted_node_ages,1)
 	age_epsilon		 = 1e-4*mean(tree$edge.length);
@@ -119,8 +119,8 @@ fit_hbd_model_on_grid = function(	tree,
 	# guess reasonable start params, if not provided
 	if(is.na(guess_rho0)) guess_rho0 = 1;
 	default_guess_PDR 	 				= mean(lineage_counter$relative_slopes); # a reasonable guesstimate for the average PDR is the average of the relative LTT-slope
-	default_guess_lambda 				= tail(lineage_counter$relative_slopes,1); # a reasonable guesstimate for lambda is the relative LTT-slope at age=0
-	if(default_guess_lambda<=0) default_guess_lambda = log(Ntips)/root_age
+	default_guess_lambda 				= tail(lineage_counter$relative_slopes[lineage_counter$relative_slopes>=0],1); # a reasonable guesstimate for lambda is the relative LTT-slope at age=0
+	if((!is.finite(default_guess_lambda)) || (default_guess_lambda<=0)) default_guess_lambda = log(Ntips)/root_age
 	guess_lambda[is.na(guess_lambda)] 	= default_guess_lambda
 	default_guess_mu 					= (if(default_guess_lambda<=default_guess_PDR) 0.5*default_guess_lambda else (default_guess_lambda-default_guess_PDR))
 	guess_mu[is.na(guess_mu)] 			= default_guess_mu

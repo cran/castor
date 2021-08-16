@@ -1,10 +1,11 @@
 # calculate statistics (mean & standard deviation) of a numeric trait on a tree over time
 # if tree$edge.length is missing, edges are assumed to have length 1.
 get_trait_stats_over_time = function(	tree, 
-										states,					# 1D numeric vector of size Nclades, listing the trait's value for each tip & node
-										Ntimes		= NULL, 	# number of equidistant time points for which to calculate trait stats
-										times		= NULL, 	# 1D array of time points in increasing order, for which to calculate trait stats
-										check_input	= TRUE){
+										states,							# 1D numeric vector of size Nclades, listing the trait's value for each tip & node
+										Ntimes				= NULL, 	# number of equidistant time points for which to calculate trait stats
+										times				= NULL, 	# 1D array of time points in increasing order, for which to calculate trait stats
+										include_quantiles 	= TRUE,		# include quantile information (e.g., median, CI95 and CI50) over time, i.e. in addition to means & stds. This increases computation time and memory.
+										check_input			= TRUE){
 	Ntips  = length(tree$tip.label)
 	Nnodes = tree$Nnode;
 	
@@ -29,11 +30,34 @@ get_trait_stats_over_time = function(	tree,
 												tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
 												edge_length		= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
 												times			= times,
-												states			= states)
+												states			= states,
+												return_states	= include_quantiles)
+	if(include_quantiles){
+		trait_stats$states_matrix = matrix(trait_stats$states_matrix,nrow=Ntimes,byrow=TRUE)
+		CI50lower 	= numeric(Ntimes)
+		CI50upper 	= numeric(Ntimes)
+		CI95lower 	= numeric(Ntimes)
+		CI95upper 	= numeric(Ntimes)
+		medians 	= numeric(Ntimes)
+		for(i in seq_len(Ntimes)){
+			quantiles = quantile(trait_stats$states_matrix[i,], probs=c(0.25, 0.75, 0.025, 0.975, 0.5), na.rm=TRUE)
+			CI50lower[i] = quantiles[1]
+			CI50upper[i] = quantiles[2]
+			CI95lower[i] = quantiles[3]
+			CI95upper[i] = quantiles[4]
+			medians[i] 	 = quantiles[5]	
+		}
+	}
+
 	
 	return(list(Ntimes			= length(times),
 				times			= times,
 				clade_counts	= trait_stats$clade_counts,
 				means 			= trait_stats$means,	# arithmetic means of trait
-				stds 			= trait_stats$stds))	# populaton standard deviations of trait
+				stds 			= trait_stats$stds,		# standard deviations of trait
+				medians			= (if(include_quantiles) medians else NULL),
+				CI50lower		= (if(include_quantiles) CI50lower else NULL),
+				CI50upper		= (if(include_quantiles) CI50upper else NULL),
+				CI95lower		= (if(include_quantiles) CI95lower else NULL),
+				CI95upper		= (if(include_quantiles) CI95upper else NULL)))
 }

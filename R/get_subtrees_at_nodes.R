@@ -47,13 +47,20 @@ get_subtrees_at_nodes = function(tree, nodes){
 									node.label 	= (if(is.null(tree$node.label)) NULL else tree$node.label[new2old_clade[(Ntips_kept+1):(Ntips_kept+Nnodes_kept)]-Ntips]),
 									edge 		= matrix(results$new_tree_edge[[n]],ncol=2,byrow=TRUE) + 1,
 									edge.length = (if(is.null(tree$edge.length)) NULL else tree$edge.length[new2old_edges[[n]]]),
-									root 		= results$new_root[[n]]+1)
+									root 		= results$new_root[[n]]+1,
+									root.edge	= (if(results$stem_edges[n]<0) NULL else tree$edge.length[1+results$stem_edges[n]]))
 			class(subtrees[[n]]) = "phylo";
 			attr(subtrees[[n]],"order") = "none";
 		}
 	}
+	
+	if(is.null(tree$edge.length)){
+		stem_lengths = NULL
+	}else{
+		stem_lengths = c(0,tree$edge.length)[2+results$stem_edges]
+	}
 
-	return(list(subtrees		= subtrees, 
+	return(list(subtrees		= subtrees,
 				new2old_tips	= new2old_tips,
 				new2old_nodes	= new2old_nodes,
 				new2old_edges	= new2old_edges));

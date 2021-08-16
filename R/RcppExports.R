@@ -177,8 +177,8 @@ count_transitions_between_clades_CPP <- function(Ntips, Nnodes, Nedges, tree_edg
     .Call(`_castor_count_transitions_between_clades_CPP`, Ntips, Nnodes, Nedges, tree_edge, clade_states, cladesA, cladesB)
 }
 
-count_clades_at_regular_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, degree, include_slopes) {
-    .Call(`_castor_count_clades_at_regular_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, degree, include_slopes)
+count_clades_at_regular_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, ultrametric, degree, include_slopes) {
+    .Call(`_castor_count_clades_at_regular_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, Ntimes, min_time, max_time, ultrametric, degree, include_slopes)
 }
 
 count_clades_at_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, times, degree) {
@@ -349,8 +349,8 @@ get_trait_depth_consenTRAIT_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, ed
     .Call(`_castor_get_trait_depth_consenTRAIT_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix)
 }
 
-ACF_continuous_trait_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix) {
-    .Call(`_castor_ACF_continuous_trait_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, Npairs, Nbins, verbose, verbose_prefix)
+ACF_continuous_trait_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, max_Npairs, phylodistance_grid, max_phylodistance, grid_is_uniform, verbose, verbose_prefix) {
+    .Call(`_castor_ACF_continuous_trait_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, max_Npairs, phylodistance_grid, max_phylodistance, grid_is_uniform, verbose, verbose_prefix)
 }
 
 get_empirical_state_frequencies_per_node_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, tip_states) {
@@ -365,8 +365,8 @@ get_phylogenetic_independent_contrasts_CPP <- function(Ntips, Nnodes, Nedges, Nt
     .Call(`_castor_get_phylogenetic_independent_contrasts_CPP`, Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, only_bifurcations, scaled)
 }
 
-get_trait_stats_at_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, times, states) {
-    .Call(`_castor_get_trait_stats_at_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, times, states)
+get_trait_stats_at_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, times, states, return_states) {
+    .Call(`_castor_get_trait_stats_at_times_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, times, states, return_states)
 }
 
 get_mrca_defining_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, mrcas, verbose, verbose_prefix) {
@@ -535,6 +535,10 @@ get_branching_ages_from_LTT_CPP <- function(ages, LTT) {
 
 generate_random_tree_BM_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_event_times, include_rates) {
     .Call(`_castor_generate_random_tree_BM_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_diffusivity, min_birth_rate_pc, max_birth_rate_pc, death_rate_diffusivity, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_event_times, include_rates)
+}
+
+generate_random_tree_OU_rates_CPP <- function(max_tips, max_time, max_time_since_equilibrium, birth_rate_pc_mean, birth_rate_pc_decay_rate, birth_rate_pc_std, min_birth_rate_pc, max_birth_rate_pc, death_rate_pc_mean, death_rate_pc_std, death_rate_pc_decay_rate, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_event_times, include_rates) {
+    .Call(`_castor_generate_random_tree_OU_rates_CPP`, max_tips, max_time, max_time_since_equilibrium, birth_rate_pc_mean, birth_rate_pc_decay_rate, birth_rate_pc_std, min_birth_rate_pc, max_birth_rate_pc, death_rate_pc_mean, death_rate_pc_std, death_rate_pc_decay_rate, min_death_rate_pc, max_death_rate_pc, root_birth_rate_pc, root_death_rate_pc, coalescent, Nsplits, as_generations, include_event_times, include_rates)
 }
 
 generate_random_tree_Mk_rates_CPP <- function(max_tips, max_extant_tips, max_sampled_tips, max_time, max_time_since_equilibrium, max_events, Nstates, start_state, state_birth_rates, state_death_rates, state_sampling_rates, transition_matrix_A, transition_matrix_C, as_generations, no_full_extinction, include_extant, include_extinct, include_event_times, include_rates) {
