@@ -98,7 +98,7 @@ Integer vector of size Nbins, storing the number of random tip pairs associated 
 %}
 
 \seealso{
-\code{\link{get_trait_depth}}, 
+\code{\link{consentrait_depth}}, 
 \code{\link{get_trait_acf}}
 }
 

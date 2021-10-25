@@ -1,10 +1,10 @@
-get_trait_depth = function(	tree, 
-							tip_states, 
-							min_fraction				= 0.9, 
-							count_singletons			= TRUE,
-							singleton_resolution		= 0,
-							weighted					= FALSE, 
-							Npermutations				= 0){
+consentrait_depth = function(	tree, 
+								tip_states, 
+								min_fraction				= 0.9, 
+								count_singletons			= TRUE,
+								singleton_resolution		= 0,
+								weighted					= FALSE, 
+								Npermutations				= 0){
 	results = get_trait_depth_consenTRAIT_CPP(	Ntips 				= length(tree$tip.label),
 												Nnodes 				= tree$Nnode,
 												Nedges 				= nrow(tree$edge),

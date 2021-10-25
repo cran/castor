@@ -107,7 +107,7 @@ generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree,
 						edge.length = results$locus_tree$locus_edge_length,
 						root 		= results$locus_tree$locus_root+1)
 	class(locus_tree) = "phylo";
-	attr(locus_tree,"order") = "none";
+	attr(locus_tree,"order") = NULL
 
 	# extract gene (coalescent) tree, simulated according to the MSC along the locus tree
 	NGtips	= results$gene_tree$NGtips
@@ -121,7 +121,7 @@ generate_gene_tree_msc_hgt_dl = function(	species_tree,							# rooted timetree,
 						edge.length = results$gene_tree$gene_edge_length,
 						root 		= results$gene_tree$gene_root+1)
 	class(gene_tree) = "phylo";
-	attr(gene_tree,"order") = "none";
+	attr(gene_tree,"order") = NULL
 		
 	return(list(success					= TRUE,
 				locus_tree				= locus_tree,

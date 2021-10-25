@@ -204,6 +204,8 @@ S. Louca and M. W. Pennell (2020). Extant timetrees are consistent with a myriad
 \code{\link{fit_hbd_pdr_parametric}}
 
 \code{\link{model_adequacy_hbd}}
+
+\code{\link{evaluate_spline}}
 }
 
 \examples{

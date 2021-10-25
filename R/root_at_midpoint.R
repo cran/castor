@@ -37,6 +37,7 @@ root_at_midpoint = function(tree,
 		new_edges = matrix(new_edges+1, ncol=2, byrow=TRUE); # unflatten returned table and shift clade indices to 1-based
 		tree$edge = new_edges;
 		tree$root = Ntips + new_root_node;
+		tree$root.edge = 0
 	
 		# update node indices if required
 		correct_root_node = 1; # correct index that the root node should have
@@ -54,6 +55,8 @@ root_at_midpoint = function(tree,
 				tree$node.label[correct_root_node] 	= root_label;
 			}
 		}
+		attr(tree,"order") = NULL
+
 	}else{
 		# figure out midpoint edge
 		distances = get_farthest_tips_per_edge_CPP(	Ntips		= Ntips,

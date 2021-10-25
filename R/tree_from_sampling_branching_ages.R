@@ -21,7 +21,7 @@ tree_from_sampling_branching_ages = function(	sampling_ages,				# numeric vector
 				edge.length = results$edge_length,
 				root 		= results$root+1)
 	class(tree) = "phylo";
-	attr(tree,"order") = "none";
+	attr(tree,"order") = NULL
 
 	return(list(success = TRUE, tree = tree));
 	

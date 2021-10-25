@@ -163,7 +163,7 @@ get_subtree_with_clades = function(	tree,
 					root 		= results$new_root+1L,
 					root.edge	= (if(force_keep_root && (!is.null(tree$root.edge))) tree$root.edge else NULL));
 	class(subtree) = "phylo";
-	attr(subtree,"order") = "none";
+	attr(subtree,"order") = NULL
 	
 	return(list(tree 			= subtree,
 				root_shift		= results$root_shift, # distance between old & new root (will always be non-negative)
@@ -490,6 +490,14 @@ get_all_branching_ages = function(tree){
 	return(branching_ages);
 }
 
+
+get_child_count_per_node = function(tree){
+	Nchildren = get_child_count_per_node_CPP(	Ntips			= length(tree$tip.label),
+												Nnodes			= tree$Nnode,
+												Nedges			= nrow(tree$edge),
+												tree_edge		= as.vector(t(tree$edge))-1);
+	return(Nchildren)
+}
 
 
 # given a piecewise polynomial (splines) function f(x), defined as a time series on some x-grid, calculate its antiderivative A(x):=\int_{Xstart}^x f(u) du for an arbitrary number of target x values
@@ -2727,7 +2735,7 @@ eliminate_bifurcating_root = function(tree){
 						edge 		= matrix(as.integer(results$new_tree_edge),ncol=2,byrow=TRUE) + 1L,
 						edge.length = results$new_edge_length)
 		class(new_tree) = "phylo"
-		attr(new_tree,"order") = "none"
+		attr(new_tree,"order") = NULL
 		return(list(success=TRUE, changed=TRUE, tree=new_tree, new2old_clade=new2old_clade))
 	}
 }

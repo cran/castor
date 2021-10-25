@@ -48,7 +48,7 @@ join_rooted_trees = function(	tree1, 					# rooted phylogenetic tree of class "p
 				edge.length = results$edge_length,
 				root 		= results$root+1)
 	class(tree) 		= "phylo"
-	attr(tree,"order") 	= "none"
+	attr(tree,"order") 	= NULL
 
 	return(list(tree				= tree,
 				clade1_to_clade		= clade1_to_clade, 

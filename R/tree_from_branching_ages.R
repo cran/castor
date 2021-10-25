@@ -20,7 +20,7 @@ tree_from_branching_ages = function(branching_ages, 			# numeric vector of size 
 				edge.length = results$edge_length,
 				root 		= results$root+1)
 	class(tree) = "phylo";
-	attr(tree,"order") = "none";
+	attr(tree,"order") = NULL
 
 	return(list(success = TRUE, tree = tree));
 	

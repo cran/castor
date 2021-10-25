@@ -83,7 +83,7 @@ generate_gene_tree_msc = function(	species_tree,							# rooted timetree, with N
 						edge.length = results$gene_edge_length,
 						root 		= results$gene_root+1)
 	class(gene_tree) = "phylo";
-	attr(gene_tree,"order") = "none";
+	attr(gene_tree,"order") = NULL
 		
 	return(list(success					= TRUE,
 				tree					= gene_tree,

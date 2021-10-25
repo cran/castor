@@ -147,7 +147,7 @@ simulate_tdsse = function(	Nstates,							# number of discrete possible states f
 				edge.length = results$edge_length,
 				root 		= results$root+1L)
 	class(tree) = "phylo";
-	attr(tree,"order") = "none";
+	attr(tree,"order") = NULL
 	
 	
 	# sub-sample tips (rarefy) if needed

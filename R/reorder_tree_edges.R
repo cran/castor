@@ -17,6 +17,11 @@ reorder_tree_edges = function(tree, root_to_tips=TRUE, depth_first_search=TRUE, 
 		tree$edge = tree$edge[new2old_edge,]
 		if(!is.null(tree$edge.label))  tree$edge.label  = tree$edge.label[new2old_edge];
 		if(!is.null(tree$edge.length)) tree$edge.length = tree$edge.length[new2old_edge];
+		if(root_to_tips && depth_first_search){
+			attr(tree,"order") = "cladewise"
+		}else{
+			attr(tree,"order") = NULL
+		}
 		return(tree);
 	}
 }

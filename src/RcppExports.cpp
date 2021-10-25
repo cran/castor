@@ -5,6 +5,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // evaluate_univariate_expression_CPP
 Rcpp::List evaluate_univariate_expression_CPP(const std::string& expression, const std::string& Xname, const std::vector<double>& X);
 RcppExport SEXP _castor_evaluate_univariate_expression_CPP(SEXP expressionSEXP, SEXP XnameSEXP, SEXP XSEXP) {
@@ -95,6 +100,19 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::string& >::type extrapolate(extrapolateSEXP);
     Rcpp::traits::input_parameter< const long >::type derivative(derivativeSEXP);
     rcpp_result_gen = Rcpp::wrap(evaluate_spline_CPP(Xgrid, Ygrid, splines_degree, Xtarget, extrapolate, derivative));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_spline_CPP
+NumericVector get_spline_CPP(const std::vector<double>& Xgrid, const std::vector<double>& Ygrid, const long splines_degree);
+RcppExport SEXP _castor_get_spline_CPP(SEXP XgridSEXP, SEXP YgridSEXP, SEXP splines_degreeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Xgrid(XgridSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type Ygrid(YgridSEXP);
+    Rcpp::traits::input_parameter< const long >::type splines_degree(splines_degreeSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_spline_CPP(Xgrid, Ygrid, splines_degree));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1411,6 +1429,30 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
     rcpp_result_gen = Rcpp::wrap(get_trait_depth_consenTRAIT_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_discrete_trait_depth_CPP
+Rcpp::List get_discrete_trait_depth_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<long>& state_per_tip, const double threshold_fraction, const bool count_singletons, const bool weighted, const double singleton_threshold, const long Npermutations, bool verbose, const std::string& verbose_prefix);
+RcppExport SEXP _castor_get_discrete_trait_depth_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP state_per_tipSEXP, SEXP threshold_fractionSEXP, SEXP count_singletonsSEXP, SEXP weightedSEXP, SEXP singleton_thresholdSEXP, SEXP NpermutationsSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nstates(NstatesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type state_per_tip(state_per_tipSEXP);
+    Rcpp::traits::input_parameter< const double >::type threshold_fraction(threshold_fractionSEXP);
+    Rcpp::traits::input_parameter< const bool >::type count_singletons(count_singletonsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type weighted(weightedSEXP);
+    Rcpp::traits::input_parameter< const double >::type singleton_threshold(singleton_thresholdSEXP);
+    Rcpp::traits::input_parameter< const long >::type Npermutations(NpermutationsSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_discrete_trait_depth_CPP(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2838,6 +2880,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_first_Wasserstein_distance_CPP", (DL_FUNC) &_castor_first_Wasserstein_distance_CPP, 2},
     {"_castor_split_undirected_graph_CPP", (DL_FUNC) &_castor_split_undirected_graph_CPP, 3},
     {"_castor_evaluate_spline_CPP", (DL_FUNC) &_castor_evaluate_spline_CPP, 6},
+    {"_castor_get_spline_CPP", (DL_FUNC) &_castor_get_spline_CPP, 3},
     {"_castor_derivatives_of_grid_curve_CPP", (DL_FUNC) &_castor_derivatives_of_grid_curve_CPP, 2},
     {"_castor_get_antiderivative_CPP", (DL_FUNC) &_castor_get_antiderivative_CPP, 5},
     {"_castor_get_derivative_CPP", (DL_FUNC) &_castor_get_derivative_CPP, 4},
@@ -2918,6 +2961,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_tree_to_Newick_string_CPP", (DL_FUNC) &_castor_tree_to_Newick_string_CPP, 12},
     {"_castor_read_Newick_string_CPP", (DL_FUNC) &_castor_read_Newick_string_CPP, 5},
     {"_castor_get_trait_depth_consenTRAIT_CPP", (DL_FUNC) &_castor_get_trait_depth_consenTRAIT_CPP, 13},
+    {"_castor_get_discrete_trait_depth_CPP", (DL_FUNC) &_castor_get_discrete_trait_depth_CPP, 14},
     {"_castor_ACF_continuous_trait_CPP", (DL_FUNC) &_castor_ACF_continuous_trait_CPP, 12},
     {"_castor_get_empirical_state_frequencies_per_node_CPP", (DL_FUNC) &_castor_get_empirical_state_frequencies_per_node_CPP, 6},
     {"_castor_get_trait_richness_collectors_curve_CPP", (DL_FUNC) &_castor_get_trait_richness_collectors_curve_CPP, 14},

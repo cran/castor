@@ -140,7 +140,7 @@ generate_tree_hbds = function(	max_sampled_tips		= NULL,
 				edge.length = results$edge_length,
 				root 		= results$root+1)
 	class(tree) = "phylo";
-	attr(tree,"order") = "none";
+	attr(tree,"order") = NULL
 
 	return(list(success				= TRUE,
 				tree				= tree,

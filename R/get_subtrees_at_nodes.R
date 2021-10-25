@@ -50,7 +50,7 @@ get_subtrees_at_nodes = function(tree, nodes){
 									root 		= results$new_root[[n]]+1,
 									root.edge	= (if(results$stem_edges[n]<0) NULL else tree$edge.length[1+results$stem_edges[n]]))
 			class(subtrees[[n]]) = "phylo";
-			attr(subtrees[[n]],"order") = "none";
+			attr(subtrees[[n]],"order") = NULL
 		}
 	}
 	

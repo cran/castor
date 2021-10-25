@@ -7,6 +7,7 @@ The library is meant for large (>100,000 tips) trees, structured in the conventi
 The computational complexity of most routines is O(Nedges).
 
 In the R "phylo" format, the tree topology (ignoring branch lengths) is encoded in a 2D array edge[,] of size Nedges x 2, where tree$edge[e,:] encodes the e-th edge, tree$edge[e,1] --> tree$edge[e,2], with tree$edge[e,1] and tree$edge[e,2] being indices in 1:(Ntips+Nnodes).
+A formal definition of the "phylo" format can be found here (section 4): http://ape-package.ird.fr/misc/FormatTreeR.pdf
 Note that in C++ (including this code) indices are zero-based (in contrast to R). 
 Hence, tips are indexed 0..(Ntips-1) and nodes are indexed 0..(Nnodes-1), and edge[,] has values in 0,..,(Ntips+Nnodes-1)
 All arrays passed to this code must be flattened and stored in row-major-format.
@@ -613,6 +614,18 @@ inline long array_argmax(const ARRAY_TYPE &X){
 	}
 	return max_n;
 }
+
+
+template<class TYPE>
+inline long array_argmax(const long N, const TYPE X[]){
+	if(N==0) return -1;
+	long max_n = 0;
+	for(long n=1; n<N; ++n){
+		if(X[n]>X[max_n]) max_n = n;
+	}
+	return max_n;
+}
+
 
 template<class ARRAY_TYPE>
 inline bool arrays_are_equal(const ARRAY_TYPE &A, const ARRAY_TYPE &B){
@@ -3008,8 +3021,20 @@ NumericVector evaluate_spline_CPP(	const std::vector<double> 	&Xgrid,			// (INPU
 			}	
 		}
 	}
-	
 	return Rcpp::wrap(Ytarget);
+}
+
+
+// given a scalar function defined as a splines on a 1D x-grid, determine its piecewise polynomial coefficients
+// [[Rcpp::export]]
+NumericVector get_spline_CPP(	const std::vector<double> 	&Xgrid,				// (INPUT) 1D array of size NG, listing X values in ascending order
+								const std::vector<double> 	&Ygrid,				// (INPUT) 1D array of size NG, listing Y values on the X grid
+								const long			 		splines_degree){	// (INPUT) integer, either 0,1,2 or 3, specifying the polynomial degree of the function Y=Y(X) at each grid interval
+	const long NG = Xgrid.size();
+	if(NG==0) return(Rcpp::wrap(std::vector<double>()));
+	dvector Ycoeff;
+	get_spline(Xgrid, Ygrid, splines_degree, false, Ycoeff);	
+	return Rcpp::wrap(Ycoeff);
 }
 
 
@@ -3724,6 +3749,24 @@ long random_binomial(long n, double prob){
 		}
 	}
 	return value;
+}
+
+
+
+// randomly shuffle the elements in a vector, between indices start & end
+// Based on the Fisher–Yates shuffling algorithm
+template<class TYPE>
+void random_shuffle_insitu(	std::vector<TYPE> 	&values, 	// (INPUT/OUTPUT) the array whose entries are to be shuffled in situ
+							const long 			start, 		// (INPUT) the lowest index of shuffled elements
+							const long 			end){		// (INPUT) the highest index of shuffled elements
+	TYPE temp;
+	for(long i=end, j; i>start; --i){
+		j = uniformIntWithin(start, i);
+		// swap values i & j
+		temp 		= values[i];
+		values[i] 	= values[j];
+		values[j] 	= temp;
+	}
 }
 
 
@@ -4890,6 +4933,79 @@ void multiply_matrix_with_log_vector(	const long			NR,
 		}
 		for(long r=0; r<NR; ++r){
 			logY[r] = log(logY[r]);
+		}
+	}
+}
+
+
+
+// Calculate the product Y = A^T * X
+template<class TYPE1,class TYPE2,class TYPE3>
+void multiply_Tmatrix_with_vector(	const long			NR,		// (INPUT) number of rows in A, must be equal to the length of X
+									const long			NC,		// (INPUT) number of columns in A, will be equal to the length of Y
+									TYPE1				A[],	// (INPUT) array of size NR*NC, in row-major format
+									TYPE2				X[],	// (INPUT) pre-allocated array of size NC or greater
+									std::vector<TYPE3>	&Y){	// (OUTPUT) product A*X, of size NR
+	if((NR==2) && (NC==2)){
+		// 2 x 2 matrix, treat as special case for computational efficiency
+		// this is useful for example in BiSSE models, where a matrix is multiplied with a vector numerous times
+		Y.resize(NC);
+		Y[0] = A[0]*X[0] + A[2]*X[1];
+		Y[1] = A[1]*X[0] + A[3]*X[1];
+	}else if((NR==3) && (NC==3)){
+		// 3 x 3 matrix, treat as special case for computational efficiency
+		// this is useful for example in spherical diffusion models, where a matrix is multiplied with a vector numerous times
+		Y.resize(NC);
+		Y[0] = A[0]*X[0] + A[3]*X[1] + A[6]*X[2];
+		Y[1] = A[1]*X[0] + A[4]*X[1] + A[7]*X[2];
+		Y[2] = A[2]*X[0] + A[5]*X[1] + A[8]*X[2];
+	}else{
+		Y.assign(NC,0);
+		for(long r=0; r<NR; ++r){
+			for(long c=0; c<NC; ++c){
+				Y[c] += A[r*NC+c] * X[r];
+			}
+		}
+	}
+}
+
+
+// Calculate the product Y = A^T * X = (X^T * A)^T, where X and Y are passed in log-transformed format
+template<class TYPE1,class TYPE2,class TYPE3>
+void multiply_Tmatrix_with_log_vector(	const long			NR,		// (INPUT) number of rows in A, must be equal to the length of X
+										const long			NC,		// (INPUT) number of columns in A, will be equal to the length of Y
+										TYPE1				A[],	// (INPUT) array of size NR*NC, in row-major format. A[0]=A[1,1], A[1]=A[1,2], A[2]=A[1,3], A[3]=A[2,1], A[4]=A[2,2], A[5]=A[2,3], A[6]=A[3,1], A[7]=A[3,2], A[8]=A[3,3]
+										TYPE2				logX[],	// (INPUT) array of size NC or greater, log-transformed X
+										std::vector<TYPE3>	&logY){	// (OUTPUT) log-transformed product A*X, of size NR
+	if((NR==2) && (NC==2)){
+		// 2 x 2 matrix, treat as special case for computational efficiency
+		// this is useful for example in BiSSE models, where a matrix is multiplied with a vector numerous times
+		logY.resize(NC);
+		const double X0 = exp(logX[0]);
+		const double X1 = exp(logX[1]);
+		logY[0] = log(A[0]*X0 + A[2]*X1);
+		logY[1] = log(A[1]*X0 + A[3]*X1);
+	}else if((NR==3) && (NC==3)){
+		// 3 x 3 matrix, treat as special case for computational efficiency
+		// this is useful for example in spherical diffusion models, where a matrix is multiplied with a vector numerous times
+		logY.resize(NC);
+		const double X0 = exp(logX[0]);
+		const double X1 = exp(logX[1]);
+		const double X2 = exp(logX[2]);
+		logY[0] = log(A[0]*X0 + A[3]*X1 + A[6]*X2);
+		logY[1] = log(A[1]*X0 + A[4]*X1 + A[7]*X2);
+		logY[2] = log(A[2]*X0 + A[5]*X1 + A[8]*X2);
+	}else{
+		logY.assign(NC,0);
+		double Xr;
+		for(long r=0; r<NR; ++r){
+			Xr = exp(logX[r]);
+			for(long c=0; c<NC; ++c){
+				logY[c] += A[r*NC+c] * Xr;
+			}
+		}
+		for(long c=0; c<NC; ++c){
+			logY[c] = log(logY[c]);
 		}
 	}
 }
@@ -16234,7 +16350,7 @@ Rcpp::List extend_tree_to_height_CPP(	const long			Ntips,
 
 
 // Eliminate multifurcations in a tree by replacing them with multiple descending bifurcations
-// Tips indices remain the same, but edge indices and the total number of nodes/edges may increase (if the tree includes multifurcations)
+// Tip indices remain the same, but edge indices and the total number of nodes/edges may increase (if the tree includes multifurcations)
 // Old nodes retain their index, and new nodes will have indices Nnodes,...,(Nnew_nodes-1)
 // New nodes will always descend from the old multifurcating nodes, that is, for every multifurcating old node that is split into bifurcations, the newly added nodes will descend from the old node (that kept its original index)
 // The tree need not be rooted
@@ -18432,8 +18548,8 @@ void aux_get_trait_depth_consenTRAIT(	const long 					Ntips,
 										const long 					Nnodes,
 										const long 					Nedges,
 										const long					root,				// integer in Ntips:(Nclades-1)
-										const std::vector<long> 		&tree_edge,			// 2D array of size Nedges x 2, flattened in row-major format
-										const std::vector<double> 		&edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+										const std::vector<long> 	&tree_edge,			// 2D array of size Nedges x 2, flattened in row-major format
+										const std::vector<double> 	&edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 										const std::vector<long>		&state_per_tip,		// 1D std::vector of integer states of size Ntips. <=0 means absence, >0 means presence.
 										const double				threshold_fraction,	// minimum fraction of tips in a clade that must share the trait, in order for the clade to be counted towards tau_D. In the original paper by Martiny et al (2013), this was 0.9.
 										const bool					count_singletons,	// if true, then singleton tips (i.e. having the trait but not counted towards any positive clade) are included by assuming a non-discovered sister tip having the trait with probability 0.5, and diverging just after the parent node [Martiny et al 2013].
@@ -18546,32 +18662,32 @@ void aux_get_trait_depth_consenTRAIT(	const long 					Ntips,
 
 
 
-// Calculate phylogenetic depth of a binary trait (presence/absence) on a tree
+// Calculate phylogenetic depth of a binary trait (presence/absence) on a tree, using the consenTRAIT metric.
 // Reference: Martiny et al (2013). Phylogenetic conservatism of functional traits in microorganisms. ISME Journal. 7:830-838
 // consenTRAIT: Consensus Analysis of Phylogenetic Trait Distribution
 //
 // Input: A phylogenetic tree, and the states of a binary trait on all tips of the tree.
 // Output: Mean depth at which the trait varies ("trait depth").
-// P-value is probability that random tauD (with randomly re-assigned states) would lead to an equal or greater tauD than observed. Traits are reassigned based on the empirical distribution of presence/absences.
+// P-value is probability that random tauD (with randomly reshuffled tip states) would lead to an equal or greater tauD than observed.
 // The time complexity of this routine is O(Nedges).
 //
 // Requirements:
 //   Tree must be rooted (root will be determined automatically based on the edges)
 //   Tree may include monofurcations or multifurcations.
 // [[Rcpp::export]]
-Rcpp::List get_trait_depth_consenTRAIT_CPP(	const long 			Ntips,
-											const long 			Nnodes,
-											const long 			Nedges,
-											const std::vector<long> &tree_edge,				// 2D array of size Nedges x 2, flattened in row-major format
-											const std::vector<double> &edge_length, 			// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-											const std::vector<long>	&state_per_tip,			// 1D std::vector of integer states of size Ntips. <=0 means absence, >0 means presence.
-											const double		threshold_fraction,		// minimum fraction of tips in a clade that must share the trait, in order for the clade to be counted towards tau_D. In the original paper by Martiny et al (2013), this was 0.9.
-											const bool			count_singletons,		// if true, then singleton tips (i.e. having the trait but not counted towards any positive clade) are included by assuming a non-discovered sister tip having the trait with probability 0.5, and diverging just after the parent node [Martiny et al 2013]. If false, leftover singletons will be ignored. This may be useful if you suspect many of them to be false positives.
-											const bool			weighted,				// if true, then positive clades (i.e. counted towards tauD) are weighted according to the number of positive tips
-											const double		singleton_threshold,	// phylogenetic distance threshold (max distance from node to its tips) for counting a node as a single tip if its diversity is equal to or below this threshold. For example, if this is 0, then nodes whose descendants are all identical, will be considered as singletons.
-											const long			Npermutations,			// number of random permutations (re-assignments of states) for estimating P-values
-											bool 				verbose,
-											const std::string 	&verbose_prefix){
+Rcpp::List get_trait_depth_consenTRAIT_CPP(	const long 					Ntips,
+											const long 					Nnodes,
+											const long 					Nedges,
+											const std::vector<long> 	&tree_edge,				// 2D array of size Nedges x 2, flattened in row-major format
+											const std::vector<double> 	&edge_length, 			// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+											const std::vector<long>		&state_per_tip,			// 1D std::vector of integer states of size Ntips. <=0 means absence, >0 means presence.
+											const double				threshold_fraction,		// minimum fraction of tips in a clade that must share the trait, in order for the clade to be counted towards tau_D. In the original paper by Martiny et al (2013), this was 0.9.
+											const bool					count_singletons,		// if true, then singleton tips (i.e. having the trait but not counted towards any positive clade) are included by assuming a non-discovered sister tip having the trait with probability 0.5, and diverging just after the parent node [Martiny et al 2013]. If false, leftover singletons will be ignored. This may be useful if you suspect many of them to be false positives.
+											const bool					weighted,				// if true, then positive clades (i.e. counted towards tauD) are weighted according to the number of positive tips
+											const double				singleton_threshold,	// phylogenetic distance threshold (max distance from node to its tips) for counting a node as a single tip if its diversity is equal to or below this threshold. For example, if this is 0, then nodes whose descendants are all identical, will be considered as singletons.
+											const long					Npermutations,			// number of random permutations (re-assignments of states) for estimating P-values
+											bool 						verbose,
+											const std::string 			&verbose_prefix){
 	const long Nclades = Ntips + Nnodes;
 	long clade, parent;
 	
@@ -18651,20 +18767,19 @@ Rcpp::List get_trait_depth_consenTRAIT_CPP(	const long 			Ntips,
 									verbose,
 									verbose_prefix);
 														
-	// estimate P-value of observed tauD, by randomly re-assigning states to tips (based on the empirical distribution)
+	// estimate P-value of observed tauD, by randomly shuffling tip states
 	double Pvalue = NAN_D;
 	double mean_random_tauD = NAN_D;
 	if(Npermutations>0){
 		long count_deeper 				= 0;
 		double sum_random_tauD 			= 0;
 		long count_valid_permutations 	= 0;
-		const double fraction_zeros 	= vector_count_zeros(current_state_per_tip)/double(Ntips);
 		double random_tauD, random_varD, random_minD, random_maxD;
 		long random_Npositives;
-		std::vector<long> positive_clades, dummy_positive_clades, dummy_positives_per_clade, dummy_tips_per_clade;
-		std::vector<double> dummy_mean_depth_per_clade;
+		lvector positive_clades, dummy_positive_clades, dummy_positives_per_clade, dummy_tips_per_clade;
+		dvector dummy_mean_depth_per_clade;
 		for(long p=0; p<Npermutations; ++p){
-			for(long tip=0; tip<Ntips; ++tip) current_state_per_tip[tip] = (random_bernoulli(fraction_zeros) ? 0 : 1);
+			random_shuffle_insitu(current_state_per_tip, 0, Ntips-1); // randomly shuffle tip states
 			aux_get_trait_depth_consenTRAIT(Ntips,
 											Nnodes,
 											Nedges,
@@ -18716,6 +18831,357 @@ Rcpp::List get_trait_depth_consenTRAIT_CPP(	const long 			Ntips,
 								Rcpp::Named("mean_depth_per_clade")		= Rcpp::wrap(mean_depth_per_clade),
 								Rcpp::Named("Pvalue") 					= Pvalue,
 								Rcpp::Named("mean_random_tauD")			= mean_random_tauD);
+}
+
+
+
+
+
+
+
+
+// Auxiliary function to get_discrete_trait_depth_CPP()
+// Assumes a pre-calculated traversal root (root-->tips)
+void aux_get_discrete_trait_depths(	const long 					Ntips,
+									const long 					Nnodes,
+									const long 					Nedges,
+									const long 					Nstates,
+									const long					root,				// integer in Ntips:(Nclades-1)
+									const std::vector<long> 	&tree_edge,			// 2D array of size Nedges x 2, flattened in row-major format
+									const std::vector<double> 	&edge_length, 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+									const std::vector<long>		&state_per_tip,		// 1D std::vector of integer states of size Ntips, with values in 0,..,Nstates
+									const double				threshold_fraction,	// minimum fraction of tips in a clade that must share a specific state, in order for the clade to be considered to have this "uniform state". In the original paper by Martiny et al (2013), this was 0.9. It should be strictly greater than 0.5.
+									const bool					count_singletons,
+									const bool					weighted,						// if true, then uniform clades are weighted according to the number of tips in the dominant state
+									const std::vector<long>		&traversal_queue,				// (INPUT) 1D array of size Nclades, with values in 0:(Nclades-1). Traversal queue root-->tips. Generated using the function get_tree_traversal_root_to_tips(include_tips=true).
+									const std::vector<long>		&traversal_node2first_edge,		// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1). Generated using the function get_tree_traversal_root_to_tips().
+									const std::vector<long>		&traversal_node2last_edge,		// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1). Generated using the function get_tree_traversal_root_to_tips().
+									const std::vector<long>		&traversal_edges,				// (INPUT) 1D array of size Nedges, with values in 0:(Nedges-1). Generated using the function get_tree_traversal_root_to_tips().
+									const std::vector<long> 	&clade2parent,					// (INPUT) 1D array of size Nclades, with values in 0:(Nclades-1).
+									const std::vector<long>		&incoming_edge_per_clade,		// (INPUT) 1D array of size Nclades, with values in 0:(Nedges-1).
+									const std::vector<double>	&node2max_tip_distance,			// (INPUT) 1D array of size Nnodes, specifying the max phylogenetic distance for each node to its tips.
+									const double				singleton_threshold,			// (INPUT) phylogenetic distance threshold for counting a node as a single tip if its max distance to its tips is equal to or below this threshold. For example, if this is 0, then nodes whose descendants are all identical, will be considered as singletons.
+									std::vector<long>			&dominant_state_per_clade,		// (OUTPUT) 1D array of size Nclades, listing the dominant (most frequent) state for each clade
+									double						&mean_depth,					// (OUTPUT) mean phylogenetic depth of all maximal uniform clades, regardless of its dominant state
+									double						&var_depth,						// (OUTPUT) variance of phylogenetic depths of all maximal uniform clades
+									double						&min_depth,						// (OUTPUT) minimum phylogenetic depth of all maximal uniform clades
+									double						&max_depth,						// (OUTPUT) maximum phylogenetic depth of all maximal uniform clades
+									long						&Nmax_uniform,					// (OUTPUT) number of maximal uniform clades, regardless of state
+									std::vector<double>			&mean_depth_per_state,			// (OUTPUT) mean depth of maximal uniform clades, separately for each state.
+									std::vector<double>			&var_depth_per_state,			// (OUTPUT) variance of depth of maximal uniform clades.
+									std::vector<double>			&min_depth_per_state,			// (OUTPUT) minimum phylogenetic depth of all maximal uniform clades
+									std::vector<double>			&max_depth_per_state,			// (OUTPUT) maximum phylogenetic depth of all maximal uniform clades
+									std::vector<long>			&Nmax_uniform_per_state,		// (OUTPUT) number of maximal uniform clades, separately for each possible state
+									bool 						verbose,
+									const std::string			&verbose_prefix){
+	const long Nclades = Ntips + Nnodes;
+	long clade, parent, child, node, incoming_edge;
+
+	// count number of tips with in each state and for each clade
+	// also count cumulative phylogenetic distances to tips, for each clade
+	lvector tips_per_clade(Nclades, 0);
+	lvector tips_per_clade_per_state(Nclades*Nstates, 0); // 2D array of size Nclades x Nstates, in row-major format
+	dvector mean_depth_per_clade(Nclades, 0); // initially this will be the cumulative depth_per_clade, normalization is done at the end
+	for(long tip=0; tip<Ntips; ++tip){
+		tips_per_clade[tip] = 1;
+		tips_per_clade_per_state[tip*Nstates+state_per_tip[tip]] = 1;
+	}
+	// traverse tips-->root
+	for(long q=traversal_queue.size()-1; q>=0; --q){
+		clade = traversal_queue[q];
+		if(clade==root) continue;
+		parent 			= clade2parent[clade];
+		incoming_edge 	= incoming_edge_per_clade[clade];
+		for(long state=0; state<Nstates; ++state){
+			tips_per_clade_per_state[parent*Nstates+state] += tips_per_clade_per_state[clade*Nstates+state];
+		}
+		tips_per_clade[parent] 			+= tips_per_clade[clade];
+		mean_depth_per_clade[parent] 	+= mean_depth_per_clade[clade] + tips_per_clade[clade] * (edge_length.size()==0 ? 1 : edge_length[incoming_edge]);
+	}
+	for(clade=0; clade<Nclades; ++clade){
+		mean_depth_per_clade[clade] /= tips_per_clade[clade];
+	}
+	
+	// determine dominant state for each clade
+	dominant_state_per_clade.assign(Nclades,-1);
+	for(clade=0; clade<Nclades; ++clade){
+		dominant_state_per_clade[clade] = array_argmax(Nstates,&tips_per_clade_per_state[clade*Nstates]);
+	}
+	
+	// traverse through all nodes with a uniform state, i.e. for which "almost all" tips share same state, and calculate their mean depth (--> tau_D statistic)
+	// traverse root-->tips, and whenever a node is counted as a uniform node, also mark its sub-clades as counted (without actually counting them)
+	double total_weight 	= 0;
+	double sum_depths 		= 0;
+	double sum_sqr_depths 	= 0;
+	Nmax_uniform				= 0;
+	min_depth 				= NAN_D;
+	max_depth 				= NAN_D;
+	min_depth_per_state.assign(Nstates,NAN_D);
+	max_depth_per_state.assign(Nstates,NAN_D);
+	dvector total_weight_per_state(Nstates,0);
+	dvector sum_depths_per_state(Nstates,0);
+	dvector sum_sqr_depths_per_state(Nstates,0);
+	lvector clade_counted(Nclades, false);
+	Nmax_uniform_per_state.assign(Nstates, 0);
+	for(long q=0, dominant_state; q<traversal_queue.size(); ++q){
+		clade = traversal_queue[q];
+		dominant_state = dominant_state_per_clade[clade];
+		const double fraction_dominant = tips_per_clade_per_state[clade*Nstates+dominant_state]/double(tips_per_clade[clade]);
+		if((!clade_counted[clade]) && (fraction_dominant>=threshold_fraction)){
+			if((clade<Ntips) || (node2max_tip_distance[clade-Ntips]<=singleton_threshold)){
+				// clade is a singleton, so treat in a special way (or omit)
+				// singleton tip sensu Martiny et al (2013): tip having the trait, but not considered to be a uniform node (because too few of it's neighbors have the state)
+				// according to Martiny, such cases may occur due to undersampling of the tree.
+				// this is a modified version of Martiny's: Some nodes may also be counted as singletons, if their descendants are very similar to each other
+				if(count_singletons){
+					clade_counted[clade] = true;
+					const double temp_depth = 0.5*(edge_length.size()==0 ? 1 : edge_length[incoming_edge_per_clade[clade]]);
+
+					++Nmax_uniform;
+					total_weight	+= 1;
+					sum_depths 		+= temp_depth;
+					sum_sqr_depths 	+= SQR(temp_depth);
+					if(std::isnan(min_depth) || (min_depth>temp_depth)) min_depth = temp_depth;
+					if(std::isnan(max_depth) || (max_depth<temp_depth)) max_depth = temp_depth;
+
+					++Nmax_uniform_per_state[dominant_state];
+					total_weight_per_state[dominant_state]	 += 1;
+					sum_depths_per_state[dominant_state] 	 += temp_depth;
+					sum_sqr_depths_per_state[dominant_state] += SQR(temp_depth);
+					if(std::isnan(min_depth_per_state[dominant_state]) || (min_depth_per_state[dominant_state]>temp_depth)) min_depth_per_state[dominant_state] = temp_depth;
+					if(std::isnan(max_depth_per_state[dominant_state]) || (max_depth_per_state[dominant_state]<temp_depth)) max_depth_per_state[dominant_state] = temp_depth;
+				}
+			}else{
+				// clade is a node with phylogenetic diversity above the singleton threshold
+				clade_counted[clade] = true;
+				const double temp_depth = mean_depth_per_clade[clade];
+				const double weight 	= (weighted ? tips_per_clade_per_state[clade*Nstates+dominant_state] : 1);
+
+				++Nmax_uniform;
+				total_weight	+= weight;
+				sum_depths 		+= weight * temp_depth;
+				sum_sqr_depths 	+= weight * SQR(temp_depth);
+				if(std::isnan(min_depth) || (min_depth>temp_depth)) min_depth = temp_depth;
+				if(std::isnan(max_depth) || (max_depth<temp_depth)) max_depth = temp_depth;
+
+				++Nmax_uniform_per_state[dominant_state];
+				total_weight_per_state[dominant_state]	 += weight;
+				sum_depths_per_state[dominant_state] 	 += weight * temp_depth;
+				sum_sqr_depths_per_state[dominant_state] += weight * SQR(temp_depth);
+				if(std::isnan(min_depth_per_state[dominant_state]) || (min_depth_per_state[dominant_state]>temp_depth)) min_depth_per_state[dominant_state] = temp_depth;
+				if(std::isnan(max_depth_per_state[dominant_state]) || (max_depth_per_state[dominant_state]<temp_depth)) max_depth_per_state[dominant_state] = temp_depth;
+			}
+		}
+		if(clade_counted[clade] && (clade>=Ntips)){
+			// clade was counted (either because it's a uniform clade, or due to an ancestral uniform clade)
+			// so mark its children as counted as well (the state of being counted will propagate all the way to the tips)
+			node = clade - Ntips;
+			for(long e=traversal_node2first_edge[node]; e<=traversal_node2last_edge[node]; ++e){
+				child = tree_edge[traversal_edges[e]*2+1];
+				clade_counted[child] = true;
+			}
+		}
+	}
+	
+	mean_depth = (total_weight==0 ? NAN_D : sum_depths/total_weight);
+	var_depth  = (total_weight==0 ? NAN_D : (Nmax_uniform==1 ? 0.0 : (sum_sqr_depths/total_weight - SQR(mean_depth))));
+	mean_depth_per_state.assign(Nstates,NAN_D);
+	var_depth_per_state.assign(Nstates,NAN_D);
+	for(long state=0; state<Nstates; ++state){
+		mean_depth_per_state[state] = (total_weight_per_state[state]==0 ? NAN_D : sum_depths_per_state[state]/total_weight_per_state[state]);
+		var_depth_per_state[state]  = (total_weight_per_state[state]==0 ? NAN_D : (Nmax_uniform_per_state[state]==1 ? 0.0 : (sum_sqr_depths_per_state[state]/total_weight_per_state[state] - SQR(mean_depth_per_state[state]))));		
+	}
+}
+
+
+
+// Calculate phylogenetic depth of a discrete trait on a tree, using a variant of the consenTRAIT metric.
+// A clade is said to be "uniform" in a state s if that state is dominant in the clade and its frequency exceeds the threshold_fraction
+// A clade is "maximal uniform" if it is uniform and is not descending from another uniform clade.
+// For every possible state s, the clades being maximal uniform in state s are determined and their phylogenetic depth is averaged, to obtain a state-specific tauD_s
+// A universal tauD is determined by calculating the average phylogenetic depth of all maximal uniform clades.
+// This approach is a modification of the consenTRAIT metric originally described for binary (presence/absence) traits
+//
+// Reference: Martiny et al (2013). Phylogenetic conservatism of functional traits in microorganisms. ISME Journal. 7:830-838
+// consenTRAIT: Consensus Analysis of Phylogenetic Trait Distribution
+//
+// Input: A phylogenetic tree, and the states of a discrete trait on all tips of the tree, as integers from 0 to Nstates-1
+// Output: Mean depth at which the trait varies ("trait depth").
+// P-value is probability that random tauD (with randomly reshuffled tip states) would lead to an equal or greater tauD than observed.
+// The time complexity of this routine is O(Nedges * Nstates).
+//
+// Requirements:
+//   Tree must be rooted (root will be determined automatically based on the edges)
+//   Tree may include monofurcations or multifurcations.
+// [[Rcpp::export]]
+Rcpp::List get_discrete_trait_depth_CPP(const long 					Ntips,
+										const long 					Nnodes,
+										const long 					Nedges,
+										const long 					Nstates,
+										const std::vector<long> 	&tree_edge,				// 2D array of size Nedges x 2, flattened in row-major format
+										const std::vector<double> 	&edge_length, 			// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+										const std::vector<long>		&state_per_tip,			// 1D std::vector of integer states of size Ntips, with values in 0,..,Nstates-1
+										const double				threshold_fraction,		// minimum fraction of tips in a clade with identical state, in order for the clade to be considered as having the particular "uniform state". In the original paper by Martiny et al (2013), this was 0.9.
+										const bool					count_singletons,		// if true, then singleton tips (i.e. having a state but not counted towards any parent clade) are considered to have that uniform state by assuming a non-discovered sister tip having the same state with probability 0.5, and diverging just after the parent node [Martiny et al 2013]. If false, leftover singletons will be ignored. This may be useful if you suspect many of them to be false positives.
+										const bool					weighted,				// if true, then uniform clades are weighted according to the number of tips in the dominant state
+										const double				singleton_threshold,	// phylogenetic distance threshold (max distance from node to its tips) for counting a node as a single tip if its diversity is equal to or below this threshold. For example, if this is 0, then nodes whose descendants are all identical, will be considered as singletons.
+										const long					Npermutations,			// number of random permutations (state reshufflings) for estimating P-values
+										bool 						verbose,
+										const std::string 			&verbose_prefix){
+	const long Nclades = Ntips + Nnodes;
+	long clade, parent;
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// determine incoming edge per clade
+	std::vector<long> incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}	
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)											
+	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
+	get_tree_traversal_root_to_tips(	Ntips,
+										Nnodes,
+										Nedges,
+										root,
+										tree_edge,
+										true,
+										false,
+										traversal_queue,
+										traversal_node2first_edge,
+										traversal_node2last_edge,
+										traversal_edges,
+										verbose,
+										verbose_prefix);
+										
+	// calculate max phylogenetic distance for each node to any of its tips, traversing tips-->root
+	// needed to identify nodes that are essentially tips (i.e. all of its descendants are closely related)
+	std::vector<double> node2max_tip_distance(Nnodes,0);
+	for(long q=traversal_queue.size()-1; q>=0; --q){
+		clade  = traversal_queue[q];
+		if(clade==root) continue;
+		parent = clade2parent[clade];
+		node2max_tip_distance[parent-Ntips] = max(node2max_tip_distance[parent-Ntips], (clade<Ntips ? 0.0 : node2max_tip_distance[clade-Ntips]) + (edge_length.size()==0 ? 1.0 : edge_length[incoming_edge_per_clade[clade]]));
+	}
+					
+	// get observed tauD_s for every state s
+	long Nmax_uniform;
+	double tauD, varD, minD, maxD;
+	lvector current_state_per_tip = state_per_tip;
+	lvector dominant_state_per_clade, Nmax_uniform_per_state;
+	dvector tauD_per_state, varD_per_state, minD_per_state, maxD_per_state;
+	aux_get_discrete_trait_depths(	Ntips,
+									Nnodes,
+									Nedges,
+									Nstates,
+									root,
+									tree_edge,
+									edge_length,
+									current_state_per_tip,
+									threshold_fraction,
+									count_singletons,
+									weighted,
+									traversal_queue,
+									traversal_node2first_edge,
+									traversal_node2last_edge,
+									traversal_edges,
+									clade2parent,
+									incoming_edge_per_clade,
+									node2max_tip_distance,
+									singleton_threshold,
+									dominant_state_per_clade,
+									tauD,
+									varD,
+									minD,
+									maxD,
+									Nmax_uniform,
+									tauD_per_state,
+									varD_per_state,
+									minD_per_state,
+									maxD_per_state,
+									Nmax_uniform_per_state,
+									verbose,
+									verbose_prefix);
+
+														
+	// estimate P-value of observed tauD, by randomly shuffling tip states
+	double Pvalue = NAN_D;
+	double mean_random_tauD = NAN_D;
+	if(Npermutations>0){
+		long count_deeper 				= 0;
+		double sum_random_tauD 			= 0;
+		long count_valid_permutations 	= 0;
+		double random_tauD, random_varD, random_minD, random_maxD;
+		long random_Nmax_uniform;
+		dvector random_tauD_per_state, random_varD_per_state, random_minD_per_state, random_maxD_per_state, mean_random_tauD_per_state;
+		lvector random_dominant_state_per_clade, random_Nmax_uniform_per_state;
+		for(long p=0; p<Npermutations; ++p){
+			random_shuffle_insitu(current_state_per_tip, 0, Ntips-1); // randomly shuffle tip states
+			aux_get_discrete_trait_depths(Ntips,
+											Nnodes,
+											Nedges,
+											Nstates,
+											root,
+											tree_edge,
+											edge_length,
+											current_state_per_tip,
+											threshold_fraction,
+											count_singletons,
+											weighted,
+											traversal_queue,
+											traversal_node2first_edge,
+											traversal_node2last_edge,
+											traversal_edges,
+											clade2parent,
+											incoming_edge_per_clade,
+											node2max_tip_distance,
+											singleton_threshold,
+											random_dominant_state_per_clade,
+											random_tauD,
+											random_varD,
+											random_minD,
+											random_maxD,
+											random_Nmax_uniform,
+											random_tauD_per_state,
+											random_varD_per_state,
+											random_minD_per_state,
+											random_maxD_per_state,
+											random_Nmax_uniform_per_state,
+											false,
+											verbose_prefix);
+			if(!std::isnan(random_tauD)){
+				++count_valid_permutations;
+				if(random_tauD>=tauD) ++count_deeper;
+				sum_random_tauD += random_tauD;
+			}
+		}
+		if(count_valid_permutations>0){
+			Pvalue = count_deeper/double(count_valid_permutations);
+			mean_random_tauD = sum_random_tauD/count_valid_permutations;
+		}else{
+			Pvalue = NAN_D;
+			mean_random_tauD = NAN_D;
+		}
+	}
+
+	return Rcpp::List::create(	Rcpp::Named("tauD") 				= tauD,
+								Rcpp::Named("varD") 				= varD,
+								Rcpp::Named("minD") 				= minD,
+								Rcpp::Named("maxD") 				= maxD,
+								Rcpp::Named("Nmax_uniform") 			= Nmax_uniform,
+								Rcpp::Named("tauD_per_state") 		= tauD_per_state,
+								Rcpp::Named("varD_per_state") 		= varD_per_state,
+								Rcpp::Named("minD_per_state") 		= minD_per_state,
+								Rcpp::Named("maxD_per_state") 		= maxD_per_state,
+								Rcpp::Named("Nmax_uniform_per_state")	= Nmax_uniform_per_state,
+								Rcpp::Named("Pvalue") 				= Pvalue,
+								Rcpp::Named("mean_random_tauD")		= mean_random_tauD);
 }
 
 
@@ -19974,7 +20440,7 @@ Rcpp::List WMPR_ASR_CPP(const long					Ntips,
 
 	// determine root
 	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-	
+		
 	// create tree-access structures and determine order in which to traverse tree
 	std::vector<long> traversal_queue_root2tips, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
 	get_tree_traversal_root_to_tips(	Ntips,
@@ -20046,6 +20512,7 @@ Rcpp::List WMPR_ASR_CPP(const long					Ntips,
 		if(parent_i % 100 == 0) Rcpp::checkUserInterrupt();
 	}
 	
+		
 	// count number of scenarios (MPR solutions) implying each state in each node (based on lowest cost in the root, and then the associated transitions to the children)
 	// scenario_count_per_node_and_state[n,s] will be the number of MPR solutions ("scenarios") in which node n is at state s
 	// scenario_count_per_node_and_state[,] will be filled in the order root-->tips
@@ -20274,9 +20741,9 @@ void aux_reroot_and_update_ASR_with_fixed_rates_Markov_model(	const long					Nti
 				expQ_pointer = &expQ[0];
 			}
 			// use exponentiated transition matrix to propagate probabilities from children to parent
-			// probabilities[parent] = product_{child in children} exp(edge_length * Q^T) * probabilities[child]
-			if(child<Ntips) multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &prior_probabilities_per_tip[child*Nstates], Y);
-			else multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &posteriors[(child-Ntips)*Nstates], Y);
+			// probabilities[parent] = product_{child in children} exp(edge_length * Q) * probabilities[child]
+ 			if(child<Ntips) multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &prior_probabilities_per_tip[child*Nstates], Y);
+ 			else multiply_matrix_with_vector(Nstates, Nstates, expQ_pointer, &posteriors[(child-Ntips)*Nstates], Y);
 			for(long s=0; s<Nstates; ++s) posteriors[node*Nstates+s] *= max(0.0,Y[s]); // factor Y into the posterior of this node. Avoid negative values from rounding errors
 		}
 			
@@ -22694,58 +23161,7 @@ Rcpp::List get_MuSSE_loglikelihood_CPP(	const long					Ntips,
 			loglikelihood += log(scaling); // correct model's loglikelihood for rescaling of this node's posterior
 
 			// check validity of likelihoods so far
-			if((scaling==0) || std::isnan(scaling) || std::isinf(scaling)) return Rcpp::List::create(	Rcpp::Named("success") = false, Rcpp::Named("error") = "Likelihood reached NaN or Inf during postorder traversal", Rcpp::Named("warnings") = Rcpp::wrap(warnings));
-			
-			/* OLD CODE. TO BE DELETED
-			if((clade_age-child_age)<=root_age*RELATIVE_EPSILON){
-				// child has same age as parent node, so just take child posterior as-is (no need to integrate over zero time)
-				posteriors[node] *= child_D;
-			}else{						
-				start_functor 	= min(Nintervals-1,long(child_age/DeltaT)); // Gmap functor defined on the interval that includes child_age
-				end_functor  	= min(Nintervals-1,long(clade_age/DeltaT)); // Gmap functor defined on the interval that includes clade_age. May be the same as start_functor.
-				// map child_D --> X (defined at start_functor's start time)
-				Gmap_shape_functors[start_functor].getValue(child_age,Gmap_to_child_shape);
-				Gmap_to_child_scale = Gmap_scale_functors[start_functor](child_age);
-				//LUsolveLinearSystem(&Gmap_to_child_shape[0],&inversion_scratch[0],Nstates,&child_D[0],1e-6*vector_abs_mean(child_D),10,&X[0]);
-				QR_linear_least_squares(Nstates,Nstates,1,Gmap_to_child_shape,child_D,true,scratchDV,inversion_scratch,X,Gmap_to_child_rank);
-				if(include_warnings && (Gmap_to_child_rank<Nstates)){
-					if(Nrank_warnings<max_rank_warnings) warnings.push_back(stringprintf("G-map from age %g to %g is rank deficient (has estimated rank %d), and hence its inversion is numerically unstable",start_functor*DeltaT,child_age,Gmap_to_child_rank));
-					++Nrank_warnings;
-				}
-				// map X --> clade_D
-				// multiply Gmaps for all age-intervals between child & clade
-				clade_D = X;
-				loglikelihood -= Gmap_to_child_scale; // correct LL for scaling of inverted Gmap_to_child
-				for(long n=start_functor; n<end_functor; ++n){
-					multiply_matrix_with_vector(Nstates,Nstates,Gmap_shape_functors[n].getLastReferenceValue(),clade_D,Y);
-					make_vector_positive(Y);
-					scaling = vector_mean(Y);
-					clade_D  = Y/scaling;
-					loglikelihood += log(scaling);
-					loglikelihood += Gmap_scale_functors[n].getLastReferenceValue();							
-				}
-				Gmap_shape_functors[end_functor].getValue(clade_age,Gmap_to_clade_shape);
-				multiply_matrix_with_vector(Nstates,Nstates,&Gmap_to_clade_shape[0],&clade_D[0],Y);
-				clade_D  = Y;
-				loglikelihood += Gmap_scale_functors[end_functor](clade_age);
-
-				replace_non_positives(clade_D, 1e-8*vector_abs_mean(clade_D)); // replace non-positive values with a relatively small value, to avoid NaNs in the loglikelihood
-				posteriors[node] *= clade_D;
-				
-				// rescale (normalize) node's posterior D
-				// this is necessary due to scaling issues for very large trees; the non-normalized posterior D tends to 0 for older nodes
-				// note that since the MuSSE ODE is linear in D, rescaling just rescales the overall model likelihood (this is corrected for below)
-				// normalization should be done at every sub-iteration (i.e. for every child), because for some very degenerate trees some nodes can have hundreds of children
-				scaling = vector_sum(posteriors[node]);
-				for(long s=0; s<Nstates; ++s) posteriors[node][s] /= scaling;
-				loglikelihood += log(scaling); // correct model's loglikelihood for rescaling of this node's posterior
-
-				// check validity of likelihoods so far
-				if((scaling==0) || std::isnan(scaling) || std::isinf(scaling)) return Rcpp::List::create(	Rcpp::Named("success") = false, Rcpp::Named("error") = "Likelihood reached NaN or Inf during postorder traversal", Rcpp::Named("warnings") = Rcpp::wrap(warnings));
-			}
-			*/
-		
-
+			if((scaling==0) || std::isnan(scaling) || std::isinf(scaling)) return Rcpp::List::create(	Rcpp::Named("success") = false, Rcpp::Named("error") = "Likelihood reached NaN or Inf during postorder traversal", Rcpp::Named("warnings") = Rcpp::wrap(warnings));			
 		}
 		
 		// abort if the user has interrupted the calling R program, or if we ran out of time
@@ -28640,8 +29056,8 @@ Rcpp::List generate_random_tree_tdSSE_CPP(	const long 	 				max_tips,					// (IN
 // given some age-dependent per-lineage-pair coalescence rate over age (time-before-present), generate random coalescence event ages age1<=age2<=age3<=...
 // The rate of coalescence events at any age will be proportional to the number of unique lineage-pairs at that age, for example at start_age it will be Nalleles*(Nalleles-1)*pairwise_rate
 // In the classical coalescent model for a haploid population the per-lineage-pair rate is 1/(Ne*T), where Ne is the effective population size at any time point and T is the generation time
-// WARNING: THIS FUNCTION SHOULD WORK, BUT HASN'T BEEN THOROUGHLY DBUGGED YET
-void get_coalescence_ages(	const PiecewisePolynomial<double>	&pairwise_rate,		// (INPUT) the rate of the Poisson process when only 2 alleles are present (typically equal to the effective_population_size x generation_time for haploid populations). Defined as a piecewise polynomial function over age (e.g. piecewise linear or spline). Make sure the rate is defined for sufficiently large ages, or its extrapolation properties are suitable for calculating a rate at sufficiently large ages. 
+// WARNING: THIS FUNCTION SHOULD WORK, BUT HASN'T BEEN THOROUGHLY DEBUGGED YET. IT HAS NOT YET BEEN INCORPORATED ANYWHERE.
+void get_coalescence_ages(	const PiecewisePolynomial<double>	&pairwise_rate,		// (INPUT) the rate of the Poisson process when only 2 alleles are present (typically equal to the effective_population_size x generation_time for haploid populations). Defined as a piecewise polynomial function over age (e.g. piecewise linear or spline). Make sure the rate is defined for sufficiently large ages, or that its extrapolation properties are suitable for calculating a rate at sufficiently large ages. 
 							const long 							Nalleles,			// (INPUT) number of alleles sampled at start_age
 							const double						start_age,			// (INPUT) the age from which to start counting, i.e. the process starts at this time, and the first coalescence event will be at age >= age0
 							const double						end_age,			// (INPUT) optional maximum age considered; any coalescence events occurring after this age are ignored. To disable this age limit set end_age to INFTY_D

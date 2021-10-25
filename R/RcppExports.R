@@ -29,6 +29,10 @@ evaluate_spline_CPP <- function(Xgrid, Ygrid, splines_degree, Xtarget, extrapola
     .Call(`_castor_evaluate_spline_CPP`, Xgrid, Ygrid, splines_degree, Xtarget, extrapolate, derivative)
 }
 
+get_spline_CPP <- function(Xgrid, Ygrid, splines_degree) {
+    .Call(`_castor_get_spline_CPP`, Xgrid, Ygrid, splines_degree)
+}
+
 derivatives_of_grid_curve_CPP <- function(Xgrid, Ygrid) {
     .Call(`_castor_derivatives_of_grid_curve_CPP`, Xgrid, Ygrid)
 }
@@ -347,6 +351,10 @@ read_Newick_string_CPP <- function(input, underscores_as_blanks, interpret_quote
 
 get_trait_depth_consenTRAIT_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix) {
     .Call(`_castor_get_trait_depth_consenTRAIT_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix)
+}
+
+get_discrete_trait_depth_CPP <- function(Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix) {
+    .Call(`_castor_get_discrete_trait_depth_CPP`, Ntips, Nnodes, Nedges, Nstates, tree_edge, edge_length, state_per_tip, threshold_fraction, count_singletons, weighted, singleton_threshold, Npermutations, verbose, verbose_prefix)
 }
 
 ACF_continuous_trait_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, state_per_tip, max_Npairs, phylodistance_grid, max_phylodistance, grid_is_uniform, verbose, verbose_prefix) {

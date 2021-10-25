@@ -49,7 +49,7 @@ collapse_tree_at_resolution = function(	tree,
 		collapsed_tree$tip.label[old2new_clade[Ntips+results$collapsed_nodes+1]] = tree$tip.label[results$farthest_tips+1];
 	}
 	class(collapsed_tree) = "phylo";
-	attr(collapsed_tree,"order") = "none";
+	attr(collapsed_tree,"order") = NULL
 
 	return(list(tree				= collapsed_tree, 
 				root_shift			= results$root_shift, # distance between old & new root (will always be non-negative)

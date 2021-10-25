@@ -29,7 +29,7 @@ merge_nodes_to_multifurcations = function(tree,
 					edge.length = results$new_edge_length,
 					root 		= results$new_root+1)
 	class(new_tree) = "phylo";
-	attr(new_tree,"order") = "none";
+	attr(new_tree,"order") = NULL
 	
 	return(list(tree			= new_tree,
 				new2old_node	= new2old_node,

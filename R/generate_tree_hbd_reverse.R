@@ -143,7 +143,7 @@ generate_tree_hbd_reverse = function(	Ntips,							# (integer) Number of tips in
 							edge.length = results$edge_length[[n]],
 							root 		= results$root[[n]]+1)
 		class(trees[[n]]) = "phylo";
-		attr(trees[[n]],"order") = "none";
+		attr(trees[[n]],"order") = NULL
 	}
 	return(list(success	= TRUE,
 				trees	= trees));

@@ -43,7 +43,7 @@ split_tree_at_height = function(tree,
 							root 		= results$new_roots[i]+1,
 							root.edge	= results$root_edges[i])
 			class(subtree) 			= "phylo";
-			attr(subtree,"order") 	= "none";
+			attr(subtree,"order") 	= NULL
 			subtrees[[i]] 	= list(	tree 			= subtree,
 									new2old_clade 	= (if(NSclades[i]==0) vector("integer") else new2old_clade[(1+clade_offset):(clade_offset+NSclades[i])]),
 									new2old_edge 	= (if(NSedges[i]==0) vector("integer") else new2old_edge[(1+edge_offset):(edge_offset+NSedges[i])]));

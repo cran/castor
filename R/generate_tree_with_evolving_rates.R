@@ -146,7 +146,7 @@ generate_tree_with_evolving_rates = function(parameters				= list(), 	# named li
 				edge.length = results$edge_length,
 				root 		= results$root+1L)
 	class(tree) = "phylo"
-	attr(tree,"order") = "none"
+	attr(tree,"order") = NULL
 	clade_states = results$clade_states
 	root_time = results$root_time
 	birth_rates_pc = results$birth_rates_pc

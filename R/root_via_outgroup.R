@@ -49,6 +49,7 @@ root_via_outgroup = function(tree, outgroup, update_indices=TRUE){
 			tree$node.label[correct_root_node] 	= root_label;
 		}
 	}
+	attr(tree,"order") = NULL
 	
 	return(tree);
 }

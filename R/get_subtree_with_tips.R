@@ -61,7 +61,7 @@ get_subtree_with_tips = function(tree, only_tips=NULL, omit_tips=NULL, collapse_
 						root 		= results$new_root+1L,
 						root.edge	= (if(results$old_stem_edge<0) (if(!is.null(tree$root.edge)) tree$root.edge else NULL) else (if(!is.null(tree$edge.length)) tree$edge.length[results$old_stem_edge+1L] else NULL)))
 		class(subtree) = "phylo"
-		attr(subtree,"order") = "none"
+		attr(subtree,"order") = NULL
 		
 		# calculate the inverse mapping old-->new clade. Some entries might be 0, i.e. for old clades that were lost.
 		old2new_clade = numeric(Ntips+Nnodes)

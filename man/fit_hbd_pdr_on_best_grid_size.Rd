@@ -169,6 +169,8 @@ S. Louca and M. W. Pennell (2020). Extant timetrees are consistent with a myriad
 \code{\link{fit_hbd_psr_on_best_grid_size}}
 
 \code{\link{model_adequacy_hbd}}
+
+\code{\link{evaluate_spline}}
 }
 
 \examples{

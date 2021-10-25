@@ -25,6 +25,7 @@ root_at_node = function(tree, new_root_node, update_indices=TRUE){
 	new_edges = matrix(new_edges+1, ncol=2, byrow=TRUE); # unflatten returned table and shift clade indices to 1-based
 	tree$edge = new_edges;
 	tree$root = Ntips + new_root_node;
+	tree$root.edge = 0
 	
 	# update node indices if required
 	correct_root_node = 1; # correct index that the root node should have
@@ -42,6 +43,7 @@ root_at_node = function(tree, new_root_node, update_indices=TRUE){
 			tree$node.label[correct_root_node] 	= root_label;
 		}
 	}
+	attr(tree,"order") = NULL
 	
 	return(tree);
 }

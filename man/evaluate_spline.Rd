@@ -38,6 +38,8 @@ Integer, specifying which derivative to return. To return the spline's value, se
 
 \details{
 Spline functions are returned by some of castor's fitting routines, so \code{evaluate_spline} is meant to aid with the evaluation and plotting of such functions. A spline function of degree \eqn{D\geq1} has continuous derivatives up to degree \eqn{D-1}. The function \code{evaluate_spline} is much more efficient if \code{Xtarget} is monotonically increasing or decreasing.
+
+This function is used to evaluate the spline's values at arbitrary points. To obtain the spline's polynomial coefficients, use \code{\link{spline_coefficients}}.
 }
 
 
@@ -50,8 +52,9 @@ A numeric vector of the same length as \code{Xtarget}, listing the values (or de
 %\references{
 %}
 
-%\seealso{
-%}
+\seealso{
+\code{\link{spline_coefficients}}
+}
 
 \examples{
 # specify Y on a coarse X grid

@@ -44,7 +44,7 @@ read_tree = function(	string="",
 				root.edge	= (if(is.nan(results$root_edge)) NULL else results$root_edge))
 	if(!is.null(tree$edge.number)) tree$edge.number[tree$edge.number<0] = NA;
 	class(tree) = "phylo";
-	attr(tree,"order") = "cladewise";
+	attr(tree,"order") = "cladewise"
 	
 	if(edge_order=="pruningwise"){
 		tree = reorder_tree_edges(tree, root_to_tips=FALSE, depth_first_search=TRUE, index_only=FALSE)

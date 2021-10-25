@@ -25,6 +25,7 @@ root_in_edge = function(tree, root_edge, location=0.5, new_root_name=NULL, colla
 	if(collapse_monofurcations){
 		tree = collapse_monofurcations(tree, force_keep_root=FALSE, as_edge_counts=FALSE)$tree
 	}
+	attr(tree,"order") = NULL
 	
 	return(tree);
 }

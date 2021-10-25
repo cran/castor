@@ -88,7 +88,7 @@ J. R. Zaneveld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 }
 
 \seealso{
-\code{\link{get_trait_depth}}, 
+\code{\link{consentrait_depth}}, 
 \code{\link{geographic_acf}}
 }
 

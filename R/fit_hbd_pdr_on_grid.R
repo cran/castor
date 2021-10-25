@@ -410,10 +410,4 @@ fit_hbd_pdr_on_grid = function(	tree,
 
 
 
-completement = function(N, indices){
-	pool = rep(TRUE,N);
-	pool[indices] = FALSE;
-	return(which(pool));
-}
-
 

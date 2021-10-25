@@ -69,7 +69,7 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 				edge.length = results$edge_length,
 				root 		= results$root+1)
 	class(tree) = "phylo";
-	attr(tree,"order") = "none";
+	attr(tree,"order") = NULL
 		
 	# collapse tips if needed
 	Ncollapsed = 0;

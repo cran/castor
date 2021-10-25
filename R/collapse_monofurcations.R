@@ -22,7 +22,7 @@ collapse_monofurcations = function(tree, force_keep_root=TRUE, as_edge_counts=FA
 							edge.length = (if(is.null(tree$edge.length)) NULL else results$new_edge_length),
 							root 		= results$new_root+1)
 	class(collapsed_tree) = "phylo";
-	attr(collapsed_tree,"order") = "none";
+	attr(collapsed_tree,"order") = NULL
 	
 	return(list(tree			= collapsed_tree, 
 				new2old_node	= new2old_node, 

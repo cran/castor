@@ -51,7 +51,7 @@ Prior probability distribution of the root's states, used to calculate the model
 Include the marginal ancestral likelihoods for each node (conditional scaled state likelihoods) in the return values. Note that this may increase the computation time and memory needed, so you may set this to \code{FALSE} if you don't need marginal ancestral states.
 }
 \item{reroot}{
-Reroot tree at each node when computing marginal ancestral likelihoods, according to Yang et al. (1995). This is the default and recommended behavior, but leads to increased computation time. If \code{FALSE}, ancestral likelihoods at each node are computed solely based on the subtree descending from that node, without rerooting.
+Reroot tree at each node when computing marginal ancestral likelihoods, according to Yang et al. (1995). This is the default and recommended behavior, but leads to increased computation time. If \code{FALSE}, ancestral likelihoods at each node are computed solely based on the subtree descending from that node, without rerooting. Caution: Rerooting is strictly speaking only valid if the Mk model is time-reversible (for example, if the transition matrix is symmetric). Do not use the rerooting method if \code{rate_model="ARD"}.
 }
 \item{Ntrials}{
 Number of trials (starting points) for fitting the transition matrix. Only relevant if \code{transition_matrix=NULL}. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.

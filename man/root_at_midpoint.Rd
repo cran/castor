@@ -18,7 +18,7 @@ root_at_midpoint( tree,
 A tree object of class "phylo". Can be unrooted or rooted (but see option \code{is_rooted}).
 }
 \item{split_edge}{
-Logical, specifying whether to place the new root in the middle of an edge (in the middle of the longest path of any two tips), thereby creating a new node. If \code{FALSE}, then the root will be placed on one of the existing nodes.
+Logical, specifying whether to place the new root in the middle of an edge (in the middle of the longest path of any two tips), thereby creating a new node. If \code{FALSE}, then the root will be placed on one of the existing nodes; note that the resulting tree may no longer be bifurcating at the root.
 }
 \item{update_indices}{
 Logical, specifying whether to update the node indices such that the new root is the first node in the list, as is common convention. This will modify \code{tree$node.label} (if it exists) and also the node indices listed in \code{tree$edge}. Note that this option is only relevant if \code{split_edge=FALSE}; if \code{split_edge=TRUE} then \code{update_indices} will always be assumed \code{TRUE}.
