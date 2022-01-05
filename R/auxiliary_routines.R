@@ -1,3 +1,11 @@
+# convert a list to a vector using unlist, after converting NULLs to NAs
+# this function may be needed if your list contains NULLs, in which case the standard unlist removes those entries from the returned vector
+unlist_with_nulls = function(L){
+	L[sapply(L, is.null)] = NA
+	return(unlist(L))
+}
+
+
 get_adjacent_edges_per_edge = function(tree){
 	Nedges = nrow(tree$edge)
 	adjacents = get_adjacent_edges_per_edge_CPP(	Ntips 		= length(tree$tip.label),
@@ -766,7 +774,7 @@ get_random_params = function(defaults, lower_bounds, upper_bounds, scales, order
 
 # check validity and sanitize (standardize format) of model parameters for fitting
 # used by various fitting routines
-sanitize_parameters_for_fitting = function(	param_values,				# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
+sanitize_parameters_for_fitting = function(	param_values,				# numeric vector of size NP, specifying fixed values for some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
 											param_guess		= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
 											param_min		= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
 											param_max		= +Inf,		# numeric vector of size NP, specifying upper bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same upper bound is assumed for all params.
@@ -1065,18 +1073,45 @@ extract_HBDS_events_from_tree = function(	tree,
 
 
 
-generate_OU_time_series = function(	times,					# numeric vector of size NT
+# create a finer time grid, based on some old grid and a refinement factor, by splitting each interval of the original grid into refinement_factor sub-intervals
+# old_grid[] must be non-decreasing
+# refinement_factor must be an integer >= 1
+refine_time_grid = function(old_grid, refinement_factor){
+	old_diffs = diff(old_grid)
+	new_diffs = rep(old_diffs/refinement_factor, rep(refinement_factor, length(old_diffs)))
+	new_grid  = old_grid[1] + cumsum(new_diffs)
+	return(new_grid)
+}
+
+
+# smoothen a time series using qubic splines
+smoothen_time_series = function(times, values){
+	refinement_factor 	= max(2,min(100,100*max(abs(diff(values)/sd(values)))))
+	refined_times  		= refine_time_grid(old_grid=times, refinement_factor=refinement_factor)
+	refined_values 		= evaluate_spline(Xgrid=times, Ygrid=values, splines_degree=3, Xtarget=refined_times, extrapolate="const", derivative=0)
+	return(list(times = refined_times, values = refined_values))
+}
+
+
+
+generate_OU_time_series = function(	times,					# numeric vector of size NT, specifying the times at which to evaluate the OU process. A finer time grid means that the resulting time series will have finer structures, and look more "jagged"
 									start_value,			# optional numeric. If NA or NaN or NULL, it will be chosen randomly from the stationary distribution
 									stationary_mean,		# numeric
 									stationary_std,			# non-negative numeric
 									decay_rate,				# strictly positive numeric, in units 1/time
 									constrain_min=-Inf,		# optional lower bound for the returned values
-									constrain_max=+Inf){	# optional upper bound for the returned values
+									constrain_max=+Inf,		# optional upper bound for the returned values
+									smoothen = FALSE){		# logical, specifying whether to smoothen the generated time series using qubic splines onto a refined time grid
 	values = get_Ornstein_Uhlenbeck_time_series_CPP(times			= times,
 													start_value		= (if((!is.null(start_value)) && is.finite(start_value)) start_value else NaN),
 													stationary_mean = stationary_mean,
 													stationary_std	= stationary_std,
 													decay_rate		= decay_rate)$values
+	if(smoothen){
+		smoothened = smoothen_time_series(times=times, values=values)
+		times  = smoothened$times
+		values = smoothened$values
+	}
 	return(list(times=times, values=pmin(constrain_max,pmax(constrain_min,values))))
 }
 
@@ -1094,6 +1129,169 @@ generate_bounded_BM_time_series = function(	times,					# numeric vector of size 
 											upper		= upper)$values
 	return(list(times=times, values=values))
 }
+
+
+# estimate the parameters of a 1-dimensional Ornstein-Uhlenbeck process (proceeding over linear time) via maximum-likelihood, given a single univariate time series
+# This is not a phylogenetic routine, i.e., it is not suitable for fitting an OU process evolving & branching along a phylogeny
+# The OU process is parameterized through its stationary mean ("mean"), its stationary standard deviation ("std") and its decay_rate (aka. "lambda")
+fit_OU1_model = function(	times,	# numeric vector of length NT, listing times in strictly ascending order
+							values, # numeric vector of length NT, listing the observed values of the OU process
+							min_mean			= -Inf,
+							max_mean			= Inf,
+							min_std				= 0,
+							max_std				= Inf,
+							min_decay_rate		= 0,
+							max_decay_rate		= Inf,
+							fixed_mean			= NA,		# optional numeric, specifying the fixed stationary mean. To fit the stationary mean, set this to NA or NaN.
+							fixed_std			= NA,		# optional numeric, specifying the fixed stationary std. To fit the stationary std, set this to NA or NaN.
+							fixed_decay_rate	= NA,		# optional numeric, specifying the fixed decay_rate. To fit the decay_rate, set this to NA.
+							guess_mean			= NA,		# initial guess for the stationary mean of the OU process. If NA, this will be automatically chosen.
+							guess_std			= NA,		# initial guess for the stationary standard deviation of the OU process. If NA, this will be automatically chosen.
+							guess_decay_rate 	= NA,		# initial guess for the decay rate ("lambda") of the OU process. If NA, this will be automatically chosen.
+							detrend				= TRUE,		# detrend the time series prior to fitting the OU process.
+							Ntrials				= 1,		# number of fitting trials to perform, to avoid local non-global likelihood maxima
+							max_start_attempts	= 1,		# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
+							Nthreads			= 1,		# number of parallel threads to use when performing multiple fitting trials
+							fit_control			= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
+							verbose				= FALSE,	# boolean, specifying whether to print informative messages
+							diagnostics			= FALSE,	# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
+							verbose_prefix		= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
+	NT 		= length(times)
+	Ndata 	= NT-1
+	if(NT<2) return(list(success=FALSE, error="Not enough data points"))
+	time_steps = diff(times)
+	
+	if(detrend){
+		linfit 	= stats::lm(Y ~ X, data=data.frame(X=times, Y=values), na.action=na.omit)
+		values	= values - (linfit$coefficients[1] + linfit$coefficients[2] * times) + mean(values, na.rm=TRUE)
+		trend 	= linfit$coefficients[2]
+	}
+	
+	# figure out reasonable parameter guesses where needed
+	if(!is.finite(guess_mean)) guess_mean = mean(values)
+	if(!is.finite(guess_std)) guess_std = sd(values)
+	if(!is.finite(guess_decay_rate)) guess_decay_rate = mean(abs(diff(values)/(diff(times) * values[1:(NT-1)])))
+	
+	# sanitize model parameters
+	sanitized_params = sanitize_parameters_for_fitting(	param_values	= c(fixed_mean, fixed_std, fixed_decay_rate),
+														param_guess 	= c(guess_mean, guess_std, guess_decay_rate),
+														param_min		= c(min_mean, min_std, min_decay_rate),
+														param_max 		= c(max_mean, max_std, max_decay_rate),
+														param_scale 	= NULL)
+	if(!sanitized_params$success) return(list(success=FALSE, error=sanitized_params$error))
+	NP				= sanitized_params$NP
+	NFP				= sanitized_params$NFP
+	param_names		= sanitized_params$param_names
+	param_values	= sanitized_params$param_values
+	param_guess		= sanitized_params$param_guess
+	param_min		= sanitized_params$param_min
+	param_max		= sanitized_params$param_max
+	param_scale		= sanitized_params$param_scale
+	fitted_params	= sanitized_params$fitted_params
+	fixed_params	= sanitized_params$fixed_params
+
+	# set fit-control options, unless provided by the caller
+	if(is.null(fit_control)) fit_control = list()
+	if(is.null(fit_control$step.min)) fit_control$step.min = 0.001
+	if(is.null(fit_control$x.tol)) fit_control$x.tol = 1e-8
+	if(is.null(fit_control$iter.max)) fit_control$iter.max = 1000
+	if(is.null(fit_control$eval.max)) fit_control$eval.max = 2 * fit_control$iter.max * NFP
+							
+	# objective function: negated log-likelihood
+	# input argument is the subset of fitted parameters, rescaled according to param_scale
+	objective_function = function(fparam_values,trial){
+		params = param_values; params[fitted_params] = fparam_values * param_scale[fitted_params];
+		if(any(is.nan(params)) || any(is.infinite(params))) return(Inf); # catch weird cases where params become NaN
+		# calculate joint likelihood of transitions, based on the fact that transitions are independent normally distributed variables
+		stationary_mean = params[1]
+		stationary_std 	= params[2]
+		decay_rate 		= params[3]
+		next_stds  		= stationary_std * sqrt(1-exp(-2*time_steps*decay_rate))
+		next_means 		= stationary_mean + (values[1:(NT-1)]-stationary_mean) * exp(-time_steps*decay_rate)
+		loglikelihood	= -sum(log(next_stds * sqrt(2*pi)) + ((values[2:NT]-next_means)^2)/(2*next_stds^2))
+		if(!is.finite(loglikelihood)) loglikelihood = -Inf
+		if(diagnostics) cat(sprintf("%s  Trial %s: loglikelihood %.10g\n",verbose_prefix,as.character(trial),loglikelihood))
+		return(-loglikelihood)
+	}
+	
+	# fit with various starting points
+	fit_single_trial = function(trial){
+		scales		 = param_scale[fitted_params]
+		lower_bounds = param_min[fitted_params]
+		upper_bounds = param_max[fitted_params]
+		# randomly choose start values for fitted params (keep trying up to max_start_attempts times)
+		Nstart_attempts = 0
+		while(Nstart_attempts<max_start_attempts){
+			# randomly choose start values for fitted params
+			if(trial==1){
+				start_values = param_guess[fitted_params]		
+			}else{
+				start_values = get_random_params(defaults=param_guess[fitted_params], lower_bounds=lower_bounds, upper_bounds=upper_bounds, scales=scales, orders_of_magnitude=4)
+			}
+			# check if start values yield NaN
+			start_objective = objective_function(start_values/scales, trial)
+			Nstart_attempts = Nstart_attempts + 1
+			if(is.finite(start_objective)) break;
+		}
+		# run fit with chosen start_values
+		if(is.finite(start_objective)){
+			fit = stats::nlminb(start		= start_values/scales, 
+								objective	= function(pars){ objective_function(pars, trial) },
+								lower		= lower_bounds/scales, 
+								upper		= upper_bounds/scales, 
+								control		= fit_control)
+			results = list(objective_value=fit$objective, fparam_values = fit$par*scales, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[[1]], Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
+			if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, Niterations %d, Nevaluations %d, converged = %d\n",verbose_prefix,trial,-results$objective_value,results$Niterations, results$Nevaluations, results$converged))
+		}else{
+			results = list(objective_value=NA, fparam_values = NA, converged=FALSE, Niterations=0, Nevaluations=0, Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
+			if(diagnostics) cat(sprintf("%s  Trial %d: Start objective is non-finite. Skipping trial\n",verbose_prefix,trial))
+		}
+		return(results)
+	}
+
+	# run one or more independent fitting trials
+    if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
+		# run trials in parallel using multiple forks
+		# Note: Forks (and hence shared memory) are not available on Windows
+		if(verbose) cat(sprintf("%sFitting %d model parameters (%d trials, parallelized)..\n",verbose_prefix,NFP,Ntrials))
+		fits = parallel::mclapply(	1:Ntrials, 
+									FUN = function(trial) fit_single_trial(trial), 
+									mc.cores = min(Nthreads, Ntrials), 
+									mc.preschedule = FALSE,
+									mc.cleanup = TRUE)
+	}else{
+		# run in serial mode
+		if(verbose) cat(sprintf("%sFitting %d model parameters (%s)..\n",verbose_prefix,NFP,(if(Ntrials==1) "1 trial" else sprintf("%d trials",Ntrials))))
+		fits = sapply(1:Ntrials,function(x) NULL)
+		for(trial in 1:Ntrials){
+			fits[[trial]] = fit_single_trial(trial)
+		}
+	}	
+
+	# extract information from best fit (note that some fits may have LL=NaN or NA)
+	objective_values	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$objective_value))
+	valids				= which((!is.na(objective_values)) & (!is.nan(objective_values)) & (!is.null(objective_values)) & (!is.infinite(objective_values)))
+	if(length(valids)==0) return(list(success=FALSE, error=sprintf("Fitting failed for all trials")));
+	best 				= valids[which.min(sapply(valids, function(i) objective_values[i]))]
+	objective_value		= -fits[[best]]$objective_value
+	loglikelihood		= objective_value
+	fitted_param_values = param_values; fitted_param_values[fitted_params] = fits[[best]]$fparam_values;
+	if(is.null(objective_value) || any(is.na(fitted_param_values)) || any(is.nan(fitted_param_values))) return(list(success=FALSE, error=sprintf("Some fitted parameters are NaN")));
+
+	return(list(success					= TRUE,
+				objective_value			= objective_value,
+				objective_name			= "loglikelihood",
+				loglikelihood			= loglikelihood,
+				fitted_mean				= fitted_param_values[1],
+				fitted_std				= fitted_param_values[2],
+				fitted_decay_rate		= fitted_param_values[3],
+				linear_trend			= trend,
+				NFP						= NFP,
+				Ndata					= Ndata,
+				AIC						= 2*NFP - 2*loglikelihood,
+				BIC						= log(Ndata)*NFP - 2*loglikelihood))
+}
+
 
 
 
@@ -1525,14 +1723,6 @@ fit_hbds_model_on_best_grid_size = function(tree,
 
 
 
-# convert a list to a vector using unlist, after converting NULLs to NAs
-# this function may be needed if your list contains NULLs, in which case the standard unlist removes those entries from the returned vector
-unlist_with_nulls = function(L){
-	L[sapply(L, is.null)] = NA
-	return(unlist(L))
-}
-
-
 # given a list of objects, unpack every object that is a pure list (non recursively)
 # "pure list" means that class(object) = c("list")
 # For example, list(a=3, b=list(c=4,d=5), e=list(f=list(6,7), g=8, h=phylo_object, i=list())) will become list(a=3, c=4, d=5, f=list(6,7), g=8, h=phylo_object)
@@ -1863,6 +2053,8 @@ read_fasta = function(	file,
 
 
 
+
+
 # make a time series monotonically increasing or decreasing, by setting problematic values to NaN
 monotonize_series_by_pruning = function(values,				# numeric vector of size N, listing the scalar time series values. May include NaN.
 										increasing, 		# logical, specifying whether the resulting time series should be monotonically increasing (rather than decreasing)
@@ -1982,7 +2174,7 @@ fit_local_exponential_rate = function(	X,					# 1D numeric vector of length N, l
 													Nthreads				= 1)
 				return(bfit$rate)
 			}
-			if((Nthreads>1) && (Nbootstraps>1) && (.Platform$OS.type!="windows")){ # debug
+			if((Nthreads>1) && (Nbootstraps>1) && (.Platform$OS.type!="windows")){
 				boostrap_rates = matrix(unlist(parallel::mclapply(seq_len(Nbootstraps), FUN = function(b) aux_bootstrap(b), mc.cores=min(Nthreads, Nbootstraps), mc.preschedule=TRUE, mc.cleanup=TRUE)), nrow=Nbootstraps, byrow=TRUE)
 			}else{
 				boostrap_rates = t(sapply(seq_len(Nbootstraps), FUN = function(b) aux_bootstrap(b)))

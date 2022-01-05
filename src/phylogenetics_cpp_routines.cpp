@@ -1007,6 +1007,7 @@ void qsortIndices(const std::vector<TYPE> &values, std::vector<long> &sortedIndi
 	aux_qsortIndices(values, sortedIndices, 0, sortedIndices.size()-1);
 }
 
+
 // similar to qsortIndices(..) but sorting in descending order
 template<typename TYPE>
 void qsortIndices_reverse(const std::vector<TYPE> &values, std::vector<long> &sortedIndices){
@@ -2648,6 +2649,105 @@ public:
 
 
 
+// given a scalar function defined as a splines on a 1D x-grid, calculate its values at some target x-values
+// [[Rcpp::export]]
+NumericVector evaluate_spline_CPP(	const std::vector<double> 	&Xgrid,			// (INPUT) 1D array of size NG, listing X values in ascending order
+									const std::vector<double> 	&Ygrid,			// (INPUT) 1D array of size NG, listing Y values on the X grid
+									const long			 		splines_degree,	// (INPUT) integer, either 0,1,2 or 3, specifying the polynomial degree of the function Y=Y(X) at each grid interval
+									const std::vector<double> 	&Xtarget,		// (INPUT) 1D array of size NT, listing target x-values on which to evaluate the function Y
+									const std::string			&extrapolate,	// (INPUT) string, specifying how to extrapolate Y beyond Xgrid if needed. Available options are "const" or "splines" (i.e. use the polynomial coefficients from the nearest grid point)
+									const long					derivative){	// (INPUT) which derivative to evaluate. Options are 0, 1 and 2. Set to 0 to get the value.
+	const long NG = Xgrid.size();
+	if(NG==0) return(Rcpp::wrap(std::vector<double>(NAN_D,Xtarget.size())));
+	if(derivative>2) return(Rcpp::wrap(std::vector<double>(NAN_D,Xtarget.size()))); // only derivatives 0,1,2 are supported right now
+	const bool extrapolate_const = (extrapolate=="const");
+	
+	// get splines representation Y
+	dvector Ycoeff;
+	get_spline(Xgrid, Ygrid, splines_degree, false, Ycoeff);
+	
+	dvector Ytarget(Xtarget.size());
+	for(long t=0, g=-1; t<Xtarget.size(); ++t){
+		if((Xtarget[t]<Xgrid[0]) && extrapolate_const){
+			Ytarget[t] = (derivative==0 ? Ygrid[0] : 0.0);
+		}else if((Xtarget[t]>Xgrid[NG-1]) && extrapolate_const){
+			Ytarget[t] = (derivative==0 ? Ygrid[NG-1] : 0.0);
+		}else{
+			g = (Xtarget[t]<=Xgrid[0] ? 0 : find_next_left_grid_point(Xgrid, Xtarget[t], g)); // determine grid point to the immediate left of target x
+			if(derivative==0){
+				Ytarget[t] = polynomial_value(splines_degree,&Ycoeff[g*(splines_degree+1)],Xtarget[t]);
+			}else if(derivative==1){
+				Ytarget[t] = polynomial_derivative(splines_degree,&Ycoeff[g*(splines_degree+1)],Xtarget[t]);
+			}else if(derivative==2){
+				Ytarget[t] = polynomial_second_derivative(splines_degree,&Ycoeff[g*(splines_degree+1)],Xtarget[t]);
+			}	
+		}
+	}
+	return Rcpp::wrap(Ytarget);
+}
+
+
+// given a scalar function defined as a splines on a 1D x-grid, determine its piecewise polynomial coefficients
+// [[Rcpp::export]]
+NumericVector get_spline_CPP(	const std::vector<double> 	&Xgrid,				// (INPUT) 1D array of size NG, listing X values in ascending order
+								const std::vector<double> 	&Ygrid,				// (INPUT) 1D array of size NG, listing Y values on the X grid
+								const long			 		splines_degree){	// (INPUT) integer, either 0,1,2 or 3, specifying the polynomial degree of the function Y=Y(X) at each grid interval
+	const long NG = Xgrid.size();
+	if(NG==0) return(Rcpp::wrap(std::vector<double>()));
+	dvector Ycoeff;
+	get_spline(Xgrid, Ygrid, splines_degree, false, Ycoeff);	
+	return Rcpp::wrap(Ycoeff);
+}
+
+
+// given a scalar piecewise linear function defined on a 1D x-grid, calculate its derivatives with respect to Xgrid[] and Ygrid[], evaluated (almost) at the same grid points (slightly to the right of the grid points)
+// this function returns a 3D array D of size 2*NG x NG x 2, in layer-row-major format
+//   with D[a,g,p] corresponding to the p-th polynomial coefficient of dY/dXgrid[a] at Xgrid[g]+0
+//   and D[NG+a,g,p] corresponding to the p-th polynomial coefficient of dY/dYgrid[a] at Xgrid[g]+0
+//   (for a=0,..,NG-1, and p=0,1)
+// note that D[a,:,:] should be interpreted as a piecewise polynomial (and discontinuous) function on the grid Xgrid[]
+// In the special case where NG=1, the derivative dY/dXgrid[0] will be zero and the derivative dY/dYgrid[0] will be 1
+// [[Rcpp::export]]
+NumericVector derivatives_of_grid_curve_CPP(const std::vector<double> 	&Xgrid,		// (INPUT) 1D array of size NG, listing X values in ascending order
+											const std::vector<double> 	&Ygrid){	// (INPUT) 1D array of size NG, listing Y values on the X grid
+	const long NG = Xgrid.size();
+	const long NA = 2*NG;
+	const long Ddegree = 1;
+	if(NG==0) return(Rcpp::wrap(std::vector<double>(NAN_D,NA*NG*(Ddegree+1))));
+	const long NperA = NG*(Ddegree+1); // number of values per derivative
+	dvector D(NA*NG*(Ddegree+1),0);
+
+	if(NG==1){
+		const long g=0;
+		D[(NG+g)*NperA + g*(Ddegree+1) + 0] = 1;
+		return Rcpp::wrap(D);
+	}
+	
+	for(long g=0; g<NG-1; ++g){
+		// calculate derivative dY(x)/dXgrid[g] for x in (Xgrid[g],Xgrid[g+1])
+		D[g*NperA + g*(Ddegree+1) + 0] = -Xgrid[g+1]*(Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
+		D[g*NperA + g*(Ddegree+1) + 1] = (Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
+		// calculate derivative dY(x)/dXgrid[g+1] for x in (Xgrid[g],Xgrid[g+1])
+		D[(g+1)*NperA + g*(Ddegree+1) + 0] = Xgrid[g]*(Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
+		D[(g+1)*NperA + g*(Ddegree+1) + 1] = -(Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
+		// calculate derivative dY(x)/dYgrid[g] for x in (Xgrid[g],Xgrid[g+1])
+		D[(NG+g)*NperA + g*(Ddegree+1) + 0] = 1+Xgrid[g]/(Xgrid[g+1]-Xgrid[g]);
+		D[(NG+g)*NperA + g*(Ddegree+1) + 1] = -1/(Xgrid[g+1]-Xgrid[g]);
+		// calculate derivative dY(x)/dYgrid[g+1] for x in (Xgrid[g],Xgrid[g+1])
+		D[(NG+g+1)*NperA + g*(Ddegree+1) + 0] = -Xgrid[g]/(Xgrid[g+1]-Xgrid[g]);
+		D[(NG+g+1)*NperA + g*(Ddegree+1) + 1] = 1/(Xgrid[g+1]-Xgrid[g]);
+	}
+	
+	// set D[:,NG-1,:] equal to D[:,NG-2,:]
+	for(long k=0; k<NA; ++k){
+		D[k*NperA + (NG-1)*(Ddegree+1) + 0] = D[k*NperA + (NG-2)*(Ddegree+1) + 0];
+		D[k*NperA + (NG-1)*(Ddegree+1) + 1] = D[k*NperA + (NG-2)*(Ddegree+1) + 1];
+	}
+	
+	return Rcpp::wrap(D);
+}
+
+
 
 #pragma mark -
 #pragma mark Integration, antiderivatives, derivatives
@@ -2715,7 +2815,7 @@ double integrate1D(const TIME_ARRAY &times, const std::vector<double> &values, c
 
 // integrate a piecewise linear curve on a 1D interval: \int_{Xstart}^{Xend} Y(x) dx
 double integrate_piecewise_linear(	const dvector	&X,			// (INPUT) 1D array of size N, listing x-values in ascending order. If this grid does not fully cover the integration interval [Xstart,Xend], Y is extrapolated as a constant where necessary
-									const dvector 	&Y,			// (INPUT) !D array of size N, listing the the values of Y on the grid
+									const dvector 	&Y,			// (INPUT) 1D array of size N, listing the the values of Y on the grid
 									double			Xstart,		// (INPUT) lower end of the integration interval
 									double			Xend){		// (INPUT) upper end of the integration interval
 	const long N = X.size();
@@ -2986,104 +3086,6 @@ void get_antiderivative(const std::vector<double> 		&X,				// (INPUT) 1D array o
 	}
 }
 
-
-// given a scalar function defined as a splines on a 1D x-grid, calculate its values at some target x-values
-// [[Rcpp::export]]
-NumericVector evaluate_spline_CPP(	const std::vector<double> 	&Xgrid,			// (INPUT) 1D array of size NG, listing X values in ascending order
-									const std::vector<double> 	&Ygrid,			// (INPUT) 1D array of size NG, listing Y values on the X grid
-									const long			 		splines_degree,	// (INPUT) integer, either 0,1,2 or 3, specifying the polynomial degree of the function Y=Y(X) at each grid interval
-									const std::vector<double> 	&Xtarget,		// (INPUT) 1D array of size NT, listing target x-values on which to evaluate the function Y
-									const std::string			&extrapolate,	// (INPUT) string, specifying how to extrapolate Y beyond Xgrid if needed. Available options are "const" or "splines" (i.e. use the polynomial coefficients from the nearest grid point)
-									const long					derivative){	// (INPUT) which derivative to evaluate. Options are 0, 1 and 2. Set to 0 to get the value.
-	const long NG = Xgrid.size();
-	if(NG==0) return(Rcpp::wrap(std::vector<double>(NAN_D,Xtarget.size())));
-	if(derivative>2) return(Rcpp::wrap(std::vector<double>(NAN_D,Xtarget.size()))); // only derivatives 0,1,2 are supported right now
-	const bool extrapolate_const = (extrapolate=="const");
-	
-	// get splines representation Y
-	dvector Ycoeff;
-	get_spline(Xgrid, Ygrid, splines_degree, false, Ycoeff);
-	
-	dvector Ytarget(Xtarget.size());
-	for(long t=0, g=-1; t<Xtarget.size(); ++t){
-		if((Xtarget[t]<Xgrid[0]) && extrapolate_const){
-			Ytarget[t] = (derivative==0 ? Ygrid[0] : 0.0);
-		}else if((Xtarget[t]>Xgrid[NG-1]) && extrapolate_const){
-			Ytarget[t] = (derivative==0 ? Ygrid[NG-1] : 0.0);
-		}else{
-			g = (Xtarget[t]<=Xgrid[0] ? 0 : find_next_left_grid_point(Xgrid, Xtarget[t], g)); // determine grid point to the immediate left of target x
-			if(derivative==0){
-				Ytarget[t] = polynomial_value(splines_degree,&Ycoeff[g*(splines_degree+1)],Xtarget[t]);
-			}else if(derivative==1){
-				Ytarget[t] = polynomial_derivative(splines_degree,&Ycoeff[g*(splines_degree+1)],Xtarget[t]);
-			}else if(derivative==2){
-				Ytarget[t] = polynomial_second_derivative(splines_degree,&Ycoeff[g*(splines_degree+1)],Xtarget[t]);
-			}	
-		}
-	}
-	return Rcpp::wrap(Ytarget);
-}
-
-
-// given a scalar function defined as a splines on a 1D x-grid, determine its piecewise polynomial coefficients
-// [[Rcpp::export]]
-NumericVector get_spline_CPP(	const std::vector<double> 	&Xgrid,				// (INPUT) 1D array of size NG, listing X values in ascending order
-								const std::vector<double> 	&Ygrid,				// (INPUT) 1D array of size NG, listing Y values on the X grid
-								const long			 		splines_degree){	// (INPUT) integer, either 0,1,2 or 3, specifying the polynomial degree of the function Y=Y(X) at each grid interval
-	const long NG = Xgrid.size();
-	if(NG==0) return(Rcpp::wrap(std::vector<double>()));
-	dvector Ycoeff;
-	get_spline(Xgrid, Ygrid, splines_degree, false, Ycoeff);	
-	return Rcpp::wrap(Ycoeff);
-}
-
-
-// given a scalar piecewise linear function defined on a 1D x-grid, calculate its derivatives with respect to Xgrid[] and Ygrid[], evaluated (almost) at the same grid points (slightly to the right of the grid points)
-// this function returns a 3D array D of size 2*NG x NG x 2, in layer-row-major format
-//   with D[a,g,p] corresponding to the p-th polynomial coefficient of dY/dXgrid[a] at Xgrid[g]+0
-//   and D[NG+a,g,p] corresponding to the p-th polynomial coefficient of dY/dYgrid[a] at Xgrid[g]+0
-//   (for a=0,..,NG-1, and p=0,1)
-// note that D[a,:,:] should be interpreted as a piecewise polynomial (and discontinuous) function on the grid Xgrid[]
-// In the special case where NG=1, the derivative dY/dXgrid[0] will be zero and the derivative dY/dYgrid[0] will be 1
-// [[Rcpp::export]]
-NumericVector derivatives_of_grid_curve_CPP(const std::vector<double> 	&Xgrid,		// (INPUT) 1D array of size NG, listing X values in ascending order
-											const std::vector<double> 	&Ygrid){	// (INPUT) 1D array of size NG, listing Y values on the X grid
-	const long NG = Xgrid.size();
-	const long NA = 2*NG;
-	const long Ddegree = 1;
-	if(NG==0) return(Rcpp::wrap(std::vector<double>(NAN_D,NA*NG*(Ddegree+1))));
-	const long NperA = NG*(Ddegree+1); // number of values per derivative
-	dvector D(NA*NG*(Ddegree+1),0);
-
-	if(NG==1){
-		const long g=0;
-		D[(NG+g)*NperA + g*(Ddegree+1) + 0] = 1;
-		return Rcpp::wrap(D);
-	}
-	
-	for(long g=0; g<NG-1; ++g){
-		// calculate derivative dY(x)/dXgrid[g] for x in (Xgrid[g],Xgrid[g+1])
-		D[g*NperA + g*(Ddegree+1) + 0] = -Xgrid[g+1]*(Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
-		D[g*NperA + g*(Ddegree+1) + 1] = (Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
-		// calculate derivative dY(x)/dXgrid[g+1] for x in (Xgrid[g],Xgrid[g+1])
-		D[(g+1)*NperA + g*(Ddegree+1) + 0] = Xgrid[g]*(Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
-		D[(g+1)*NperA + g*(Ddegree+1) + 1] = -(Ygrid[g+1]-Ygrid[g])/SQ(Xgrid[g+1]-Xgrid[g]);
-		// calculate derivative dY(x)/dYgrid[g] for x in (Xgrid[g],Xgrid[g+1])
-		D[(NG+g)*NperA + g*(Ddegree+1) + 0] = 1+Xgrid[g]/(Xgrid[g+1]-Xgrid[g]);
-		D[(NG+g)*NperA + g*(Ddegree+1) + 1] = -1/(Xgrid[g+1]-Xgrid[g]);
-		// calculate derivative dY(x)/dYgrid[g+1] for x in (Xgrid[g],Xgrid[g+1])
-		D[(NG+g+1)*NperA + g*(Ddegree+1) + 0] = -Xgrid[g]/(Xgrid[g+1]-Xgrid[g]);
-		D[(NG+g+1)*NperA + g*(Ddegree+1) + 1] = 1/(Xgrid[g+1]-Xgrid[g]);
-	}
-	
-	// set D[:,NG-1,:] equal to D[:,NG-2,:]
-	for(long k=0; k<NA; ++k){
-		D[k*NperA + (NG-1)*(Ddegree+1) + 0] = D[k*NperA + (NG-2)*(Ddegree+1) + 0];
-		D[k*NperA + (NG-1)*(Ddegree+1) + 1] = D[k*NperA + (NG-2)*(Ddegree+1) + 1];
-	}
-	
-	return Rcpp::wrap(D);
-}
 
 
 
@@ -3458,7 +3460,7 @@ void uniform_order_statistic(	double 		minimum,
 
 
 
-// draw a standard-normal random variable
+// draw a normal random variable
 inline double random_normal(double mean, double std){
 	return mean + std * sqrt(-2.0*log(uniformWithinInclusiveRight(0, 1)))*cos(2.0*M_PI*uniformWithinInclusiveRight(0,1));
 }
@@ -5496,7 +5498,7 @@ void exponentiate_matrix(	const long	 				NR,				// (INPUT) number of rows & col
 
 // calculate the exponential exp(T*A) for some quadratic matrix A and for a large number of scalar scaling factors T
 // Returns the exponentials (one per scaling) as a flattened array of size NS x NR x NR in layer-row-major format, i.e. with exponentials[s*NR*NR + r*NR + c] being the (r,c)-th entry of exp(scalings[s]*A)
-// This routine is most efficient when T is very large.
+// This routine is most efficient when the number of scalings is very large
 // The approach resembles the one proposed by [Al-Mohy and Higham (2011). Computing the action of the matrix exponential, with an application to exponential integrators. SIAM Journal on Scientific Computing 33:488-511]
 // [[Rcpp::export]]
 NumericVector exponentiate_matrix_for_multiple_scalings_CPP(const long	 				NR,			// (INPUT) number of rows & columns of the matrix A
@@ -5531,7 +5533,7 @@ NumericVector exponentiate_matrix_for_multiple_scalings_CPP(const long	 				NR,	
 															Npolynomials,
 															polynomials,
 															polynomial_norms,
-															scalings[s],
+															scalings[s]/max_scaling,
 															epsilon,
 															NPmin,
 															balances,
@@ -24628,7 +24630,7 @@ Rcpp::List HBD_PSR_loglikelihood_CPP(	const std::vector<double>	&branching_ages,
 										const std::vector<double>	&age_grid,				// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided rp_rates will be defined on this age grid. This age grid must cover at least the range [0,oldest_age].
 										const std::vector<double>	&PSRs,					// (INPUT) 1D array of size NG, listing pulled speciation rates (PSR) on the age-grid.
 										const long					splines_degree,			// (INPUT) either 0,1,2 or 3, specifying the degree of the splines defined by the lambdas and mus on the age grid.										
-										const std::string			&condition,				// (INPUT) either "stem" or "crown", specifying whether to condition the likelihood on the survival of the stem group or the crown group. This is similar to the "cond" option in the R function RPANDA::likelihood_bd, except for the fact that here a conditioning (stem or crown) is required. Note that "crown" really only makes sense when oldest_age==root_age.
+										const std::string			&condition,				// (INPUT) either "stem" or stem<N> or "crown" or crown<N>, specifying whether to condition the likelihood on the survival of the stem group ("stem"), or on the survival of the stem with at least 2 sampled tips ("stem2"), or on the survival crown group. This is similar to the "cond" option in the R function RPANDA::likelihood_bd, except for the fact that here a conditioning (stem or crown) is required. Note that "crown" really only makes sense when oldest_age==root_age.
 										const double				relative_dt,			// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 										const double				runtime_out_seconds){	// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.				
 	const long NB = branching_ages.size();

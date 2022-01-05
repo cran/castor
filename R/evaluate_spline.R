@@ -12,5 +12,5 @@ evaluate_spline = function(	Xgrid,					# numeric vector of size NG, listing x-va
 	if(Xgrid[1]>tail(Xgrid,1)) stop("Xgrid must be in ascending order")
 
 	Ytarget = evaluate_spline_CPP(Xgrid=Xgrid, Ygrid=Ygrid, splines_degree=splines_degree, Xtarget=Xtarget, extrapolate=extrapolate, derivative=derivative);
-	return(Ytarget);
+	return(Ytarget)
 }

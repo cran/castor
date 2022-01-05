@@ -1,9 +1,9 @@
-# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree, by estimating functional form parameters for the pulled diversification rate (PDR)
-# An HBD congruence class is defined by a time-dependent pulled diversification rate (PDR) and the product rho*lambda(0) (sampling fraction times present-day speciation rate)
+# Fit a homogenous-birth-death cladogenic model-congruence-class to an ultrametric timetree, by estimating functional form parameters for the pulled speciation rate (PSR)
+# An HBD congruence class is fully defined by a time-dependent pulled speciation rate (PSR)
 #
 # References:
 #	Morlon et al. (2011). Reconciling molecular phylogenies with the fossil record. PNAS 108:16327-16332
-fit_hbd_pdr_parametric = function(	tree, 
+fit_hbd_psr_parametric = function(	tree, 
 									param_values,					# numeric vector of size NP, specifying fixed values for a some or all parameters. For fitted (i.e. non-fixed) parameters, use NaN or NA.
 									param_guess			= NULL,		# numeric vector of size NP, listing an initial guess for each parameter. For fixed parameters, guess values are ignored.
 									param_min			= -Inf,		# numeric vector of size NP, specifying lower bounds for the model parameters. For fixed parameters, bounds are ignored. May also be a single scalar, in which case the same lower bound is assumed for all params.
@@ -11,17 +11,20 @@ fit_hbd_pdr_parametric = function(	tree,
 									param_scale			= NULL,		# numeric vector of size NP, specifying typical scales for the model parameters. For fixed parameters, scales are ignored. If NULL, scales are automatically estimated from other information (such as provided guess and bounds). May also be a single scalar, in which case the same scale is assumed for all params.
 									oldest_age			= NULL,		# either a numeric specifying the stem age or NULL (equivalent to the root age). This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
 									age0				= 0,		# non-negative numeric, youngest age (time before present) to consider when fitting and with respect to which rholambda0 is defined (i.e. rholambda0 = rho(age0)*lambda(age0))
-									PDR,							# function handle, mapping age & model_parameters to the current pulled diversification rate, (age,param_values) --> PDR. Must be defined for all ages in [age0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
-									rholambda0,						# function handle, mapping model_parameters to the product rho(age0)*lambda(age0), where rho is the sampling fraction at age0 and lambda(age0) is the speciation rate at age0; (param_values) --> rholambda0. Must be defined for all parameters within the imposed bounds.
-									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the PDR functional should be evaluated. This age grid must be fine enough to capture the possible variation in PDR() over time. If NULL or of length 1, then the PDR is assumed to be time-independent.
+									PSR,							# function handle, mapping age & model_parameters to the current pulled speciation rate, (age,param_values) --> PSR. Must be defined for all ages in [age0:oldest_age] and for all parameters within the imposed bounds. Must be vectorized in the age argument, i.e. return a vector the same size as age[].
+									age_grid			= NULL,		# numeric vector of size NG>=1, listing ages in ascending order, on which the PSR functional should be evaluated. This age grid must be fine enough to capture the possible variation in PSR() over time. If NULL or of length 1, then the PSR is assumed to be time-independent.
 									condition			= "auto",	# one of "crown" or "stem" or "stem2" (or "stem3", "stem4", .. etc) or "auto", specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age<root_age, "stem2" when oldest_age>root_age, or "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 									relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 									Ntrials				= 1,		# number of fitting trials to perform, each time starting with random parameter values
 									max_start_attempts	= 1,		# number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
 									Nthreads			= 1,
 									max_model_runtime	= NULL,		# maximum time (in seconds) to allocate for each likelihood evaluation. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
-									fit_control			= list()){	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
+									fit_control			= list(),	# a named list containing options for the nlminb fitting routine (e.g. iter.max and rel.tol)
+									verbose				= FALSE,	# boolean, specifying whether to print informative messages
+									diagnostics			= FALSE,	# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
+									verbose_prefix		= ""){		# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
 	# basic input error checking
+	if(verbose) cat(sprintf("%sChecking input variables..\n",verbose_prefix))
 	if(tree$Nnode<1) return(list(success = FALSE, error="Input tree is too small"));
 	if(age0<0) return(list(success = FALSE, error="age0 must be non-negative"));
 	root_age = get_tree_span(tree)$max_distance
@@ -43,17 +46,10 @@ fit_hbd_pdr_parametric = function(	tree,
 	
 	# check if some of the functionals are actually fixed numbers
 	model_fixed = TRUE
-	if(is.numeric(PDR) && (length(PDR)==1)){
-		# the provided PDR is actually a single number, so convert to a function
-		PDR_value = PDR
-		PDR = function(ages,params){ rep(PDR_value, times=length(ages)) }
-	}else{
-		model_fixed = FALSE
-	}
-	if(is.numeric(rholambda0) && (length(rholambda0)==1)){
-		# the provided rholambda0 is actually a single number, so convert to a function
-		rholambda0_value = rholambda0
-		rholambda0 = function(params){ rholambda0 }
+	if(is.numeric(PSR) && (length(PSR)==1)){
+		# the provided PSR is actually a single number, so convert to a function
+		PSR_value = PSR
+		PSR = function(ages,params){ rep(PSR_value, times=length(ages)) }
 	}else{
 		model_fixed = FALSE
 	}
@@ -87,14 +83,12 @@ fit_hbd_pdr_parametric = function(	tree,
 	fitted_params	= sanitized_params$fitted_params
 	fixed_params	= sanitized_params$fixed_params
 	
-	if((NFP>0) && model_fixed) return(list(success=FALSE, error="At least one model parameter is fitted, however all model aspects (PDR and rholambda0) are fixed"))
+	if((NFP>0) && model_fixed) return(list(success=FALSE, error="At least one model parameter is fitted, however all model aspects (PSR) are fixed"))
 	
 	# check if functionals are valid at least on the initial guess
-	PDR_guess = PDR(age_grid+age0,param_guess)
-	rholambda0_guess = rholambda0(param_guess)
-	if(!all(is.finite(PDR_guess))) return(list(success=FALSE, error=sprintf("PDR is not a valid number for guessed parameters, at some ages")));
-	if(!is.finite(rholambda0_guess)) return(list(success=FALSE, error=sprintf("rholambda0 is not a valid number for guessed parameters")));
-	if(length(PDR_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("PDR function must return vectors of the same length as the input ages")));
+	PSR_guess = PSR(age_grid+age0,param_guess)
+	if(!all(is.finite(PSR_guess))) return(list(success=FALSE, error=sprintf("PSR is not a valid number for guessed parameters, at some ages")));
+	if(length(PSR_guess)!=length(age_grid)) return(list(success=FALSE, error=sprintf("PSR function must return vectors of the same length as the input ages")));
 
 	# set fit-control options, unless provided by the caller
 	if(is.null(fit_control)) fit_control = list()
@@ -110,36 +104,34 @@ fit_hbd_pdr_parametric = function(	tree,
 	
 	# objective function: negated log-likelihood
 	# input argument is the subset of fitted parameters, rescaled according to param_scale
-	objective_function = function(fparam_values){
+	objective_function = function(fparam_values,trial){
 		params = param_values; params[fitted_params] = fparam_values * param_scale[fitted_params];
 		if(any(is.nan(params)) || any(is.infinite(params))) return(Inf); # catch weird cases where params become NaN
 		if(!is.null(param_names)) names(params) = param_names;
-		PDRs = PDR(age_grid+age0,params)
-		input_rholambda0 = rholambda0(params)
-		if(!(all(is.finite(PDRs)) && is.finite(input_rholambda0))) return(Inf); # catch weird cases where PDR/rholambda0 become NaN
+		PSRs = PSR(age_grid+age0,params)
+		if(!all(is.finite(PSRs))) return(Inf); # catch weird cases where PSR becomes NaN
 		if(length(age_grid)==1){
-			# while age-grid has only one point (i.e., PDR is constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
+			# while age-grid has only one point (i.e., PSR is constant over time), we need to provide a least 2 grid points to the loglikelihood calculator, spanning the interval [0,oldest_age]
 			input_age_grid 	= c(0,oldest_age);
-			input_PDRs		= c(PDRs, PDRs);
+			input_PSRs		= c(PSRs, PSRs);
 		}else{
 			input_age_grid 	= age_grid;
-			input_PDRs		= PDRs
+			input_PSRs		= PSRs
 		}
-		results = HBD_PDR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
+		results = HBD_PSR_loglikelihood_CPP(branching_ages		= sorted_node_ages,
 											oldest_age			= oldest_age,
-											rholambda0			= input_rholambda0,
 											age_grid 			= input_age_grid,
-											PDRs 				= input_PDRs,
+											PSRs 				= input_PSRs,
 											splines_degree		= 1,
 											condition			= condition,
 											relative_dt			= relative_dt,
-											runtime_out_seconds	= max_model_runtime,
-											diff_PDR			= numeric(),
-											diff_PDR_degree		= 0);
-		if(!results$success) return(Inf)
-		LL = results$loglikelihood
-		if(is.na(LL) || is.nan(LL) || is.infinite(LL)) return(Inf);
-		return(-LL);
+											runtime_out_seconds	= max_model_runtime);
+		loglikelihood = if((!results$success) || (!is.finite(results$loglikelihood))) -Inf else results$loglikelihood
+		if(diagnostics){
+			if(results$success){ cat(sprintf("%s  Trial %s: loglikelihood %.10g, model runtime %.5g sec\n",verbose_prefix,as.character(trial),loglikelihood,results$runtime)) }
+			else{ cat(sprintf("%s  Trial %s: Model evaluation failed: %s\n",verbose_prefix,as.character(trial),results$error)) }
+		}
+		return(-loglikelihood)
 	}
 	
 
@@ -151,34 +143,31 @@ fit_hbd_pdr_parametric = function(	tree,
 		# randomly choose start values for fitted params (keep trying up to max_start_attempts times)
 		Nstart_attempts = 0
 		while(Nstart_attempts<max_start_attempts){
-			start_values = param_guess[fitted_params]
-			if(trial>1){
-				boxed_left	= which((!is.infinite(lower_bounds)) & is.infinite(upper_bounds))
-				boxed_right	= which((!is.infinite(upper_bounds)) & is.infinite(lower_bounds))
-				boxed_dual  = which(!(is.infinite(lower_bounds) | is.infinite(upper_bounds))); # determine fitted params that are boxed, i.e. constrained to within finite lower & upper bounds
-				unboxed 	= which(is.infinite(lower_bounds) & is.infinite(upper_bounds))
-				if(length(boxed_dual)>0) 	start_values[boxed_dual] = lower_bounds[boxed_dual] + (upper_bounds[boxed_dual]-lower_bounds[boxed_dual]) * runif(n=length(boxed_dual),min=0,max=1)
-				if(length(unboxed)>0) 	 	start_values[unboxed]	 = 10**runif(n=length(unboxed), min=-2, max=2) * start_values[unboxed]
-				if(length(boxed_left)>0) 	start_values[boxed_left] = sapply(boxed_left, FUN=function(fp) random_semiboxed_left(lower_bound=lower_bounds[fp], default=start_values[fp], typical_scale=scales[fp], orders_of_magnitude=4))
-				if(length(boxed_right)>0) 	start_values[boxed_right]= sapply(boxed_right, FUN=function(fp) -random_semiboxed_left(lower_bound=-upper_bounds[fp], default=-start_values[fp], typical_scale=scales[fp], orders_of_magnitude=4))
+			# randomly choose start values for fitted params
+			if(trial==1){
+				start_values = param_guess[fitted_params]		
+			}else{
+				start_values = get_random_params(defaults=param_guess[fitted_params], lower_bounds=lower_bounds, upper_bounds=upper_bounds, scales=scales, orders_of_magnitude=4)
 			}
-			# make sure start fparams are within bounds
-			start_values 	= pmax(lower_bounds,pmin(upper_bounds,start_values))
-			start_objective = objective_function(start_values/scales);
+			# check if start values yield NaN
+			start_objective = objective_function(start_values/scales, trial)
 			Nstart_attempts = Nstart_attempts + 1
 			if(is.finite(start_objective)) break;
 		}
-		# run fit
+		# run fit with chosen start_values
 		if(is.finite(start_objective)){
-			fit = stats::nlminb(start_values/scales, 
-								objective	= objective_function, 
+			fit = stats::nlminb(start		= start_values/scales, 
+								objective	= function(pars){ objective_function(pars, trial) },
 								lower		= lower_bounds/scales, 
 								upper		= upper_bounds/scales, 
 								control		= fit_control)
-			return(list(objective_value=fit$objective, fparam_values = fit$par*scales, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[[1]], Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective));
+			results = list(objective_value=fit$objective, fparam_values = fit$par*scales, converged=(fit$convergence==0), Niterations=fit$iterations, Nevaluations=fit$evaluations[[1]], Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
+			if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, Niterations %d, Nevaluations %d, converged = %d\n",verbose_prefix,trial,-results$objective_value,results$Niterations, results$Nevaluations, results$converged))
 		}else{
-			return(list(objective_value=NA, fparam_values = NA, converged=FALSE, Niterations=0, Nevaluations=0, Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective));
+			results = list(objective_value=NA, fparam_values = NA, converged=FALSE, Niterations=0, Nevaluations=0, Nstart_attempts=Nstart_attempts, start_values=start_values, start_objective=start_objective)
+			if(diagnostics) cat(sprintf("%s  Trial %d: Start objective is non-finite. Skipping trial\n",verbose_prefix,trial))
 		}
+		return(results)
 	}
 	
 	################################
@@ -187,6 +176,7 @@ fit_hbd_pdr_parametric = function(	tree,
     if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
 		# run trials in parallel using multiple forks
 		# Note: Forks (and hence shared memory) are not available on Windows
+		if(verbose) cat(sprintf("%sFitting %d model parameters (%d trials, parallelized)..\n",verbose_prefix,NFP,Ntrials))
 		fits = parallel::mclapply(	1:Ntrials, 
 									FUN = function(trial) fit_single_trial(trial), 
 									mc.cores = min(Nthreads, Ntrials), 
@@ -194,6 +184,7 @@ fit_hbd_pdr_parametric = function(	tree,
 									mc.cleanup = TRUE);
 	}else{
 		# run in serial mode
+		if(verbose) cat(sprintf("%sFitting %d model parameters (%s)..\n",verbose_prefix,NFP,(if(Ntrials==1) "1 trial" else sprintf("%d trials",Ntrials))))
 		fits = sapply(1:Ntrials,function(x) NULL)
 		for(trial in 1:Ntrials){
 			fits[[trial]] = fit_single_trial(trial)

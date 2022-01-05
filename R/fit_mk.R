@@ -225,7 +225,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 								method 	= "L-BFGS-B", 
 								lower 	= rep(first_guess_rate/(10**power_range), Nrates)/rate_scale,
 								upper	= rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
-								control = list(maxit=optim_max_iterations, reltol=optim_rel_tol))
+								control = list(maxit=optim_max_iterations))
 			LL 				= -fit$value;
 			Nevaluations 	= fit$counts
 			Niterations		= NA
@@ -235,7 +235,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 								function(x) objective_function(x*rate_scale), 
 								lower=rep(0, Nrates)/rate_scale, 
 								upper=rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
-								control = list(iter.max=optim_max_iterations, eval.max=optim_max_iterations*Nrates*10, rel.tol=optim_rel_tol, step.min=1e-4))
+								control = list(iter.max=optim_max_iterations, eval.max=optim_max_iterations*Nrates*10, rel.tol=optim_rel_tol, step.min=1e-5))
 			LL 				= -fit$objective;
 			Nevaluations 	= fit$evaluations[1]
 			Niterations		= fit$iterations

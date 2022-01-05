@@ -245,7 +245,7 @@ fit_hbds_model_parametric = function(tree,
 			Nstart_attempts = Nstart_attempts + 1
 			if(is.finite(start_objective)) break;
 		}
-		# run fit with chose start_values
+		# run fit with chosen start_values
 		if(is.finite(start_objective)){
 			fit = stats::nlminb(start		= start_values/scales, 
 								objective	= function(pars){ objective_function(pars, trial) },
