@@ -244,11 +244,11 @@ fit_hbd_model_parametric = function(tree,
 				Niterations		= fit$iterations
 				converged		= (fit$convergence==0)
 			}else if(fit_algorithm == "subplex"){
-				fit = tryCatch({ nloptr::nloptr(	x0 		= start_values/scales, 
-										eval_f 	= function(pars){ objective_function(pars, trial) },
-										lb 		= lower_bounds/scales, 
-										ub 		= upper_bounds/scales, 
-										opts 	= fit_control)
+				fit = tryCatch({ nloptr::nloptr(x0 		= start_values/scales, 
+												eval_f 	= function(pars){ objective_function(pars, trial) },
+												lb 		= lower_bounds/scales, 
+												ub 		= upper_bounds/scales, 
+												opts 	= fit_control)
 								}, error = function(e){ list(objective=NaN, solution=NA, status=1, iterations=NA) })
 				LL 				= -fit$objective
 				Nevaluations 	= NA

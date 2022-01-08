@@ -49,7 +49,7 @@ fit_musse = function(	tree,
 						oldest_age				= NULL,			# oldest age to consider. Typically this will be <=root_age. If NULL, this will be set to root_age.
 						Ntrials 				= 1,			# (integer) number of trials (starting points) for fitting the model. If 0, then no fitting is performed, and only the a first-guess (start params) is evaluated and returned.
 						max_start_attempts		= 10,			# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
-						optim_algorithm 		= "subplex",	# either "optim", "nlminb" or "subplex". What algorithm to use for fitting.
+						optim_algorithm 		= "nlminb",		# either "optim", "nlminb" or "subplex". What algorithm to use for fitting.
 						optim_max_iterations	= 10000,		# maximum number of iterations of the optimization algorithm (per trial)
 						optim_max_evaluations	= NULL,			# maximum number of evaluations of the objective function (per trial). If left unspecified, it is chosen automatically based on the number of iterations.
 						optim_rel_tol			= 1e-6,			# relative tolerance when optimizing the objective function

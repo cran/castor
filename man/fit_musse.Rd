@@ -33,7 +33,7 @@ fit_musse(tree,
           oldest_age            = NULL,
           Ntrials               = 1,
           max_start_attempts    = 10,
-          optim_algorithm       = "subplex",
+          optim_algorithm       = "nlminb",
           optim_max_iterations  = 10000,
           optim_max_evaluations = NULL,
           optim_rel_tol         = 1e-6,
@@ -135,13 +135,13 @@ Non-negative integer, specifying the number of trials for fitting the model, usi
 Integer, specifying the number of times to attempt finding a valid start point (per trial) before giving up on that trial. Randomly chosen extreme start parameters may occasionally result in Inf/undefined likelihoods, so this option allows the algorithm to keep looking for valid starting points. For complex models (e.g., with >5 states), setting this to 10, 100 or even 1000 may be beneficial.
 }
 \item{optim_algorithm}{
-Character, specifying the optimization algorithm for fitting. Must be one of either "optim", "nlminb" or "subplex".
+Character, specifying the optimization algorithm for fitting. Must be one of either "optim", "nlminb" or "subplex" (requires the \code{nloptr} package).
 }
 \item{optim_max_iterations}{
 Integer, maximum number of iterations allowed for fitting. Only relevant for "optim" and "nlminb".
 }
 \item{optim_max_evaluations}{
-Integer, maximum number of function evaluations allowed for fitting. Only relevant for "nlminb" and "subplex".
+Integer, maximum number of function evaluations allowed for fitting. Only relevant for "nlminb" and "subplex" (requires the \code{nloptr} package).
 }
 \item{optim_rel_tol}{
 Numeric, relative tolerance for the fitted log-likelihood.

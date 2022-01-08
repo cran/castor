@@ -1,4 +1,4 @@
-077edaddf11af021e9d49322d1c359e0 *DESCRIPTION
+07416bb70476ba3b9ae9fa524cc4e619 *DESCRIPTION
 24b5a065e8f9de268fdd2001fc971e52 *NAMESPACE
 e8cda82f1d2f6c554dddb2a5371c48a2 *R/RcppExports.R
 90e3e84e252598a58a812a040e2bfced *R/asr_empirical_probabilities.R
@@ -31,7 +31,7 @@ abe9b0e9b9b199c50c72b11a4d084ed8 *R/find_farthest_tips.R
 010b6492610c5d60d906d9f4247fa27e *R/fit_and_compare_sbm_const.R
 7e1e690d432c0ddf3393711f18f0b91b *R/fit_bm_model.R
 3df5a68786285f24e433de356e1786a5 *R/fit_hbd_model_on_grid.R
-e531864ec635c064fcf8f45b7f6f1d0c *R/fit_hbd_model_parametric.R
+278e94e27120c0dcbd686d88f6183b0b *R/fit_hbd_model_parametric.R
 7a3e6bf2b0ee250b2487604cf03192a0 *R/fit_hbd_pdr_on_best_grid_size.R
 543619b48305869826112f3cf9a46235 *R/fit_hbd_pdr_on_grid.R
 d95ae2abead28302ed7476945a97b185 *R/fit_hbd_pdr_parametric.R
@@ -41,7 +41,7 @@ c51b79935430d889545599e31b0d8465 *R/fit_hbd_psr_parametric.R
 aaa485599a20efed371b8bad2ab4f0c3 *R/fit_hbds_model_on_grid.R
 0d41c4d362dd87f8b41d3d32a52d95a0 *R/fit_hbds_model_parametric.R
 119361289760034b48f57942685c0231 *R/fit_mk.R
-85bd055668228fa82cd99894b0de3330 *R/fit_musse.R
+b45830d98168e3b816fa190c866ddc41 *R/fit_musse.R
 8baaee1c6ab67bb21d791a210a161416 *R/fit_sbm_const.R
 22e4e5cac492aa3270c1a4cbb65050fe *R/fit_sbm_const_biased_sampling_unfinished.R
 48305a15e176c3d48b770a2130ed9f15 *R/fit_sbm_geobiased_const.R
@@ -171,7 +171,7 @@ cbe48085609ec20f52df028986345606 *man/fit_hbd_model_parametric.Rd
 d02ad04aa7d43cfcdd547bdccd3a4c7f *man/fit_hbds_model_on_grid.Rd
 cc033060596dd73a1cc583919882201a *man/fit_hbds_model_parametric.Rd
 e17752f2a6383d0541f2495cd20e2523 *man/fit_mk.Rd
-9205ffa0223dac1540e8856b49df8d18 *man/fit_musse.Rd
+5e8f67afc37de3592af265e1e641ed2b *man/fit_musse.Rd
 afde7886e8b2b668ccef2e13970c653d *man/fit_sbm_const.Rd
 0dbcd8d389910acd8f926398925d2e17 *man/fit_sbm_geobiased_const.Rd
 044c3efb0aef0264a9132b9eab93a909 *man/fit_sbm_linear.Rd
