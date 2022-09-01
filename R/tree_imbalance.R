@@ -18,7 +18,8 @@ tree_imbalance = function(tree, type){
 	}else if(type=="Colless_normalized"){
 		imbalance = get_Colless_Imbalance_CPP(Ntips, Nnodes, Nedges = nrow(tree$edge), tree_edge = as.vector(t(tree$edge)) - 1, normalized=TRUE)
 	}else if(type=="Blum"){
-		imbalance = sum(log(count_tips_per_node(tree)), na.rm=TRUE)
+		tips_per_node = count_tips_per_node(tree)
+		imbalance = sum(log(tips_per_node[tips_per_node>1]-1))
 	}else{
 		imbalance = NA
 	}				

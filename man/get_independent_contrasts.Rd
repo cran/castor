@@ -11,6 +11,7 @@ get_independent_contrasts(tree,
                           tip_states,
                           scaled = TRUE, 
                           only_bifurcations = FALSE,
+                          include_zero_phylodistances = FALSE,
                           check_input = TRUE)
 }
 \arguments{
@@ -25,6 +26,9 @@ Logical, specifying whether to divide (standardize) PICs by the square root of t
 }
 \item{only_bifurcations}{
 Logical, specifying whether to only calculate PICs for bifurcating nodes. If \code{FALSE}, then multifurcations are temporarily expanded to bifurcations, and an additional PIC is calculated for each created bifurcation. If \code{TRUE}, then multifurcations are not expanded and PICs will not be calculated for them.
+}
+\item{include_zero_phylodistances}{
+Logical, specifying whether the returned PICs may include cases where the phylodistance is zero (this can only happen if the tree has edges with length 0). If \code{FALSE}, all returned PICs will have non-zero phylodistances.
 }
 \item{check_input}{
 Logical, specifying whether to perform some basic checks on the validity of the input data. If you are certain that your input data are valid, you can set this to \code{FALSE} to reduce computation.

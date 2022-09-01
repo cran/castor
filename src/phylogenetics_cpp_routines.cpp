@@ -331,6 +331,26 @@ long count_occurrences(	const std::string	&haystack,
 }
 
 
+bool extract_string_parts(	const std::string			&haystack,
+							const std::string			&delimiter,
+							const long					max_Nparts,
+							std::vector<std::string>	&parts){	// (OUTPUT) This vector will contain up to max_Nparts parts extracted from the string
+	long start = 0;
+	long pos;
+	parts.clear();
+	while(parts.size()<max_Nparts){
+		pos = haystack.find(delimiter, start);
+		if(pos==string::npos) break;
+		parts.push_back(haystack.substr(start,pos-start));
+		start = pos + delimiter.length();
+	}
+	if(parts.size()<max_Nparts){
+		parts.push_back(haystack.substr(start));
+	}
+	return (parts.size()==max_Nparts);
+}
+
+
 inline bool XOR(bool a, bool b){
 	return ((!a) && b) || (a && (!b));
 }
@@ -500,6 +520,7 @@ long find_next_left_grid_point(const long N, const double grid[], const double n
 
 // similar to find_next_left_grid_point(), but searching for the grid point on the immediate right (or equal) to the needle
 // grid[] must be in increasing order
+// this function is most efficient when subsequent calls always ask for non-decreasing needle values, or always ask for non-increasing needle values
 long find_next_right_grid_point(const std::vector<double> &grid, const double needle, long previous_g){
 	const long N = grid.size();
 	if(N==0) return -1;
@@ -8595,7 +8616,7 @@ void refine_piecewise_polynomial(	const long		degree,						// (INPUT) polynomial
 									const dvector 	&coarse_coeff,				// (INPUT) 2D array of size NC x (degree+1), in row-major format, listing polynomial coefficients of the original (coarse) spline
 									const bool		slideX,						// (INPUT) whether the polynomial is defined as a function of the sliding-time, i.e. in the interval coarse_times[i]:coarse_times[i+1] Y is defined as a polynomial of (X-coarse_times[i]) rather than X. Note that the returned refined piecewise polynomial will also be defined w.r.t. the sliding-time (on the refined time grid)
 									const double	start_time,					// (INPUT) start time for the refined time series. Must not be greater than coarse_times.back(). To surely include the left-most end of the input time series, you can set end_time=-INFTY_D.
-									const double	end_time,					// (INPUT) end time for the refined time series. Must not be smaller than coarse_times[0]. To surely include the right-most end of the input time series, you can set end_time=INFTY_D.
+									const double	end_time,					// (INPUT) end time for the refined time series. Must not be smaller than coarse_times[0].
 									const dvector	&max_time_steps,			// (INPUT) optional constraint on the time steps of the refined time series; to omit this constraint set this to INFTY_D. This can either be empty, or a single number or a 1D array of size NC (i.e. specifying the maximum time step for each coarse time interval)
 									const double 	max_value_step,				// (INPUT) optional constraint on the value steps of the refined time series; to omit this constraint set this to INFTY_D
 									const double 	max_relative_value_step,	// (INPUT) optional constraint on the relative value steps of the refined time series; to omit this constraint set this to INFTY_D
@@ -8608,17 +8629,17 @@ void refine_piecewise_polynomial(	const long		degree,						// (INPUT) polynomial
 	if(start_time>coarse_times.back()) return;
 	if(end_time<coarse_times[0]) return;
 	const long start_c = (start_time<coarse_times[0] ? 0 : find_next_left_grid_point(coarse_times, start_time, 0)); 		// coarse-grid point immediately below (or equal) to start_time
-	const long end_c   = (end_time>coarse_times.back() ? NC-1 : find_next_right_grid_point(coarse_times, end_time, NC-1));	// coarse-grid point immediately above (or equal) to end_time
+	const long end_c   = (end_time>coarse_times.back() ? NC : find_next_right_grid_point(coarse_times, end_time, NC-1));	// coarse-grid point immediately above (or equal) to end_time. If end_time is beyond the last coarse-grid point, this will be NC (i.e., out of bounds).
 	const long baseN   = (end_c-start_c+1);
 	
 	// determine size of refined time series
-	std::vector<long> dN(NC-1,0); // dN[c] will be the resolution (number of additional time points) of the refined time series within the coarse time interval coarse_times[c]:coarse_times[c+1]. A dN of 0 means the particular coarse time interval does not need to be refined.
+	std::vector<long> dN(end_c,0); // dN[c] will be the resolution (number of additional time points) of the refined time series within the coarse time interval coarse_times[c]:coarse_times[c+1]. A dN of 0 means the particular coarse time interval does not need to be refined.
 	double left_time, right_time, min_value, max_value, max_rate, max_time_step, time_shift;
 	if(max_refined_grid_size>baseN){
 		for(long c=start_c; c<end_c; ++c){
 			time_shift		= (slideX ? coarse_times[c] : 0.0);
 			left_time  		= max(start_time, coarse_times[c]);
-			right_time 		= min(end_time, coarse_times[c+1]);
+			right_time 		= (c<NC-1 ? min(end_time, coarse_times[c+1]) : end_time);
 			min_value		= polynomial_lower_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time-time_shift, right_time-time_shift);
 			max_value		= polynomial_upper_bound(degree, &coarse_coeff[c*(degree+1)+0], left_time-time_shift, right_time-time_shift);
 			max_rate 		= polynomial_bound_abs_derivative(degree, &coarse_coeff[c*(degree+1)+0], left_time-time_shift, right_time-time_shift);
@@ -8645,10 +8666,11 @@ void refine_piecewise_polynomial(	const long		degree,						// (INPUT) polynomial
 	// construct refined time series
 	refined_times.resize(NR);
 	refined_coeff.resize(NR*(degree+1));
-	for(long c=start_c, r=0; c<end_c; ++c){
+	long r=0;
+	for(long c=start_c; c<end_c; ++c){
 		// refine time interval left_time:right_time
 		left_time  = max(start_time, coarse_times[c]);
-		right_time = min(end_time, coarse_times[c+1]);
+		right_time = (c<NC-1 ? min(end_time, coarse_times[c+1]) : end_time);
 		double refined_time_step = (right_time-left_time)/(1+dN[c]);
 		for(long n=0; n<dN[c]+1; ++n){
 			refined_times[r] = left_time + n*refined_time_step;
@@ -8664,9 +8686,9 @@ void refine_piecewise_polynomial(	const long		degree,						// (INPUT) polynomial
 			++r;
 		}
 	}
-	refined_times[NR-1] = min(end_time,coarse_times[end_c]);
+	refined_times[NR-1] = end_time;
 	for(long d=0; d<=degree; ++d){ 
-		refined_coeff[(NR-1)*(degree+1)+d] = coarse_coeff[end_c*(degree+1)+d];
+		refined_coeff[(NR-1)*(degree+1)+d] = coarse_coeff[(end_c-1)*(degree+1)+d];
 	}
 }
 
@@ -9331,6 +9353,7 @@ Rcpp::List fit_exp_Poisson_moving_window_CPP(	const std::vector<double> 	&X,				
 // This function supports non-evenly spaced data, which means fitting a polynomial at each time point, making it computationally expensive
 // The time series is assumed to be sorted in time
 // This function is NAN-sensitive, i.e. NANs in data[] are avoided.
+// In contrast to many existing SG filter implementations, this one can handle irregular time series
 template<class TIME_ARRAY, class VALUE_ARRAY>
 bool smoothenTimeSeriesSavitzkyGolay(	const TIME_ARRAY	&times,				// time points in ascending order
 										const VALUE_ARRAY	&data, 	
@@ -9457,6 +9480,7 @@ Rcpp::List smoothenTimeSeriesSavitzkyGolay_CPP(	const std::vector<double>	&times
 // Note: Time points for which the derivative cannot be estimated (e.g. too few time points available in sliding window) will have derivate==NAN_D
 // This function is NAN-sensitive, i.e. NANs in data[] are avoided.
 // The set of time points included for each fitting is either specified via windowTimeSpan or windowIndexSpan
+// In contrast to many existing SG filter implementations, this one can handle irregular time series
 template<class TIME_ARRAY, class VALUE_ARRAY>
 bool derivativeOfTimeSeries_SavitzkyGolay(	const TIME_ARRAY	&times,				// time points in ascending order
 											const VALUE_ARRAY	&data, 	
@@ -19219,7 +19243,7 @@ Rcpp::List ACF_continuous_trait_CPP(const long 					Ntips,
 									const std::vector<double>	&state_per_tip,		// 1D std::vector of numeric states of size Ntips.
 									long						max_Npairs,			// maximum number of random tip pairs for estimating the correlation function. If <=0, all possible pairs are used.
 									const std::vector<double>	&phylodistance_grid,// 1D array of size Nbins, specifying the left-edges of the phylodistance bins in which to estimate the ACF. Must be in strictly ascending order.
-									const double				max_phylodistance,	// maximum phylodistance to consider, i.e. the right-edge of the right-most phylodistance bin. Hence, the first bin extends from phylodistance_grid[1] to phylodistance_grid[2], while the last cell extends from phylodistance_grid.back() to max_phylodistance
+									const double				max_phylodistance,	// maximum phylodistance to consider, i.e. the right-edge of the right-most phylodistance bin. Hence, the first bin extends from phylodistance_grid[0] to phylodistance_grid[1], while the last cell extends from phylodistance_grid.back() to max_phylodistance
 									const bool					grid_is_uniform,	// whether the provided phylodistance_grid[] is uniform (except perhaps for the last grid cell) 
 									bool 						verbose,
 									const std::string 			&verbose_prefix){	
@@ -19604,16 +19628,17 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 											const long 			Nnodes,
 											const long			Nedges,
 											const long			Ntraits,
-											const std::vector<long> &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-											const std::vector<double> &edge_length,			// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+											const std::vector<long> 	&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+											const std::vector<double> 	&edge_length,			// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
 											const std::vector<double>	&tip_states,			// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
-											const bool			only_bifurcations,		// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
-											const bool			scaled,					// (INPUT) if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
-											std::vector<double>	&PICs,					// (OUTPUT) 2D array of size Npics x Ntraits, in row-major format, listing PICs for each trait and for each considered node
-											std::vector<double>	&distances,				// (OUTPUT) 1D array of size Npics, listing phylogenetic distances corresponding to the PICs. Under a Brownian motion mode, these are proportional to the variance of each PIC
-											std::vector<long>	&PIC_nodes,				// (OUTPUT) 1D array of size Npics, listing node indices for which PICs were calculated. Negative values indicate nodes that were not actually in the original tree, but were created temporarily during expansion of multifurcations
-											std::vector<double>	&root_state,			// (OUTPUT) 1D array of size Ntraits, holding the root's globally reconstructed state (X_k sensu Felsenstein)
-											std::vector<double>	&root_standard_error){	// (OUTPUT) 1D array of size Ntraits, listing the standard errors for the root's state (under a Brownian motion model) [Garland et al. (1999). An introduction to phylogenetically based statistical methods, with a new method for confidence intervals on ancestral values]
+											const bool			scaled,							// (INPUT) if true, then PICs are rescaled (divided) by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
+											const bool			only_bifurcations,				// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
+											const bool			include_zero_phylodistances,	// (INPUT) if true, then returned PICs may include cases where the phylodistance is zero (this can only happen if the tree has edges with length 0).
+											std::vector<double>	&PICs,							// (OUTPUT) 2D array of size Npics x Ntraits, in row-major format, listing PICs for each trait and for each considered node
+											std::vector<double>	&distances,						// (OUTPUT) 1D array of size Npics, listing phylogenetic distances corresponding to the PICs. Under a Brownian motion mode, these are proportional to the variance of each PIC
+											std::vector<long>	&PIC_nodes,						// (OUTPUT) 1D array of size Npics, listing node indices for which PICs were calculated. Negative values indicate nodes that were not actually in the original tree, but were created temporarily during expansion of multifurcations
+											std::vector<double>	&root_state,					// (OUTPUT) 1D array of size Ntraits, holding the root's globally reconstructed state (X_k sensu Felsenstein)
+											std::vector<double>	&root_standard_error){			// (OUTPUT) 1D array of size Ntraits, listing the standard errors for the root's state (under a Brownian motion model) [Garland et al. (1999). An introduction to phylogenetically based statistical methods, with a new method for confidence intervals on ancestral values]
 	// check if tree has monofurcations & multifurcations
 	long Nmonofurcations, Nbifurcations, Nmultifurcations;
 	count_monofurcations_and_multifurcations(	Ntips,
@@ -19684,32 +19709,45 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 		incoming_length_per_clade.assign(incoming_length_per_clade.size(),1);
 		incoming_length_per_clade[local_root] = 0;
 	}
-	
 									
 	// calculate Felsenstein's PICs in a postorder traversal (tips-->root)
-	const double edge_length_epsilon = RELATIVE_EPSILON * array_nonzero_min(local_edge_length); // substitute to be used for zero edge lengths
 	std::vector<double> node_states(Nlocal_nodes*Ntraits,0);	// 2D numeric array of size Nlocal_nodes x Ntraits
 	PICs.clear(); PICs.reserve(Npics*Ntraits);
 	distances.clear(); distances.reserve(Npics);
 	PIC_nodes.clear(); PIC_nodes.reserve(Npics);
 	long edge1, edge2, child, child1, child2, node, clade, trait;
-	double length, total_weight, X1, X2;
+	double length, weight, total_weight, X1, X2, distance;
+	bool encountered_zero_length;
 	for(long q=traversal_queue.size()-1; q>=0; --q){
 		clade	= traversal_queue[q];
 		node	= clade - Ntips;
 		// calculate Felsenstein's X_k (node_states) and nu_k (incoming_length_per_clade)
 		total_weight = 0;
+		encountered_zero_length = false;
 		for(long e=node2first_edge[node]; e<=node2last_edge[node]; ++e){
 			child 	= local_tree_edge[2*edge_mapping[e]+1];
 			length 	= incoming_length_per_clade[child];
-			if(length==0) length = edge_length_epsilon;
-			for(trait=0; trait<Ntraits; ++trait){
-				node_states[node*Ntraits+trait] += (1.0/length) * (child<Ntips ? tip_states[child*Ntraits+trait] : node_states[(child-Ntips)*Ntraits+trait]);
+			if(length<=0){
+				if(!encountered_zero_length){
+					// this is the first edge from this node with zero length, so from now on we only consider those edges from this node that have zero length (i.e., all other edges have negligible weight)
+					for(trait=0; trait<Ntraits; ++trait) node_states[node*Ntraits+trait] = 0;
+					total_weight = 0;
+				}
+				encountered_zero_length = true;
+				weight = 1;
+			}else if(encountered_zero_length){
+				// we already encountered a zero length, so any other edges with strictly positive length will have no contribution
+				continue;
+			}else{
+				weight = 1.0/length;
 			}
-			total_weight += (1.0/length);
+			for(trait=0; trait<Ntraits; ++trait){
+				node_states[node*Ntraits+trait] += weight * (child<Ntips ? tip_states[child*Ntraits+trait] : node_states[(child-Ntips)*Ntraits+trait]);
+			}
+			total_weight += weight;
 		}
 		for(trait=0; trait<Ntraits; ++trait) node_states[node*Ntraits+trait] /= total_weight;
-		incoming_length_per_clade[clade] += 1.0/total_weight;
+		incoming_length_per_clade[clade] += (encountered_zero_length ? 0.0 : 1.0/total_weight);
 		
 		// calculate PICs using Felsenstein's X_i & nu_i (skip over monofurcating nodes)
 		// note that monofurcating nodes acquire the same state as their child, and their modified incoming_length is the same as their child plus the length of their incoming edge
@@ -19718,12 +19756,14 @@ void get_phylogenetic_independent_contrasts(const long			Ntips,
 		edge2		= edge_mapping[node2first_edge[node]+1];
 		child1 		= local_tree_edge[2*edge1+1];
 		child2 		= local_tree_edge[2*edge2+1];
+		distance	= incoming_length_per_clade[child1] + incoming_length_per_clade[child2];
+		if((distance==0) && (!include_zero_phylodistances)) continue; // phylodistance is zero and these are to be omitted
 		for(trait=0; trait<Ntraits; ++trait){
 			X1 = (child1<Ntips ? tip_states[child1*Ntraits+trait] : node_states[(child1-Ntips)*Ntraits+trait]);
 			X2 = (child2<Ntips ? tip_states[child2*Ntraits+trait] : node_states[(child2-Ntips)*Ntraits+trait]);
 			PICs.push_back(X2 - X1);
 		}
-		distances.push_back(incoming_length_per_clade[child1] + incoming_length_per_clade[child2]);
+		distances.push_back(distance);
 		PIC_nodes.push_back(node<Nnodes ? node : -1); // keep track which node this PIC corresponds to. -1 means this temporary node did not exist in the original tree
 	}
 	
@@ -19761,11 +19801,12 @@ Rcpp::List get_phylogenetic_independent_contrasts_CPP(	const long			Ntips,
 														const long 			Nnodes,
 														const long			Nedges,
 														const long			Ntraits,
-														const std::vector<long> &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-														const std::vector<double> &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
-														const std::vector<double>	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
-														const bool			only_bifurcations,	// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
-														const bool			scaled){			// (INPUT)if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
+														const std::vector<long> 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+														const std::vector<double> 	&edge_length,	// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+														const std::vector<double>	&tip_states,	// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
+														const bool			scaled,					// (INPUT) if true, then PICs are rescaled by the square-root of their expected variances (=the edge lengths connecting the compared nodes/tips)
+														const bool			only_bifurcations,		// (INPUT) if true, PICs are only calculated for bifurcating nodes in the input tree, and multifurcations are not expanded.
+														const bool			include_zero_phylodistances){	// (INPUT) if true, then returned PICs may include cases where the phylodistance is zero (this can only happen if the tree has edges with length 0).
 		std::vector<double> PICs, distances, root_state, root_standard_error;
 		std::vector<long> PIC_nodes;
 		get_phylogenetic_independent_contrasts(	Ntips,
@@ -19775,8 +19816,9 @@ Rcpp::List get_phylogenetic_independent_contrasts_CPP(	const long			Ntips,
 												tree_edge,
 												edge_length,
 												tip_states,
-												only_bifurcations,
 												scaled,
+												only_bifurcations,
+												include_zero_phylodistances,
 												PICs,
 												distances,
 												PIC_nodes,
@@ -19799,10 +19841,10 @@ void fit_Brownian_motion_model(	const long			Ntips,
 								const long 			Nnodes,
 								const long			Nedges,
 								const long			Ntraits,
-								const std::vector<long> &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-								const std::vector<double> &edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
+								const std::vector<long> 	&tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+								const std::vector<double> 	&edge_length,		// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
 								const std::vector<double>	&tip_states,		// (INPUT) 2D array of size Ntips x Ntraits, in row-major format, listing numeric states for each trait at each tip
-								std::vector<double>	&diffusivity){		// (OUTPUT) 2D array of size Ntraits x Ntraits, in row-major format, listing the fitted diffusion matrix D
+								std::vector<double>			&diffusivity){		// (OUTPUT) 2D array of size Ntraits x Ntraits, in row-major format, listing the fitted diffusion matrix D
 											
 	// calculate phylogenetic independent contrasts (PIC)
 	// PICs correspond to independent increments of a multivariate Brownian motion process
@@ -19815,8 +19857,9 @@ void fit_Brownian_motion_model(	const long			Ntips,
 											tree_edge,
 											edge_length,
 											tip_states,
-											false,
 											true,	// rescale PICs by phylogenetic distances
+											false,	// only bifurcations
+											false,	// don't include zero phylodistances
 											PICs,
 											distances,
 											PIC_nodes,
@@ -20991,7 +21034,8 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 								const double				exponentiation_accuracy,		// (INPUT) maximum allowed error when exponentiating the transition matrix via polynomials, in terms of the Hilbert-Schmidt L2 norm. Only relevant if exponentiation is done using the polynomials.
 								const long					max_polynomials){				// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix via polynomials, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
 	const double start_runtime   = (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
-	const double max_edge_length = (edge_length.size()==0 ? 1.0 : array_max(edge_length));
+	double edge_length_scale = (edge_length.size()==0 ? 1.0 : array_max(edge_length));
+	if(edge_length_scale==0) edge_length_scale = 1;
 	
 	// determine tree root
 	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
@@ -21026,7 +21070,7 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 	// prepare transition matrix exponentiator functor
 	matrix_exponentiator transition_exponentiator;
 	const long min_polynomials = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transition_matrix);
-	transition_exponentiator.initialize(Nstates, transition_matrix, max_edge_length, 1e-4, min_polynomials, max_polynomials, true);
+	transition_exponentiator.initialize(Nstates, transition_matrix, edge_length_scale, 1e-4, min_polynomials, max_polynomials, true);
 							
 	// calculate state likelihoods on each node (traverse tips-->root)
 	// To avoid numerical overflow due to extremely small posterior densities, we represent the latter as a scale & log-transformed density variation
@@ -21045,7 +21089,7 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 			child = tree_edge[2*edge+1];
 
 			// calculate exponential of transition matrix along edge
-			transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/max_edge_length, expQ);
+			transition_exponentiator.get_exponential((edge_length.size()==0 ? 1.0 : edge_length[edge])/edge_length_scale, expQ);
 									
 			// use exponentiated transition matrix to propagate likelihoods ("posteriors") from child to parent
 			// posteriors[parent] = product_{child in children} exp(edge_length * Q) * posteriors[child]
@@ -21110,7 +21154,8 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 	}
 
 	return Rcpp::List::create(	Rcpp::Named("success") 			= true, 
-								Rcpp::Named("loglikelihood")	= loglikelihood);
+								Rcpp::Named("loglikelihood")	= loglikelihood, 
+								Rcpp::Named("error")			= "");
 }
 
 
@@ -21416,7 +21461,7 @@ void aux_get_quadratic_parameters_for_squared_change_parsimony(	const long				Nt
 																const long 				Nnodes,
 																const ARRAY_TYPE 		&tree_edge,							// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
 																const std::vector<double> 	&edge_length,						// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
-																const std::vector<double>		&tip_states,						// (INPUT) 1D array of size Ntips
+																const std::vector<double>	&tip_states,						// (INPUT) 1D array of size Ntips
 																const std::vector<long>	&node2first_edge,					// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1), mapping nodes to their first outgoing edge (or incoming/outgoing edge if edge_mapping_inout==true).
 																const std::vector<long>	&node2last_edge,					// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1), mapping nodes to their last outgoing edge (or incoming/outgoing edge if edge_mapping_inout==true).
 																const std::vector<long>	&edge_mapping,						// (INPUT) 1D array of size Nedges (or 2*Nedges if edge_mapping_inout==true), with values in 0:(Nedges-1). Maps internal edge indices (i.e. as listed in node2first_edge[] and node2last_edge[]) to original edge indices.
@@ -23632,7 +23677,7 @@ void solve_Bernoulli_ODE2_inv2(	const dvector	&times,		// (INPUT) 1D vector of s
 // The function also calculates features of the model that are not necessarily the same for all equivalent models, such as the deterministic total diversity or the lineage-extinction probability
 // [[Rcpp::export]]
 Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			// (INPUT) age (time before present) with respect to which the returned LTT, Pextinct, Pmissing, PNDs, shadow_diversity, census_lambda and census_rho will apply. Typically this is 0, but could also be >0.
-												const double				oldest_age,			// (INPUT) oldest age to consider. Must be within the provided age_grid[]
+												const double				oldest_age,			// (INPUT) oldest age to consider. If splines_degree>0, then oldest_age must be within the provided age_grid[], otherwise it can be outside-right of it.
 												const std::vector<double>	&age_grid,			// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus will be defined on this age grid. This age grid must cover at least the range [census_age,oldest_age].
 												const std::vector<double>	&lambdas,			// (INPUT) 1D array of size NG, listing (per-capita) speciation rates on the age-grid. Either lambdas[] or PDRs[] must be provided.
 												const std::vector<double>	&mus,				// (INPUT) 1D array of size NG, listing (per-capita) extinction rates on the age-grid. Either mus or mu_over_lambda must be provided.
@@ -23645,7 +23690,8 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 												const long					splines_degree,		// (INPUT) either 1, 2 or 3, specifying the degree of the splines defined by the lambdas, mus and PDRs on the age grid.
 												const double				relative_dt,		// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 												const bool					allow_unreal){		// (INPUT) if true, then BD models with unrealistic parameters (e.g., negative mu or negative Pmissing) are fully supported. This may be desired e.g. when examining model congruence classes with negative mu.
-	if((oldest_age<age_grid[0]) || (oldest_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies outside of the provided age_grid");
+	if((splines_degree==0) && (oldest_age<age_grid[0])) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies left of the provided age_grid");
+	if((splines_degree>0) && ((oldest_age<age_grid[0]) || (oldest_age>age_grid.back()))) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "oldest_age lies outside of the provided age_grid");
 	if((census_age<age_grid[0]) || (census_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "census_age lies outside of the provided age_grid");
 	if((anchor_age<age_grid[0]) || (anchor_age>age_grid.back())) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "anchor_age lies outside of the provided age_grid");
 	const bool got_lambdas 		= (!lambdas.empty());
@@ -23690,11 +23736,11 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 		}
 		const double mean_abs_diversification_rate = vector_abs_mean(coarse_diversification_rates);
 		refine_piecewise_polynomial(splines_degree,
-									age_grid,
-									coarse_diversification_coeff,
-									splines_slideX,
-									age_grid[0],
-									oldest_age,
+									age_grid, // coarse_times
+									coarse_diversification_coeff, // coarse_coeff
+									splines_slideX, // slideX
+									age_grid[0], // start_time
+									oldest_age, // end_time
 									max_time_steps,																		// max_time_steps
 									(mean_abs_diversification_rate==0 ? INFTY_D : 0.01*mean_abs_diversification_rate),	// max_value_step
 									0.01, 																				// max_relative_value_step
@@ -23703,6 +23749,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 									refined_diversification_coeff);
 		NRG = refined_age_grid.size();
 		Rcpp::checkUserInterrupt();
+		//Rcout << "debug C++: refined_age_grid.back=" << refined_age_grid.back() << endl; // debug
 			
 		// redefine lambda & mu splines on refined time grid
 		refine_piecewise_polynomial(lambda_degree, age_grid, coarse_lambda_coeff, splines_slideX, refined_age_grid, refined_lambda_coeff, refined_lambdas);
@@ -24266,10 +24313,10 @@ Rcpp::List CR_HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching_
 Rcpp::List HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching_ages,		// (INPUT) 1D array of size NB, listing branching ages (internal node ages, accounting for multiplicities in the case of multifurcations or monofurcations) in ascending order, with branching_ages.last() being the root_age
 										const double				oldest_age,				// (INPUT) maximum age to consider, i.e. consider only branching events within ages [0:oldest_age]. If this is less than the root_age, then the tree is considered to be "cut" at oldest_age into multiple sub-trees, and the likelihood is calculated as if each sub-tree is an independent realization of the same model. If this is the stem age (i.e. >root_age), the assumption is that all extant descendands of the stem lineage have been sampled (or subsampled) at equal probabilities. This is similar to the "tot_time" option in the R function RPANDA::likelihood_bd
 										const double				rarefaction,			// (INPUT) number within (0,1], specifying the rarefaction (subsampling fraction) of the timetree, i.e. what fraction of extant diversity is represented in the timetree
-										const std::vector<double>	&age_grid,				// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus will be defined on this age grid. This age grid must cover at least the range [0,oldest_age].
+										const std::vector<double>	&age_grid,				// (INPUT) 1D array of size NG, listing ages (time before present) in ascending order, from present to root. The provided lambdas & mus will be defined on this age grid. If (splines_degree>0), then the age grid must cover at least the range [0,oldest_age], otherwise if (splines_degree==0) the age grid must cover at least age 0.
 										const std::vector<double>	&lambdas,				// (INPUT) 1D array of size NG, listing (per-capita) speciation rates on the age-grid.
 										const std::vector<double>	&mus,					// (INPUT) 1D array of size NG, listing (per-capita) extinction rates on the age-grid.
-										const long					splines_degree,			// (INPUT) either 0,1,2 or 3, specifying the degree of the splines defined by the lambdas and mus on the age grid.										
+										const long					splines_degree,			// (INPUT) either 0, 1, 2 or 3, specifying the degree of the splines defined by the lambdas and mus on the age grid.
 										const std::string			&condition,				// (INPUT) one of "stem", "crown", "stemN", "crownN" or "none" (where N is an integer >=2), specifying whether to condition the likelihood on the survival of the stem group, the crown group or none (not recommended). This is similar to the "cond" option in the R function RPANDA::likelihood_bd
 										const double				relative_dt,			// (INPUT) maximum relative time step allowed for integration. Smaller values increase integration accuracy. Typical values are 0.0001-0.001.
 										const double				runtime_out_seconds){	// (INPUT) max allowed runtime in seconds. If <=0, this option is ignored.				
@@ -24281,7 +24328,11 @@ Rcpp::List HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching_age
 		
 	// basic error checking
 	if((NB==0) || age_grid.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Not enough input data (zero branching ages and/or empty age-grid");
-	if((age_grid[0]>age0) || (age_grid.back()<oldest_age)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Age-grid does not cover the entire considered age interval [0:oldest_age]");
+	if(splines_degree==0){
+		if(age_grid[0]>age0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Age-grid does not cover age 0");
+	}else{
+		if((age_grid[0]>age0) || (age_grid.back()<oldest_age)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Age-grid does not cover the entire considered age interval [0:oldest_age]");
+	}
 		
 	// get splines representation of lambdas & mus
 	dvector coarse_lambda_coeff, coarse_mu_coeff, coarse_diversification_coeff, coarse_diversification_rates;
@@ -24315,7 +24366,7 @@ Rcpp::List HBD_model_loglikelihood_CPP(	const std::vector<double>	&branching_age
 								0.01, 																				// max_relative_value_step
 								1e9,																				// max_refined_grid_size
 								refined_age_grid,
-								refined_diversification_coeff);	
+								refined_diversification_coeff);
 	const long NRG = refined_age_grid.size();
 	if((runtime_out_seconds>0) && (get_thread_monotonic_walltime_seconds()-start_runtime>=runtime_out_seconds)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Aborted node traversal because the maximum allowed runtime was reached");
 
@@ -31845,7 +31896,7 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 
 
 #pragma mark -
-#pragma mark FASTA files
+#pragma mark Loading files
 #pragma mark 
 
 
@@ -31893,6 +31944,80 @@ Rcpp::List read_fasta_from_file_CPP(	const std::string 	&fasta_path,
 								Rcpp::Named("Nlines") 		= Nlines,
 								Rcpp::Named("Nsequences") 	= Nsequences);
 }
+
+
+
+
+// Efficiently load a distances list from a text file, with parent and child names listed in the first 2 columns, and distance listed in another column
+// Unfortunately this function cannot directly read gzipped files
+// [[Rcpp::export]]
+Rcpp::List read_distances_list_CPP(	const std::string 	&file_path,
+									const std::string	&delimiter,
+									const std::string	&comment_prefix,
+									const long			distances_column,	// column index (0-based) where the distances are located
+									const double		min_distance,
+									const double		max_distance,
+									const long			max_Nedges,			// optional maximum number of edges to load. If negative, this filter is ignored.
+									const long			verbose_interval,	// number of lines between progress messages
+									const std::string	&verbose_prefix){
+	std::ifstream fin(file_path);
+	if(!fin.is_open()){
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not open input file");
+	}
+	long Nlines = 0;
+	std::string line;
+	std::vector<std::string> parts, member_names;
+	std::map<std::string,long> member_name2index;
+	dvector distances;
+	lvector edges;
+	long member;
+	double distance;
+	std::map<std::string,long>::const_iterator member_iterator;
+	while(std::getline(fin, line)){
+		if((Nlines % 1000) == 0) Rcpp::checkUserInterrupt();
+		++Nlines;
+		if(line.length()==0) continue; // skip empty lines
+		extract_string_parts(line, "#", 1, parts);
+		line = trim_whitespace(parts[0]);
+		if(line.size()==0) continue; // this line has nothing but comments, so skip
+		extract_string_parts(line, delimiter, distances_column+1, parts);
+		if(parts.size()<=distances_column){
+			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Error on line %d: Need at least %d columns, but found only %d",Nlines,distances_column+1,parts.size()));
+		}
+		distance = std::stod(parts[distances_column]);
+		if((distance<min_distance) || (distance>max_distance)) continue; // skip this edge
+		// record the edge's distance
+		distances.push_back(distance);
+		// record edge parent
+		member_iterator = member_name2index.find(parts[0]);
+		if(member_iterator == member_name2index.end()){
+			member = member_names.size();
+			member_name2index.insert(std::pair<string,long>(parts[0],member));
+			member_names.push_back(parts[0]);
+		}else{
+			member = member_iterator->second;
+		}
+		edges.push_back(member);
+		// record edge child
+		member_iterator = member_name2index.find(parts[1]);
+		if(member_iterator == member_name2index.end()){
+			member = member_names.size();
+			member_name2index.insert(std::pair<string,long>(parts[1],member));
+			member_names.push_back(parts[1]);
+		}else{
+			member = member_iterator->second;
+		}
+		edges.push_back(member);
+		if((Nlines % verbose_interval) == 0) Rcout << verbose_prefix << "Read " << Nlines << " lines so far, loaded " << distances.size() << " edges\n";
+		if((max_Nedges>=0) && (distances.size()>=max_Nedges)) break;
+	}
+	fin.close();
+	return Rcpp::List::create(	Rcpp::Named("success")		= true,
+								Rcpp::Named("member_names")	= member_names,	// 1D vector of unique member names
+								Rcpp::Named("distances") 	= distances,	// 1D array of size ND, listing the distance of each edge
+								Rcpp::Named("edges") 		= edges); 		// 2D array of size ND x 2 in row-major format, listing the integer indices of the parent & child of each edge
+}
+
 
 
 

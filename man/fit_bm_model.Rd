@@ -61,6 +61,12 @@ Either a single non-negative number (if \code{tip_states} was a vector) or a 2D 
 \item{loglikelihood}{
 The log-likelihood of the fitted model, given the provided tip states data.
 }
+\item{AIC}{
+The AIC (Akaike Information Criterion) of the fitted model.
+}
+\item{BIC}{
+The BIC (Bayesian Information Criterion) of the fitted model.
+}
 \item{Ncontrasts}{
 Integer, number of independent contrasts used to estimate the diffusivity. This corresponds to the number of independent data points used.
 }

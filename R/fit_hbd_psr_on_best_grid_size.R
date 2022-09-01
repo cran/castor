@@ -26,7 +26,7 @@ fit_hbd_psr_on_best_grid_size = function(	tree, 							# rooted ultrametric time
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age
 	if(!is.null(guess_PSR)){
-		if(class(guess_PSR) != "function"){
+		if("function" %in% class(guess_PSR)){
 			if(length(guess_PSR)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_PSR, or NULL, or a function handle"))
 			}else{
@@ -39,7 +39,7 @@ fit_hbd_psr_on_best_grid_size = function(	tree, 							# rooted ultrametric time
 		guess_PSR = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_PSR)){
-		if(class(fixed_PSR) != "function"){
+		if("function" %in% class(fixed_PSR)){
 			if(length(fixed_PSR)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_PSR, or NULL, or a function handle"))
 			}else{

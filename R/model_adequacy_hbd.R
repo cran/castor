@@ -108,22 +108,34 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 	# calculate P-value of gamma statistic
 	bootstrap_gammas		= sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$gamma)
 	bootstrap_mean_gamma 	= mean(bootstrap_gammas, na.rm=TRUE)
+	bootstrap_std_gamma 	= sd(bootstrap_gammas, na.rm=TRUE)
 	Pgamma 					= mean(abs(bootstrap_gammas-bootstrap_mean_gamma)>=abs(tree_gamma-bootstrap_mean_gamma),na.rm=TRUE)
+	RESgamma				= (tree_gamma-bootstrap_mean_gamma)/abs(bootstrap_mean_gamma) # relative effect size of gamma statistic
+	SESgamma				= (tree_gamma-bootstrap_mean_gamma)/bootstrap_std_gamma # standardized effect size of gamma statistic
 	
 	# calculate P-value of Colless imbalance statistic
 	bootstrap_Colless		= sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$Colless)
 	bootstrap_mean_Colless	= mean(bootstrap_Colless, na.rm=TRUE)
+	bootstrap_std_Colless	= sd(bootstrap_Colless, na.rm=TRUE)
 	PColless				= mean(abs(bootstrap_Colless-bootstrap_mean_Colless)>=abs(tree_Colless-bootstrap_mean_Colless),na.rm=TRUE)
+	RESColless				= (tree_Colless-bootstrap_mean_Colless)/abs(bootstrap_mean_Colless) # relative effect size of Colless statistic
+	SESColless				= (tree_Colless-bootstrap_mean_Colless)/bootstrap_std_Colless # standardized effect size of Colless statistic
 
 	# calculate P-value of Sackin imbalance statistic
 	bootstrap_Sackin		= sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$Sackin)
 	bootstrap_mean_Sackin	= mean(bootstrap_Sackin, na.rm=TRUE)
+	bootstrap_std_Sackin	= sd(bootstrap_Sackin, na.rm=TRUE)
 	PSackin					= mean(abs(bootstrap_Sackin-bootstrap_mean_Sackin)>=abs(tree_Sackin-bootstrap_mean_Sackin),na.rm=TRUE)
+	RESSackin				= (tree_Sackin-bootstrap_mean_Sackin)/abs(bootstrap_mean_Sackin) # relative effect size of Sackin statistic
+	SESSackin				= (tree_Sackin-bootstrap_mean_Sackin)/bootstrap_std_Sackin # standardized effect size of Sackin statistic
 
 	# calculate P-value of Blum imbalance statistic
 	bootstrap_Blum		= sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$Blum)
 	bootstrap_mean_Blum	= mean(bootstrap_Blum, na.rm=TRUE)
+	bootstrap_std_Blum	= sd(bootstrap_Blum, na.rm=TRUE)
 	PBlum				= mean(abs(bootstrap_Blum-bootstrap_mean_Blum)>=abs(tree_Blum-bootstrap_mean_Blum),na.rm=TRUE)
+	RESBlum				= (tree_Blum-bootstrap_mean_Blum)/abs(bootstrap_mean_Blum) # relative effect size of Blum statistic
+	SESBlum				= (tree_Blum-bootstrap_mean_Blum)/bootstrap_std_Blum # standardized effect size of Blum statistic
 	
 	# calculate confidence intervals of bootstrap LTTs
 	bootstrap_LTTs		= t(sapply(seq_len(Nbootstraps), FUN=function(b) bootstraps[[b]]$LTT))
@@ -148,29 +160,52 @@ model_adequacy_hbd = function(	tree, 						# ultrametric timetree of class "phyl
 				Nbootstraps					= Nbootstraps,
 				tree_gamma					= tree_gamma,
 				bootstrap_mean_gamma 		= bootstrap_mean_gamma,
+				bootstrap_std_gamma 		= bootstrap_std_gamma,
 				Pgamma						= Pgamma,
+				RESgamma					= RESgamma,
+				SESgamma					= SESgamma,
 				tree_Colless				= tree_Colless,
 				bootstrap_mean_Colless 		= bootstrap_mean_Colless,
+				bootstrap_std_Colless 		= bootstrap_std_Colless,
 				PColless					= PColless,
+				RESColless					= RESColless,
+				SESColless					= SESColless,
 				tree_Sackin					= tree_Sackin,
 				bootstrap_mean_Sackin 		= bootstrap_mean_Sackin,
+				bootstrap_std_Sackin 		= bootstrap_std_Sackin,
 				PSackin						= PSackin,
+				RESSackin					= RESSackin,
+				SESSackin					= SESSackin,
 				tree_Blum					= tree_Blum,
 				bootstrap_mean_Blum 		= bootstrap_mean_Blum,
 				PBlum						= PBlum,
+				RESBlum						= RESBlum,
+				SESBlum						= SESBlum,
 				tree_edgeKS					= edge_Kolmogorov_Smirnov$empirical_KS,
 				bootstrap_mean_edgeKS 		= edge_Kolmogorov_Smirnov$mean_bootstrap_KS,
+				bootstrap_std_edgeKS 		= edge_Kolmogorov_Smirnov$std_bootstrap_KS,
 				PedgeKS						= edge_Kolmogorov_Smirnov$Pvalue,
+				RESedgeKS					= edge_Kolmogorov_Smirnov$RES,
+				SESedgeKS					= edge_Kolmogorov_Smirnov$SES,
 				tree_nodeKS					= node_Kolmogorov_Smirnov$empirical_KS,
 				bootstrap_mean_nodeKS 		= node_Kolmogorov_Smirnov$mean_bootstrap_KS,
+				bootstrap_std_nodeKS 		= node_Kolmogorov_Smirnov$std_bootstrap_KS,
 				PnodeKS						= node_Kolmogorov_Smirnov$Pvalue,
+				RESnodeKS					= node_Kolmogorov_Smirnov$RES,
+				SESnodeKS					= node_Kolmogorov_Smirnov$SES,
 				tree_sizeKS					= size_Kolmogorov_Smirnov$empirical_KS,
 				bootstrap_mean_sizeKS 		= size_Kolmogorov_Smirnov$mean_bootstrap_KS,
+				bootstrap_std_sizeKS 		= size_Kolmogorov_Smirnov$std_bootstrap_KS,
 				PsizeKS						= size_Kolmogorov_Smirnov$Pvalue,
+				RESsizeKS					= size_Kolmogorov_Smirnov$RES,
+				SESsizeKS					= size_Kolmogorov_Smirnov$SES,
 				statistical_tests			= data.frame(	statistic			= c("gamma", "Colless", "Sackin", "Blum", "edge-lengths Kolmogorov-Smirnov", "node-ages Kolmogorov-Smirnov", "node-sizes Kolmogorov-Smirnov"),
 															tree_value	 		= c(tree_gamma, tree_Colless, tree_Sackin, tree_Blum, edge_Kolmogorov_Smirnov$empirical_KS, node_Kolmogorov_Smirnov$empirical_KS, size_Kolmogorov_Smirnov$empirical_KS),
 															bootstrap_mean		= c(bootstrap_mean_gamma, bootstrap_mean_Colless, bootstrap_mean_Sackin, bootstrap_mean_Blum, edge_Kolmogorov_Smirnov$mean_bootstrap_KS, node_Kolmogorov_Smirnov$mean_bootstrap_KS, size_Kolmogorov_Smirnov$mean_bootstrap_KS),
-															Pvalue	 			= c(Pgamma, PColless, PSackin, PBlum, edge_Kolmogorov_Smirnov$Pvalue, node_Kolmogorov_Smirnov$Pvalue, size_Kolmogorov_Smirnov$Pvalue)),
+															bootstrap_std		= c(bootstrap_std_gamma, bootstrap_std_Colless, bootstrap_std_Sackin, bootstrap_std_Blum, edge_Kolmogorov_Smirnov$std_bootstrap_KS, node_Kolmogorov_Smirnov$std_bootstrap_KS, size_Kolmogorov_Smirnov$std_bootstrap_KS),
+															Pvalue	 			= c(Pgamma, PColless, PSackin, PBlum, edge_Kolmogorov_Smirnov$Pvalue, node_Kolmogorov_Smirnov$Pvalue, size_Kolmogorov_Smirnov$Pvalue),
+															RES		 			= c(RESgamma, RESColless, RESSackin, RESBlum, edge_Kolmogorov_Smirnov$RES, node_Kolmogorov_Smirnov$RES, size_Kolmogorov_Smirnov$RES),
+															SES		 			= c(SESgamma, SESColless, SESSackin, SESBlum, edge_Kolmogorov_Smirnov$SES, node_Kolmogorov_Smirnov$SES, size_Kolmogorov_Smirnov$SES)),
 				LTT_ages				= tree_LTT$ages,
 				tree_LTT				= tree_LTT$lineages,
 				bootstrap_LTT_CI		= bootstrap_LTT_CIs,

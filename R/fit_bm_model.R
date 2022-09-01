@@ -37,12 +37,19 @@ fit_bm_model = function(trees, 					# either a single tree in phylo format, or a
 	scalar = is.vector(tip_states[[1]])
 	Ntraits	= (if(scalar) 1 else ncol(tip_states[[1]]))
 	
+	if(check_input){
+		# check tree quality
+		for(i in seq_len(Ntrees)){
+			if(any(trees[[i]]$edge.length<0)) return(list(success=FALSE,error=sprintf("Tree #%d includes negative edge lengths",i)))
+		}
+	}
+	
 	# loop through the trees and extract independet contrasts
 	# X will be a matrix of size Ncontrasts x Ntraits, each row of which lists a single independent contrast, i.e. geodistance divided by the square root of the corresponding phylodistance
 	phylodistances 	= numeric()
 	X				= matrix(nrow=0, ncol=Ntraits)
-	for(i in 1:Ntrees){
-		pic_results 	= get_independent_contrasts(trees[[i]], tip_states[[i]], scaled = TRUE, only_bifurcations = FALSE, check_input = check_input);
+	for(i in seq_len(Ntrees)){
+		pic_results 	= get_independent_contrasts(trees[[i]], tip_states[[i]], scaled = TRUE, only_bifurcations = FALSE, include_zero_phylodistances=FALSE, check_input = check_input);
 		phylodistances 	= c(phylodistances, pic_results$distances)
 		if(scalar){
 			X = rbind(X, matrix(pic_results$PICs,ncol=1))		
@@ -51,16 +58,18 @@ fit_bm_model = function(trees, 					# either a single tree in phylo format, or a
 		}
 	}
 	Ncontrasts = length(phylodistances)
-		
+			
 	# estimate diffusivity based on vectorial increments
 	if(scalar){
 		diffusivity 	= 0.5 * mean(X**2)
 		loglikelihood	= -0.25 * sum((X**2)/diffusivity) - 0.5*Ncontrasts*log(2*pi) - 0.5*sum(log(2*phylodistances)) - 0.5*Ncontrasts*log(diffusivity)
+		Nparams			= 1
 	}else{
 		if(isotropic){
 			# fit a single diffusivity for all directions
 			diffusivity = (0.5/Ntraits) * mean(sapply(1:Ncontrasts, FUN=function(k) sum(X[k,]**2)), na.rm=TRUE)
 			diffusivity = diag(diffusivity, Ntraits, Ntraits)
+			Nparams = 1
 		}else{
 			# fit an arbitrary diffusivity matrix (constrained to be symmetric and non-negative definite)
 			# maximum-likelihood estimator on the intrinsic geometry of positive-definite matrices
@@ -71,6 +80,7 @@ fit_bm_model = function(trees, 					# either a single tree in phylo format, or a
 					diffusivity[t2,t1] = diffusivity[t1,t2]; 
 				}
 			}
+			Nparams = (Ntraits*(Ntraits+1))/2
 		}
 		inverse_diffusivity = solve(diffusivity)
 		loglikelihood = -0.25 * sum(sapply(1:Ncontrasts, function(p) X[p,,drop=FALSE] %*% inverse_diffusivity %*% t(X[p,,drop=FALSE]))) - 0.5*Ntraits*Ncontrasts*log(2*pi) - 0.5*Ntraits*sum(log(2*phylodistances)) - 0.5*Ncontrasts*determinant(diffusivity,logarithm=TRUE)$modulus
@@ -87,12 +97,12 @@ fit_bm_model = function(trees, 					# either a single tree in phylo format, or a
 			bootstrap_tip_states = vector(mode="list", Ntrees)
 			for(i in 1:Ntrees){
 				bootstrap_tip_states[[i]] = castor::simulate_bm_model(	tree			= trees[[i]], 
-														diffusivity		= diffusivity,
-														include_tips	= TRUE, 
-														include_nodes	= FALSE, 
-														root_states 	= NULL,
-														Nsimulations	= 1,
-														drop_dims		= TRUE)$tip_states
+																		diffusivity		= diffusivity,
+																		include_tips	= TRUE, 
+																		include_nodes	= FALSE, 
+																		root_states 	= NULL,
+																		Nsimulations	= 1,
+																		drop_dims		= TRUE)$tip_states
 			}
 
 			# fit diffusivity using bootstrap-simulation
@@ -119,6 +129,8 @@ fit_bm_model = function(trees, 					# either a single tree in phylo format, or a
 	return(list(success			= TRUE,
 				diffusivity		= diffusivity, 
 				loglikelihood	= loglikelihood,
+				AIC				= 2*Nparams - 2*loglikelihood,
+				BIC				= Nparams * log(Ncontrasts) - 2*loglikelihood,
 				Ncontrasts		= Ncontrasts,
 				phylodistances	= phylodistances,
 				standard_errors	= (if(Nbootstraps>0) standard_errors else NULL),

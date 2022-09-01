@@ -30,7 +30,7 @@ fit_hbd_pdr_on_best_grid_size = function(	tree,
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age
 	if(!is.null(guess_PDR)){
-		if(class(guess_PDR) != "function"){
+		if("function" %in% class(guess_PDR)){
 			if(length(guess_PDR)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_PDR, or NULL, or a function handle"))
 			}else{
@@ -43,7 +43,7 @@ fit_hbd_pdr_on_best_grid_size = function(	tree,
 		guess_PDR = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_PDR)){
-		if(class(fixed_PDR) != "function"){
+		if("function" %in% class(fixed_PDR)){
 			if(length(fixed_PDR)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_PDR, or NULL, or a function handle"))
 			}else{

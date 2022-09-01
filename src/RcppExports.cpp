@@ -1519,8 +1519,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_phylogenetic_independent_contrasts_CPP
-Rcpp::List get_phylogenetic_independent_contrasts_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Ntraits, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& tip_states, const bool only_bifurcations, const bool scaled);
-RcppExport SEXP _castor_get_phylogenetic_independent_contrasts_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NtraitsSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_statesSEXP, SEXP only_bifurcationsSEXP, SEXP scaledSEXP) {
+Rcpp::List get_phylogenetic_independent_contrasts_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Ntraits, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& tip_states, const bool scaled, const bool only_bifurcations, const bool include_zero_phylodistances);
+RcppExport SEXP _castor_get_phylogenetic_independent_contrasts_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NtraitsSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP tip_statesSEXP, SEXP scaledSEXP, SEXP only_bifurcationsSEXP, SEXP include_zero_phylodistancesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1531,9 +1531,10 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type tip_states(tip_statesSEXP);
-    Rcpp::traits::input_parameter< const bool >::type only_bifurcations(only_bifurcationsSEXP);
     Rcpp::traits::input_parameter< const bool >::type scaled(scaledSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_phylogenetic_independent_contrasts_CPP(Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, only_bifurcations, scaled));
+    Rcpp::traits::input_parameter< const bool >::type only_bifurcations(only_bifurcationsSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_zero_phylodistances(include_zero_phylodistancesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_phylogenetic_independent_contrasts_CPP(Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, scaled, only_bifurcations, include_zero_phylodistances));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2871,6 +2872,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// read_distances_list_CPP
+Rcpp::List read_distances_list_CPP(const std::string& file_path, const std::string& delimiter, const std::string& comment_prefix, const long distances_column, const double min_distance, const double max_distance, const long max_Nedges, const long verbose_interval, const std::string& verbose_prefix);
+RcppExport SEXP _castor_read_distances_list_CPP(SEXP file_pathSEXP, SEXP delimiterSEXP, SEXP comment_prefixSEXP, SEXP distances_columnSEXP, SEXP min_distanceSEXP, SEXP max_distanceSEXP, SEXP max_NedgesSEXP, SEXP verbose_intervalSEXP, SEXP verbose_prefixSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::string& >::type file_path(file_pathSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type comment_prefix(comment_prefixSEXP);
+    Rcpp::traits::input_parameter< const long >::type distances_column(distances_columnSEXP);
+    Rcpp::traits::input_parameter< const double >::type min_distance(min_distanceSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_distance(max_distanceSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_Nedges(max_NedgesSEXP);
+    Rcpp::traits::input_parameter< const long >::type verbose_interval(verbose_intervalSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
+    rcpp_result_gen = Rcpp::wrap(read_distances_list_CPP(file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_castor_evaluate_univariate_expression_CPP", (DL_FUNC) &_castor_evaluate_univariate_expression_CPP, 3},
@@ -2965,7 +2985,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_ACF_continuous_trait_CPP", (DL_FUNC) &_castor_ACF_continuous_trait_CPP, 12},
     {"_castor_get_empirical_state_frequencies_per_node_CPP", (DL_FUNC) &_castor_get_empirical_state_frequencies_per_node_CPP, 6},
     {"_castor_get_trait_richness_collectors_curve_CPP", (DL_FUNC) &_castor_get_trait_richness_collectors_curve_CPP, 14},
-    {"_castor_get_phylogenetic_independent_contrasts_CPP", (DL_FUNC) &_castor_get_phylogenetic_independent_contrasts_CPP, 9},
+    {"_castor_get_phylogenetic_independent_contrasts_CPP", (DL_FUNC) &_castor_get_phylogenetic_independent_contrasts_CPP, 10},
     {"_castor_get_trait_stats_at_times_CPP", (DL_FUNC) &_castor_get_trait_stats_at_times_CPP, 8},
     {"_castor_get_mrca_defining_tips_CPP", (DL_FUNC) &_castor_get_mrca_defining_tips_CPP, 7},
     {"_castor_get_pairwise_ancestries_CPP", (DL_FUNC) &_castor_get_pairwise_ancestries_CPP, 6},
@@ -3032,6 +3052,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_fit_SBM_from_sampled_transitions_CPP", (DL_FUNC) &_castor_fit_SBM_from_sampled_transitions_CPP, 16},
     {"_castor_ACF_spherical_CPP", (DL_FUNC) &_castor_ACF_spherical_CPP, 13},
     {"_castor_read_fasta_from_file_CPP", (DL_FUNC) &_castor_read_fasta_from_file_CPP, 3},
+    {"_castor_read_distances_list_CPP", (DL_FUNC) &_castor_read_distances_list_CPP, 9},
     {NULL, NULL, 0}
 };
 

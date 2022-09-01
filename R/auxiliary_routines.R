@@ -1317,7 +1317,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 											fixed_rho0			= NULL,		# optional fixed value for rho. If non-NULL and non-NA, then rho is not fitted. 
 											const_lambda		= FALSE,	# logical, whether to enforce a constant (time-independent) fitted speciation rate. Only relevant if lambdas are non-fixed.
 											const_mu			= FALSE,	# logical, whether to enforce a constant (time-independent) fitted extinction rate. Only relevant if mus are non-fixed.
-											splines_degree		= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
+											splines_degree		= 1,		# integer, either 0, 1, 2 or 3, specifying the degree for the splines defined by lambda and mu on the age grid.
 											condition			= "auto",	# one of "crown" or "stem" or "none" or "auto" or "stem2" (or "stem3" etc) or "crown3" (or "crown4" etc), specifying whether to condition the likelihood on the survival of the stem group or the crown group. It is recommended to use "stem" when oldest_age!=root_age, and "crown" when oldest_age==root_age. This argument is similar to the "cond" argument in the R function RPANDA::likelihood_bd. Note that "crown" really only makes sense when oldest_age==root_age.
 											relative_dt			= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase the accuracy of the computed likelihoods, but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.
 											Ntrials				= 1,
@@ -1331,7 +1331,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 	root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age
 	if(!is.null(guess_lambda)){
-		if(class(guess_lambda) != "function"){
+		if("function" %in% class(guess_lambda)){
 			if(length(guess_lambda)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL, or a function handle"))
 			}else{
@@ -1344,7 +1344,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 		guess_lambda = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(guess_mu)){
-		if(class(guess_mu) != "function"){
+		if("function" %in% class(guess_mu)){
 			if(length(guess_mu)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL, or a function handle"))
 			}else{
@@ -1357,7 +1357,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 		guess_mu = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_lambda)){
-		if(class(fixed_lambda) != "function"){
+		if("function" %in% class(fixed_lambda)){
 			if(length(fixed_lambda)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL, or a function handle"))
 			}else{
@@ -1370,7 +1370,7 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 		fixed_lambda = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_mu)){
-		if(class(fixed_mu) != "function"){
+		if("function" %in% class(fixed_mu)){
 			if(length(fixed_mu)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL, or a function handle"))
 			}else{
@@ -1409,9 +1409,17 @@ fit_hbd_model_on_best_grid_size = function(	tree,
 	for(m in model_order){
 		Ngrid = grid_sizes[m]
 		if(uniform_grid || (Ngrid==1)){
-			age_grid = seq(from=age0, to=oldest_age, length.out=Ngrid)
+			if(splines_degree==0){
+				age_grid = seq(from=age0, to=oldest_age, length.out=Ngrid+1)[1:Ngrid]
+			}else{
+				age_grid = seq(from=age0, to=oldest_age, length.out=Ngrid)
+			}
 		}else{
-			age_grid = get_inhomogeneous_grid_1D(Xstart = age0, Xend = oldest_age, Ngrid = Ngrid, densityX = rev(LTT$ages), densityY=sqrt(rev(LTT$lineages)), extrapolate=TRUE)
+			if(splines_degree==0){
+				age_grid = get_inhomogeneous_grid_1D(Xstart = age0, Xend = oldest_age, Ngrid = Ngrid+1, densityX = rev(LTT$ages), densityY=sqrt(rev(LTT$lineages)), extrapolate=TRUE)[1:Ngrid]
+			}else{
+				age_grid = get_inhomogeneous_grid_1D(Xstart = age0, Xend = oldest_age, Ngrid = Ngrid, densityX = rev(LTT$ages), densityY=sqrt(rev(LTT$lineages)), extrapolate=TRUE)
+			}
 		}
 		if(verbose) cat(sprintf("%s  Fitting model with grid size %d..\n",verbose_prefix,Ngrid))
 		fit = fit_hbd_model_on_grid(tree				= tree, 
@@ -1509,7 +1517,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 	if(is.null(root_age)) root_age = get_tree_span(tree)$max_distance
 	if(is.null(oldest_age)) oldest_age = root_age
 	if(!is.null(guess_lambda)){
-		if(class(guess_lambda) != "function"){
+		if("function" %in% class(guess_lambda)){
 			if(length(guess_lambda)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_lambda, or NULL, or a function handle"))
 			}else{
@@ -1522,7 +1530,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		guess_lambda = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(guess_mu)){
-		if(class(guess_mu) != "function"){
+		if("function" %in% class(guess_mu)){
 			if(length(guess_mu)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_mu, or NULL, or a function handle"))
 			}else{
@@ -1535,7 +1543,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		guess_mu = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(guess_psi)){
-		if(class(guess_psi) != "function"){
+		if("function" %in% class(guess_psi)){
 			if(length(guess_psi)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_psi, or NULL, or a function handle"))
 			}else{
@@ -1548,7 +1556,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		guess_psi = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(guess_kappa)){
-		if(class(guess_kappa) != "function"){
+		if("function" %in% class(guess_kappa)){
 			if(length(guess_kappa)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one guess_kappa, or NULL, or a function handle"))
 			}else{
@@ -1561,7 +1569,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		guess_kappa = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_lambda)){
-		if(class(fixed_lambda) != "function"){
+		if("function" %in% class(fixed_lambda)){
 			if(length(fixed_lambda)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_lambda, or NULL, or a function handle"))
 			}else{
@@ -1574,7 +1582,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		fixed_lambda = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_mu)){
-		if(class(fixed_mu) != "function"){
+		if("function" %in% class(fixed_mu)){
 			if(length(fixed_mu)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_mu, or NULL, or a function handle"))
 			}else{
@@ -1587,7 +1595,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		fixed_mu = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_psi)){
-		if(class(fixed_psi) != "function"){
+		if("function" %in% class(fixed_psi)){
 			if(length(fixed_psi)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_psi, or NULL, or a function handle"))
 			}else{
@@ -1600,7 +1608,7 @@ fit_hbds_model_on_best_grid_size = function(tree,
 		fixed_psi = function(ages){ rep(NA, length(ages)) }
 	}
 	if(!is.null(fixed_kappa)){
-		if(class(fixed_kappa) != "function"){
+		if("function" %in% class(fixed_kappa)){
 			if(length(fixed_kappa)!=1){
 				return(list(success=FALSE, error="Expecting either exactly one fixed_kappa, or NULL, or a function handle"))
 			}else{
@@ -2429,12 +2437,16 @@ bootstrap_Kolmogorov_Smirnov_test = function(	bootstraps,	# list of length NB, l
 
 	# compare empirical_KS to bootstrap_KSs
 	mean_bootstrap_KS 	= mean(boostrap_KSs)
+	std_bootstrap_KS 	= sd(boostrap_KSs)
 	median_bootstrap_KS = median(boostrap_KSs)
 	Pvalue 				= mean(boostrap_KSs>=empirical_KS)
 	return(list(empirical_KS		= empirical_KS,
 				mean_bootstrap_KS	= mean_bootstrap_KS, 
+				std_bootstrap_KS	= std_bootstrap_KS, 
 				median_bootstrap_KS	= median_bootstrap_KS, 
 				Pvalue				= Pvalue,
+				RES					= (empirical_KS-mean_bootstrap_KS)/abs(mean_bootstrap_KS), # relative effect size of the empirical KS
+				SES					= (empirical_KS-mean_bootstrap_KS)/std_bootstrap_KS, # standardized effect size of the empirical KS
 				CDF_grid			= empirical_CDF_grid,
 				reference_CDF_values= reference_CDF_values,
 				empirical_CDF_values= empirical_CDF_values))
@@ -2930,6 +2942,65 @@ eliminate_bifurcating_root = function(tree){
 		attr(new_tree,"order") = NULL
 		return(list(success=TRUE, changed=TRUE, tree=new_tree, new2old_clade=new2old_clade))
 	}
+}
+
+
+
+read_distances_list = function(	file_path,
+								delimiter			= "\t",
+								comment_prefix		= "#",
+								distances_column	= 3,
+								min_distance		= -Inf, # omit edges shorter than this number
+								max_distance		= Inf, # omit edges longer than this number
+								max_Nedges			= -1, # optional maximum number of edges to load. If negative, this filter is ignored.
+								verbose_interval	= 100000, # number of lines loaded between successive progress messages
+								verbose_prefix		= ""){
+	dlist = read_distances_list_CPP(file_path			= file_path,
+									delimiter			= delimiter,
+									comment_prefix		= comment_prefix,
+									distances_column	= distances_column-1,
+									min_distance		= min_distance,
+									max_distance		= max_distance,
+									max_Nedges			= max_Nedges,
+									verbose_interval	= verbose_interval,
+									verbose_prefix		= verbose_prefix)
+	dlist$edges = matrix(1 + dlist$edges, ncol=2, byrow=TRUE)
+	return(dlist)
+}
+
+
+
+# compute the expected absolute displacement (jump) of a scalar (i.e., 1-dimensional) Ornstein-Uhlenbeck process after a specific time step delta, at stationarity
+# Hence, compute: E{|X(t)-X(0)|} assuming that X(0) is at stationarity, where X is the Ornstein-Uhlenbeck process
+get_mean_abs_displacement_scalar_OU = function(	stationary_mean, 		# stationary mean of the OU process, i.e., the deterministic equilibrium
+												decay_rate,				# decay rate (aka. lambda) of the OU process
+												stationary_variance,	# stationary variance of the OU process
+												delta,					# time step for the displacement
+												rel_error = 0.0001,		# relative tolerable standard estimation error (relative to the true mean abs displacement)
+												Nsamples = NULL){		# number of random samples to use for estimation. If NULL, this is determined automatically based on the desired accuracy (rel_error)
+	if(is.null(Nsamples)){
+		# start with a decent but small sample size, then increase it if needed
+		Nsamples_here = 1000
+	}else{
+		Nsamples_here = Nsamples
+	}
+	W = stationary_variance*(1 - exp(-2*decay_rate*delta)) # conditional variance of the displacements. Note that this does not depend on X(0).
+	# Method 1: Monte Carlo integration
+	# Generate many random X(0), then compute the corresponding conditional expected absolute displacements, and average those
+	X0s = rnorm(n=Nsamples_here, mean=stationary_mean, sd=sqrt(stationary_variance))
+	Ms = (stationary_mean-X0s)*(1-exp(-decay_rate*delta)) # conditional means of the displacements, i.e., conditioned on the X(0)
+	conditional_mean_abs_displacements = sqrt(2*W/pi) * exp(-(Ms**2)/(2*W)) + Ms*(1-2*pnorm(-Ms/sqrt(W)))
+	mean_abs_displacement = mean(conditional_mean_abs_displacements)
+	
+	if(is.null(Nsamples)){
+		# this was actually just a small trial to estimate the necessary sample size for the desired accuracy
+		Nsamples = min(1000000000,(sd(conditional_mean_abs_displacements)/(mean_abs_displacement*rel_error))**2)
+		# repeat estimationg using the appropriate sample size
+		if(Nsamples>Nsamples_here){
+			mean_abs_displacement = get_mean_abs_displacement_scalar_OU(stationary_mean=stationary_mean, decay_rate=decay_rate, stationary_variance=stationary_variance, delta=delta, rel_error=rel_error, Nsamples=Nsamples)
+		}
+	}
+	return(mean_abs_displacement)
 }
 
 

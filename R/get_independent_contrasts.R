@@ -7,13 +7,14 @@
 #    Felsenstein (1985). Phylogenies and the Comparative Method. The American Naturalist. 125:1-15.
 #  Requirements:
 # 	Tree can include monofurcations and multifurcations. Multifurcations are internally expanded to bifurcations. One additional PIC is returned for each such bifurcation.
-# 	Tree can also include edges with length zero (will be adjusted internally to some small epsilon if weighted==TRUE).
+# 	Tree can also include edges with length zero.
 #	Tree must be rooted.
 get_independent_contrasts = function(	tree, 							# a phylogenetic tree of class "phylo"
 										tip_states, 					# numeric vector of size Ntips
-										scaled			 	= TRUE,		# rescale PICs by the square root of their corresponding distances (typically done to standardize their variances)
-										only_bifurcations 	= FALSE,	# if TRUE, then only existing bifurcating nodes are considered. Multifurcations will not be expanded.
-										check_input			= TRUE){
+										scaled			 			= TRUE,		# rescale PICs by the square root of their corresponding distances (typically done to standardize their variances)
+										only_bifurcations 			= FALSE,	# if TRUE, then only existing bifurcating nodes are considered. Multifurcations will not be expanded.
+										include_zero_phylodistances	= FALSE,	# if TRUE, then returned PICs may include cases where the phylodistance is zero (this can only happen if the tree has edges with length 0).
+										check_input					= TRUE){
 	Ntips  	= length(tree$tip.label)
 	scalar 	= is.vector(tip_states)
 	Ntraits = (if(scalar) 1 else ncol(tip_states))
@@ -27,15 +28,16 @@ get_independent_contrasts = function(	tree, 							# a phylogenetic tree of clas
 		if((!scalar) && (!is.null(rownames(tip_states))) && any(rownames(tip_states)!=tree$tip.label)) stop("ERROR: Row names in tip_states and tip labels in tree don't match (must be in the same order).")
 	}
 
-	results = get_phylogenetic_independent_contrasts_CPP(	Ntips				= Ntips,
-															Nnodes				= tree$Nnode,
-															Nedges				= nrow(tree$edge),
-															Ntraits				= Ntraits,
-															tree_edge			= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
-															edge_length			= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
-															tip_states			= as.vector(t(tip_states)), # flatten in row-major format
-															only_bifurcations	= only_bifurcations,
-															scaled				= scaled)
+	results = get_phylogenetic_independent_contrasts_CPP(	Ntips						= Ntips,
+															Nnodes						= tree$Nnode,
+															Nedges						= nrow(tree$edge),
+															Ntraits						= Ntraits,
+															tree_edge					= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
+															edge_length					= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
+															tip_states					= as.vector(t(tip_states)), # flatten in row-major format
+															scaled						= scaled,
+															only_bifurcations			= only_bifurcations,
+															include_zero_phylodistances	= include_zero_phylodistances)
 	PICs = (if(scalar) results$PICs else matrix(results$PICs,ncol=Ntraits,byrow=TRUE)) # unflatten PICs if needed
 	if((!scalar) && (!is.null(colnames(tip_states)))) colnames(PICs) = colnames(tip_states);
 	nodes = 1 + results$nodes; # shift indices C++ to R

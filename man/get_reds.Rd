@@ -34,7 +34,7 @@ A numeric vector of length Nnodes, listing the RED of each node in the tree. The
 \author{Stilianos Louca}
 
 \references{
-D. H. Parks, M. Chuvochina et al. (2018). A proposal for a standardized bacterial taxonomy based on genome phylogeny. bioRxiv 256800. DOI:10.1101/256800
+D. H. Parks, M. Chuvochina et al. (2018). A standardized bacterial taxonomy based on genome phylogeny substantially revises the tree of life. Nature Biotechnology. 36:996-1004.
 }
 
 %\seealso{

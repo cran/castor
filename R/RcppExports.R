@@ -369,8 +369,8 @@ get_trait_richness_collectors_curve_CPP <- function(Ntips, Nnodes, Nedges, Ntrai
     .Call(`_castor_get_trait_richness_collectors_curve_CPP`, Ntips, Nnodes, Nedges, Ntraits, root, tree_edge, edge_length, tip2first_trait, tip2last_trait, traits, rarefaction_depths, Nrepeats, tip_distribution, use_realized_depths)
 }
 
-get_phylogenetic_independent_contrasts_CPP <- function(Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, only_bifurcations, scaled) {
-    .Call(`_castor_get_phylogenetic_independent_contrasts_CPP`, Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, only_bifurcations, scaled)
+get_phylogenetic_independent_contrasts_CPP <- function(Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, scaled, only_bifurcations, include_zero_phylodistances) {
+    .Call(`_castor_get_phylogenetic_independent_contrasts_CPP`, Ntips, Nnodes, Nedges, Ntraits, tree_edge, edge_length, tip_states, scaled, only_bifurcations, include_zero_phylodistances)
 }
 
 get_trait_stats_at_times_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, times, states, return_states) {
@@ -635,5 +635,9 @@ ACF_spherical_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip
 
 read_fasta_from_file_CPP <- function(fasta_path, include_headers, include_sequences) {
     .Call(`_castor_read_fasta_from_file_CPP`, fasta_path, include_headers, include_sequences)
+}
+
+read_distances_list_CPP <- function(file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix) {
+    .Call(`_castor_read_distances_list_CPP`, file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix)
 }
 

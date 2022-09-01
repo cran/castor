@@ -14,13 +14,13 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 										oldest_age,					# numeric, specifying how far back (time before present) to simulate the model
 										age0			= 0,		# numeric, specifying the age (time before present) at which LTT0, lambda0 and rho are specified. Typically this is 0 (i.e., present-day), but may also be somewhere in the past (>0)
 										rho0			= 1,		# numeric within (0,1], specifying the fraction of extant diversity represented in the tree at age0. Can also be NULL, which is equivalent to setting rarefaction=1.
-										age_grid		= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu mut be a single scalar. The returned time series will be defined on an age-grid that may be finer than this grid. If of size >=2, the age_grid must cover oldest_age and age0.
+										age_grid		= NULL,		# either NULL, or empty, or a numeric vector of size NG, listing ages in ascending order, on which birth/mu are specified. If NULL or empty, then lambda and mu mut be a single scalar. The returned time series will be defined on an age-grid that may be finer than this grid. If of size >=2, the age_grid must cover age0 and (if splines_degree>0) also oldest_age.
 										lambda			= NULL,		# either NULL, or a single numeric (constant speciation rate over time), or a numeric vector of size NG (listing speciation rates at each age in grid_ages[]).
 										mu				= NULL,		# either a single numeric (constant extinction rate over time), or a numeric vector of size NG (listing extinction rates at each age in grid_ages[]), or NULL (in which case mu_over_lambda must be provided).
 										mu_over_lambda	= NULL,		# ratio mu/lambda. Either a single numeric (constant over time), or a numeric vector of size NG (listing mu/lambda at each age in grid_ages[]), or NULL (in which case mu must be provided).
 										PDR				= NULL,		# either NULL, or a single numeric (constant PDR over time), or a numeric vector of size NG (listing PDR at each age in grid_ages[]). Only needed if lambda is NULL.
 										lambda0			= NULL,		# either NULL, or a single numeric specifying the speciation rate at age0. Only needed if lambda is NULL.
-										splines_degree	= 1,		# integer, either 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
+										splines_degree	= 1,		# integer, either 0, 1 or 2 or 3, specifying the degree for the splines defined by lambda, mu and PDR on the age grid.
 										relative_dt		= 1e-3,		# maximum relative time step allowed for integration. Smaller values increase integration accuracy but increase computation time. Typical values are 0.0001-0.001. The default is usually sufficient.	
 										allow_unreal	= FALSE){	# logical, specifying whether BD models with unrealistic parameters (e.g., negative mu or negative Pmissing) should be supported. This may be desired e.g. when examining model congruence classes with negative mu.
 	# check validity of input variables
@@ -48,7 +48,11 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 	}else{
 		NG = length(age_grid);
 		if(age_grid[1]>tail(age_grid,1))return(list(success = FALSE, error = sprintf("Values in age_grid must be strictly increasing")))
-		if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
+		if(splines_degree==0){
+			if(age_grid[1]>oldest_age) return(list(success = FALSE, error = sprintf("Age grid must include at least one point at or below oldest_age (%g)",oldest_age)))
+		}else{
+			if((age_grid[1]>oldest_age) || (age_grid[NG]<oldest_age)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including oldest_age (%g)",oldest_age)))
+		}
 		if((age_grid[1]>age0) || (age_grid[NG]<age0)) return(list(success = FALSE, error = sprintf("Age grid must cover the entire requested age interval, including age0 (%g)",age0)))
 		if((!is.null(lambda)) && (length(lambda)!=1) && (length(lambda)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of lambda; since an age grid of size %d was provided, you must either provide zero, one or %d lambda",NG,NG)))
 		if((!is.null(mu)) && (length(mu)!=1) && (length(mu)!=NG)) return(list(success = FALSE, error = sprintf("Invalid number of mu; since an age grid of size %d was provided, you must either provide one or %d mu",NG,NG)))
@@ -78,7 +82,7 @@ simulate_deterministic_hbd = function(	LTT0, 						# number of extant species re
 														allow_unreal		= allow_unreal)
 	if(!simulation$success) return(list(success = FALSE, error = sprintf("Could not simulate model: %s",simulation$error)))
 	rholambda0 = simulation$anchor_rho*simulation$anchor_lambda;
-	census_rholambda = simulation$census_rho*simulation$census_lambda;
+	census_rholambda = simulation$census_rho*simulation$census_lambda
 
 	return(list(success							= TRUE,
 				ages							= simulation$refined_age_grid, # potentially refined ages grid, on which all returned variables are defined

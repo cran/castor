@@ -25,6 +25,7 @@ fit_mk( trees,
         Nbootstraps             = 0,	
         Ntrials_per_bootstrap   = NULL,
         verbose                 = FALSE,
+        diagnostics             = FALSE,
         verbose_prefix          = "")
         
 }
@@ -83,6 +84,9 @@ Integer, specifying the number of fitting trials to perform for each bootstrap s
 }
 \item{verbose}{
 Logical, specifying whether to print progress reports and warnings to the screen.
+}
+\item{diagnostics}{
+Logical, specifying whether to print detailed diagnostic messages, mainly for debugging purposes.
 }
 \item{verbose_prefix}{
 Character, specifying the line prefix for printing progress reports to the screen.

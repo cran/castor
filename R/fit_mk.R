@@ -19,6 +19,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 					Nbootstraps				= 0,			# integer optional number of parametric-bootstrap samples for estimating confidence intervals of fitted parameters. If 0, no parametric bootstrapping is performed. Typical values are 10-100.	
 					Ntrials_per_bootstrap	= NULL,			# integer optional number of fitting trials for each bootstrap sampling. If NULL, this is set equal to Ntrials. A smaller Ntrials_per_bootstrap will reduce computation, at the expense of increasing the estimated confidence intervals (i.e. yielding more conservative estimates of confidence).
 					verbose					= FALSE,		# boolean, specifying whether to print informative messages
+					diagnostics				= FALSE,		# boolean, specifying whether to print detailed info (such as log-likelihood) at every iteration of the fitting. For debugging purposes mainly.
 					verbose_prefix			= ""){			# string, specifying the line prefix when printing messages. Only relevant if verbose==TRUE.
 					
 	# basic input checking
@@ -172,6 +173,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 			first_guess_rate = mean(abs(as.vector(guess_transition_matrix)), na.rm=TRUE)
 		}
 	}
+	if(diagnostics) cat(sprintf("%s  First guess rate: %.5g\n",verbose_prefix,first_guess_rate))
 	if(is.null(guess_transition_matrix) || all(is.na(guess_transition_matrix))){
 		guess_transition_matrix = get_transition_matrix_from_rate_vector(rates = rep(first_guess_rate, Nrates), index_matrix = index_matrix, Nstates = Nstates)
 	}else{
@@ -183,15 +185,18 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 	
 	
 	# define objective function to be minimized (negated log-likelihood)
-	objective_function = function(dense_rates){
-		if(any(is.nan(dense_rates)) || any(is.infinite(dense_rates))) return(Inf);
+	objective_function = function(dense_rates, trial){
+		if(any(is.nan(dense_rates)) || any(is.infinite(dense_rates))){
+			if(diagnostics) cat(sprintf("%s  Trial %d: Objective requested for invalid rates: %s\n",verbose_prefix,trial,paste(sprintf("%.4g", dense_rates), collapse=", ")))
+			return(Inf)
+		}
 		Q = get_transition_matrix_from_rate_vector(dense_rates, index_matrix, Nstates)
 		if(root_prior[1]=="stationary"){
 			root_prior_type			 = "custom"
 			root_prior_probabilities = get_stationary_distribution(Q)
 		}
 		loglikelihood = 0
-		for(tr in 1:Ntrees){
+		for(tr in seq_len(Ntrees)){
 			focal_tree = trees[[tr]]
 			results = Mk_loglikelihood_CPP(	Ntips 						= length(focal_tree$tip.label),
 											Nnodes						= focal_tree$Nnode,
@@ -199,17 +204,21 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 											Nstates						= Nstates,
 											tree_edge 					= as.vector(t(focal_tree$edge))-1,	# flatten in row-major format and make indices 0-based,
 											edge_length		 			= (if(is.null(focal_tree$edge.length)) numeric() else focal_tree$edge.length),
-											transition_matrix			= as.vector(t(Q)),				# flatten in row-major format
-											prior_probabilities_per_tip	= as.vector(t(tip_priors[[tr]])),		# flatten in row-major format
+											transition_matrix			= as.vector(t(Q)),					# flatten in row-major format
+											prior_probabilities_per_tip	= as.vector(t(tip_priors[[tr]])),	# flatten in row-major format
 											root_prior_type				= root_prior_type,
 											root_prior					= root_prior_probabilities,
 											oldest_age					= (if(is.null(oldest_ages)) -1 else (if(is.finite(oldest_ages[tr])) oldest_ages[tr] else -1)),
 											runtime_out_seconds			= max_model_runtime,
 											exponentiation_accuracy		= 1e-3,
 											max_polynomials				= 1000)
-			if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)) return(Inf)
+			if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)){
+				if(diagnostics) cat(sprintf("%s  Trial %d, tree %d (%d tips): Model evaluation failed: %s\n",verbose_prefix,trial,tr,length(focal_tree$tip.label),results$error))
+				return(Inf)
+			}
 			loglikelihood = loglikelihood + results$loglikelihood
 		}
+		if(diagnostics) cat(sprintf("%s  Trial %d: loglikelihood %.10g\n",verbose_prefix,trial,loglikelihood))
 		return(-loglikelihood)
 	}
 
@@ -221,7 +230,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 		rate_scale = mean(abs(initial_dense_rates))
 		if(optim_algorithm == "optim"){
 			fit = stats::optim(	initial_dense_rates/rate_scale, 
-								function(x) objective_function(x*rate_scale), 
+								function(x) objective_function(x*rate_scale, trial), 
 								method 	= "L-BFGS-B", 
 								lower 	= rep(first_guess_rate/(10**power_range), Nrates)/rate_scale,
 								upper	= rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
@@ -232,7 +241,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 			converged 		= (fit$convergence==0)
 		}else{
 			fit = stats::nlminb(initial_dense_rates/rate_scale, 
-								function(x) objective_function(x*rate_scale), 
+								function(x) objective_function(x*rate_scale, trial), 
 								lower=rep(0, Nrates)/rate_scale, 
 								upper=rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
 								control = list(iter.max=optim_max_iterations, eval.max=optim_max_iterations*Nrates*10, rel.tol=optim_rel_tol, step.min=1e-5))
@@ -242,6 +251,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 			converged		= (fit$convergence==0)
 		}
 		fit$par = fit$par * rate_scale
+		if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
 		return(list(LL=LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit))
 	}
 	
@@ -305,6 +315,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 							Nthreads 				= Nthreads,
 							Nbootstraps				= 0,
 							verbose					= verbose,
+							diagnostics				= diagnostics,
 							verbose_prefix			= paste0(verbose_prefix,"    "))
 			if(!fit$success){
 				if(verbose) cat(sprintf("%s  WARNING: Fitting failed for this bootstrap: %s\n",verbose_prefix,fit$error))

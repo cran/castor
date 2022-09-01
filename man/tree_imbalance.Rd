@@ -22,6 +22,8 @@ Character, specifying the statistic to be calculated. Must be one of "Colless" (
 
 \details{
 The tree may include multifurcations and monofurcations. Note that the Colless Index is traditionally only defined for bifurcating trees. For non-bifurcating trees this function calculates a generalization of the index, by summing over all children pairs at each node.
+
+The Blum statistic is the sum of natural logarithms of the sizes (number of descending tips) of non-monofurcating nodes. 
 }
 
 \value{

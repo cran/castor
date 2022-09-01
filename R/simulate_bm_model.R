@@ -49,7 +49,7 @@ simulate_bm_model = function(	tree,
 															diffusivity			= diffusivity,
 															include_tips		= include_tips,
 															include_nodes		= include_nodes,
-															Nsimulations		= Nsimulations);	
+															Nsimulations		= Nsimulations);
 	}else{
 		results = simulate_multivariate_Brownian_motion_model_CPP(	Ntips			= Ntips,
 																	Nnodes			= Nnodes,
