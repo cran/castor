@@ -10,6 +10,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 					oldest_ages				= NULL,			# optional numeric or numeric vector of size Ntrees, specifying the oldest age to consider for each tree. Typically this will be <=root_age. If NULL, this will be set to each tree's root_age. May contain NAs or NaNs; for these trees the oldest age will be the root_age.
 					guess_transition_matrix	= NULL,			# optional 2D numeric matrix, specifying a first guess for the transition rate matrix. May contain NAs.
 					Ntrials 				= 1,			# (int) number of trials (starting points) for fitting the transition matrix. Only relevant if transition_matrix=NULL.
+					Nscouts					= NULL,			# integer, number of randomly chosen parameter values to consider as possible fitting starts (only Ntrials-1 of those will be kept). Each scout costs only one evaluation of the loglikelihood function, which is much cheaper than a whole fitting trial. If NULL, this is automatically chosen based on the number of fitted parameters and Ntrials. Only relevant if Ntrials>1, since the first trial uses the default first guess (i.e., without scouting).
 					max_model_runtime		= NULL,			# maximum time (in seconds) to allocate for each likelihood evaluation per tree. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
 					optim_algorithm		 	= "nlminb",		# either "optim" or "nlminb". What algorithm to use for fitting.
 					optim_max_iterations	= 200,			# maximum number of iterations of the optimization algorithm (per trial)
@@ -224,12 +225,10 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 
 	
 	# fit starting with various starting_rates, keep track of best fit
-	fit_single_trial = function(trial){
-		power_range = 8
-		initial_dense_rates = if(trial==1) extract_independent_rates_from_transition_matrix(guess_transition_matrix, index_matrix) else first_guess_rate * 10**runif(n=Nrates, min=-power_range/2, max=power_range/2);
-		rate_scale = mean(abs(initial_dense_rates))
+	fit_single_trial = function(start_dense_rates, trial){
+		rate_scale = mean(abs(start_dense_rates))
 		if(optim_algorithm == "optim"){
-			fit = stats::optim(	initial_dense_rates/rate_scale, 
+			fit = stats::optim(	start_dense_rates/rate_scale, 
 								function(x) objective_function(x*rate_scale, trial), 
 								method 	= "L-BFGS-B", 
 								lower 	= rep(first_guess_rate/(10**power_range), Nrates)/rate_scale,
@@ -240,7 +239,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 			Niterations		= NA
 			converged 		= (fit$convergence==0)
 		}else{
-			fit = stats::nlminb(initial_dense_rates/rate_scale, 
+			fit = stats::nlminb(start_dense_rates/rate_scale, 
 								function(x) objective_function(x*rate_scale, trial), 
 								lower=rep(0, Nrates)/rate_scale, 
 								upper=rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
@@ -254,23 +253,45 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 		if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
 		return(list(LL=LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit))
 	}
+
+	power_range = 6
+	default_start = extract_independent_rates_from_transition_matrix(guess_transition_matrix, index_matrix)
+	if(Ntrials>1){
+		# randomly choose multiple parameter starting points and keep the Ntrials-1 most promising ones (i.e., with smallest objective values) plus the defaut_start
+		Nscouts = (if(is.null(Nscouts)) min(10000,10*Nrates*Ntrials) else max(Ntrials-1,Nscouts))
+		if(verbose) cat(sprintf("%sGenerating %d random parameter starts and selecting the most promising ones..\n",verbose_prefix,Nscouts))
+		starts_pool = lapply(seq_len(Nscouts), FUN=function(k) first_guess_rate * 10**runif(n=Nrates, min=-((k/Nscouts)^2)*power_range/2, max=((k/Nscouts)^2)*power_range/2))
+		# compute the objective values for each start in the pool
+		if((Nthreads>1)  && (.Platform$OS.type!="windows")){
+			start_objectives = unlist(parallel::mclapply(starts_pool, FUN = function(dense_rates) objective_function(dense_rates, trial=-1), mc.cores = min(Nthreads, length(starts_pool)), mc.preschedule = TRUE, mc.cleanup = TRUE))
+		}else{
+			start_objectives = sapply(starts_pool, FUN = function(dense_rates) objective_function(dense_rates, trial=-1))
+		}
+		# keep only the most promising starts (i.e., with lowest non-nan objectives), but always include first_guess_compr 
+		start_objectives[!is.finite(start_objectives)] = NaN
+		starts_pool	= c(list(default_start), starts_pool[get_smallest_items(values=start_objectives, N=Ntrials-1, check_nan=TRUE)])
+	}else{
+		# only consider the default guess as starting point
+		starts_pool = list(default_start)
+	}
+	Ntrials = length(starts_pool)
 	
 	# run one or more independent fitting trials
 	if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
 		# run trials in parallel using multiple forks
 		# Note: Forks (and hence shared memory) are not available on Windows
 		if(verbose) cat(sprintf("%sFitting %d free parameters (%d trials, parallelized)..\n",verbose_prefix,Nrates,Ntrials))
-		fits = parallel::mclapply(	1:Ntrials, 
-									FUN = function(trial) fit_single_trial(trial), 
+		fits = parallel::mclapply(	seq_len(Ntrials), 
+									FUN = function(trial) fit_single_trial(start_dense_rates=starts_pool[[trial]], trial=trial), 
 									mc.cores = min(Nthreads, Ntrials), 
 									mc.preschedule = FALSE, 
-									mc.cleanup = TRUE);
+									mc.cleanup = TRUE)
 	}else{
 		# run in serial mode
 		if(verbose) cat(sprintf("%sFitting %d free parameters (%s)..\n",verbose_prefix,Nrates,(if(Ntrials==1) "1 trial" else sprintf("%d trials",Ntrials))))
 		fits = sapply(1:Ntrials,function(x) NULL)
-		for(trial in 1:Ntrials){
-			fits[[trial]] = fit_single_trial(trial)
+		for(trial in seq_len(Ntrials)){
+			fits[[trial]] = fit_single_trial(start_dense_rates=starts_pool[[trial]], trial=trial)
 		}
 	}
 	
@@ -307,6 +328,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 							root_prior 				= root_prior,
 							guess_transition_matrix	= original_guess_transition_matrix,
 							Ntrials 				= Ntrials_per_bootstrap,
+							Nscouts					= Nscouts,
 							max_model_runtime		= max_model_runtime,
 							optim_algorithm		 	= optim_algorithm,
 							optim_max_iterations	= optim_max_iterations,

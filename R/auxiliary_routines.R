@@ -6,6 +6,18 @@ unlist_with_nulls = function(L){
 }
 
 
+# given a numeric vector, determine the indices of the N smallest non-nan values
+get_smallest_items = function(values, N, check_nan=TRUE){
+	if(check_nan){
+		valids = which(!is.nan(values))
+	}else{
+		valids = seq_len(length(values))
+	}
+	smallest = valids[order(values[valids])][1:min(N,length(valids))]
+	return(smallest)
+}
+
+
 get_adjacent_edges_per_edge = function(tree){
 	Nedges = nrow(tree$edge)
 	adjacents = get_adjacent_edges_per_edge_CPP(	Ntips 		= length(tree$tip.label),

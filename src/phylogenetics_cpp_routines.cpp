@@ -188,10 +188,10 @@ void print_as_python_matrix(const long NR, const long NC, const ARRAY_TYPE &A){
 }
 
 template<class ARRAY_TYPE>
-void print_as_matrix(const long NR, const long NC, const ARRAY_TYPE &A){
+void print_as_matrix(const long NR, const long NC, const ARRAY_TYPE &A, const int Ndigits=6){
 	for(long r=0; r<NR; ++r){
 		for(long c=0; c<NC; ++c){
-			Rcout << (c>0 ? ", " : "") << A[r*NC+c];
+			Rcout << std::setprecision(Ndigits) << (c>0 ? ", " : "") << A[r*NC+c];
 		}
 		Rcout << "\n";
 	}
@@ -3794,6 +3794,31 @@ void random_shuffle_insitu(	std::vector<TYPE> 	&values, 	// (INPUT/OUTPUT) the a
 
 
 
+// Simple and efficient random number generator for drawing numbers uniformly within the interval [0,1].
+// Meant to be used in situations that require some pseudorandomness but still need to be deterministic, such as some linear algebra routines.
+// Based on the LCG algorithm, parameterization from Numerical Recipes, "quick and dirty generators" list.
+class RNG1{
+private:
+	long X; // internal state
+	long a,c,m; // parameters of the LCG algorithm (multiplier, increment, modulus)
+public:
+	// initialize (seed) the RNG
+	RNG1(const long seed=123456){
+		a = 1664525;
+		c = 1013904223;
+		m = 4294967296;
+		X = abs(seed) % m;
+	}
+
+	// draw the next pseudorandom number, uniformly within [0,1]
+	double next(){
+		X = (a*X + c) % m;
+		return X/(m-1);
+	}
+};
+
+
+
 // ##########################################################
 // MATRIX ALGEBRA
 
@@ -5807,10 +5832,11 @@ bool get_dominant_eigenvalue(	const long		N,				// (INPUT) the number of rows & 
 	double XAX, error, best_lambda=0, best_error=INFTY_D;
 	dvector AX, Xnew(N), best_X;
 	X.resize(N);
+	RNG1 rng(123456); // use an intenal pseudorandom number generator to ensure deterministic outcomes. Determinism is particularly important for gradient-based optimization routines (e.g., for maximum likelihood).
 	for(int trial=0; trial<min(3L,N); ++trial){ // perform multiple trials, in case the first happens to start with a "bad" direction X
 		if(trial==0){
 			// generate a random start vector X
-			for(long i=0; i<N; ++i) X[i] = R::runif(0.0,1.0);
+			for(long i=0; i<N; ++i) X[i] = rng.next();
 		}else{
 			// pick a new sart vector X that is perpendicular to the previous X
 			// step 1: find largest (in magnitude) element in X
@@ -5819,7 +5845,7 @@ bool get_dominant_eigenvalue(	const long		N,				// (INPUT) the number of rows & 
 				if(abs(X[i])>abs(X[largest])) largest = i;
 			}
 			// step 2: generate N-1 random entries for Xnew, except at the position [largest]
-			for(long i=0; i<N; ++i) Xnew[i] = (i==largest ? 0.0 : R::runif(0.0,1.0));
+			for(long i=0; i<N; ++i) Xnew[i] = (i==largest ? 0.0 : rng.next());
 			// step 3: choose Xnew[largest] such that the dot-product X^T*Xnew is zero
 			Xnew[largest] = (-1/X[largest]) * dot_product(X,Xnew);
 			// step 4: adopt Xnew, and repeat power iteration below
@@ -22894,7 +22920,7 @@ bool get_MuSSE_flow(const long					Nstates,						// (INPUT) number of discrete s
 		// calculate largest singular value (sigma1) of the dynamics at this age
 		// then kappa_rate <= 2*sigma1, since sigma1(exp(t*A))/sigma2(exp(t*A)) <= exp(t*2*sigma1(A)) [So and Thompson (2000) Singular values of Matrix Exponentials. Theorem 2.1]
 		double kappa_rate;
-		const double sigma1 = get_largest_singular_value(Nstates, Nstates, dynamics, 1000, 1e-3);
+		const double sigma1 = get_largest_singular_value(Nstates, Nstates, dynamics, 1000, 1e-4);
 		if(!std::isnan(sigma1)){
 			kappa_rate = 2*sigma1;
 		}else{

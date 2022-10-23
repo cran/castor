@@ -48,7 +48,8 @@ fit_musse = function(	tree,
 						root_conditioning		= "auto",		# can be 'none', 'madfitz', 'herr_als', 'stem', 'crown' or 'auto', specifying how to condition the state-likelihoods at the root prior to averaging. "none" (no conditioning) uses the raw state-likelihoods, as originally described by Maddison (2007). "madfitz" and "herr_als" are the options implemented in the hisse package, conditioning the root's state-likelihoods based on the birth-rates and the computed extinction probability (after or before averaging, respectively). For typical use cases, we suspect that this option does not matter much.
 						oldest_age				= NULL,			# oldest age to consider. Typically this will be <=root_age. If NULL, this will be set to root_age.
 						Ntrials 				= 1,			# (integer) number of trials (starting points) for fitting the model. If 0, then no fitting is performed, and only the a first-guess (start params) is evaluated and returned.
-						max_start_attempts		= 10,			# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
+						Nscouts					= NULL,			# integer, number of randomly chosen parameter values to consider as possible fitting starts (only Ntrials-1 of those will be kept). Each scout costs only one evaluation of the loglikelihood function, which is much cheaper than a whole fitting trial. If NULL, this is automatically chosen based on the number of fitted parameters and Ntrials. Only relevant if Ntrials>1, since the first trial uses the default first guess (i.e., without scouting).
+						#max_start_attempts		= 10,			# integer, number of times to attempt finding a valid start point (per trial) before giving up. Randomly choosen start parameters may result in Inf/undefined objective, so this option allows the algorithm to keep looking for valid starting points.
 						optim_algorithm 		= "nlminb",		# either "optim", "nlminb" or "subplex". What algorithm to use for fitting.
 						optim_max_iterations	= 10000,		# maximum number of iterations of the optimization algorithm (per trial)
 						optim_max_evaluations	= NULL,			# maximum number of evaluations of the objective function (per trial). If left unspecified, it is chosen automatically based on the number of iterations.
@@ -118,7 +119,6 @@ fit_musse = function(	tree,
 			}
 		}
 	}
-	max_start_attempts 	= (if(is.null(max_start_attempts)) 1 else max(1,max_start_attempts))
 	if((Nbootstraps>0) && (!is.null(Ntrials_per_bootstrap)) && (Ntrials_per_bootstrap<=0)) stop(sprintf("ERROR: Ntrials_per_bootstrap must be strictly positive, if bootstrapping is requested"))
 	if((!is.null(birth_rates)) && (length(birth_rates)!=1) && (length(birth_rates)!=Nstates)) stop(sprintf("ERROR: Invalid number of birth-rates; got %d, but expected 1 or %d (Nstates)",length(birth_rates),Nstates))
 	if((!is.null(death_rates)) && (length(death_rates)!=1) && (length(death_rates)!=Nstates)) stop(sprintf("ERROR: Invalid number of death-rates; got %d, but expected 1 or %d (Nstates)",length(death_rates),Nstates))
@@ -553,14 +553,14 @@ fit_musse = function(	tree,
 	param_scales = compress_musse_params(param_scales$transition_matrix, param_scales$birth_rates, param_scales$death_rates, Nstates, transition_indices, birth_rate_indices, death_rate_indices)
 							
 	# define objective function to be minimized (negated log-likelihood)
-	# the input to the objective function must be scaled and free (non-fixed) independent parametes
-	objective_function = function(fparam_values, trial){
-		# # reverse parameter transformation. fparam_values are shifted with regards to their lower bounds, i.e. the true parameter values are: SQ(fparam_values)+param_mins
+	# if scaled==TRUE, then the input to the objective function must be scaled and free (non-fixed) independent parametes
+	objective_function = function(fparam_values, trial, scaled=FALSE){
+		# reverse parameter transformation. fparam_values are shifted with regards to their lower bounds, i.e. the true parameter values are: SQ(fparam_values)+param_mins
 		if(any(is.nan(fparam_values)) || any(is.infinite(fparam_values))) return(if(optim_algorithm == "optim") 1e100 else Inf)
-		fparam_values 	= unscale_params(fparam_values, param_scales[fitted_params], param_mins[fitted_params])
+		if(scaled) fparam_values = unscale_params(fparam_values, param_scales[fitted_params], param_mins[fitted_params])
 		if(any(fparam_values<param_mins[fitted_params]) || any(fparam_values>param_maxs[fitted_params])) return(Inf)
-		param_values 	= provided_param_values; param_values[fitted_params] = fparam_values; # merge fixed & fitted parameter values
-		param_values 	= uncompress_musse_params(param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
+		param_values = provided_param_values; param_values[fitted_params] = fparam_values; # merge fixed & fitted parameter values
+		param_values = uncompress_musse_params(param_values, Nstates, transition_indices, birth_rate_indices, death_rate_indices, NULL)
 		results = tryCatch({ get_MuSSE_loglikelihood_CPP(	Ntips 							= Ntips,
 												Nnodes							= Nnodes,
 												Nedges							= Nedges,
@@ -592,31 +592,19 @@ fit_musse = function(	tree,
 		}
 		return(-loglikelihood);
 	}
+	
 
-	# fit starting with various start-params, keep track of best fit
+	# define auxiliary function for a single fitting trial
 	scaled_param_mins = scale_params(param_mins,param_scales,param_mins);
 	scaled_param_maxs = scale_params(param_maxs,param_scales,param_mins);
-	fit_single_trial = function(trial){
-		# randomly choose start values for fitted params (keep trying up to max_start_attempts times)
-		Nstart_attempts = 0
-		while(Nstart_attempts<max_start_attempts){
-			# randomly choose start values for fitted params
-			if(trial==1){
-				initial_param_values = first_guess_compr
-			}else{
-				initial_param_values = get_random_params(defaults=first_guess_compr, lower_bounds=param_mins, upper_bounds=param_maxs, scales=param_scales, orders_of_magnitude=max(1,min(6,log2(10.0)*sqrt(Ntrials))))
-			}
-			scaled_initial_fparam_values = scale_params(initial_param_values,param_scales,param_mins)[fitted_params]
-			# check if start values yield NaN
-			start_LL = -objective_function(fparam_values=scaled_initial_fparam_values, trial=0)
-			Nstart_attempts = Nstart_attempts + 1
-			if(is.finite(start_LL)) break;
-		}
-		# run fit with chose start values
+	fit_single_trial = function(start_param_values, trial){
+		scaled_start_fparam_values = scale_params(start_param_values,param_scales,param_mins)[fitted_params]
+		start_LL = -objective_function(fparam_values=scaled_start_fparam_values, trial=0, scaled=TRUE)
+		# run fit with provided start values
 		if(is.finite(start_LL)){
 			if(optim_algorithm == "optim"){
-				fit = stats::optim(	par		= scaled_initial_fparam_values, 
-									fn		= function(pars){ objective_function(pars, trial) }, 
+				fit = stats::optim(	par		= scaled_start_fparam_values, 
+									fn		= function(pars){ objective_function(pars, trial, scaled=TRUE) },
 									method 	= "L-BFGS-B", 
 									lower 	= scaled_param_mins[fitted_params],
 									upper 	= scaled_param_maxs[fitted_params],
@@ -626,8 +614,8 @@ fit_musse = function(	tree,
 				Niterations		= NA
 				converged 		= (fit$convergence==0)
 			}else if(optim_algorithm == "nlminb"){
-				fit = stats::nlminb(start		= scaled_initial_fparam_values, 
-									objective	= function(pars){ objective_function(pars, trial) }, 
+				fit = stats::nlminb(start		= scaled_start_fparam_values, 
+									objective	= function(pars){ objective_function(pars, trial, scaled=TRUE) },
 									lower 		= scaled_param_mins[fitted_params], 
 									upper 		= scaled_param_maxs[fitted_params],
 									control 	= list(iter.max = optim_max_iterations, eval.max = optim_max_evaluations, rel.tol = optim_rel_tol))
@@ -636,8 +624,8 @@ fit_musse = function(	tree,
 				Niterations		= fit$iterations
 				converged		= (fit$convergence==0)
 			}else if(optim_algorithm == "subplex"){
-				fit = nloptr::nloptr(	x0 		= scaled_initial_fparam_values, 
-										eval_f 	= function(pars){ objective_function(pars, trial) },
+				fit = nloptr::nloptr(	x0 		= scaled_start_fparam_values, 
+										eval_f 	= function(pars){ objective_function(pars, trial, scaled=TRUE) },
 										lb 		= scaled_param_mins[fitted_params], 
 										ub 		= scaled_param_maxs[fitted_params], 
 										opts 	= list(algorithm = "NLOPT_LN_SBPLX", maxeval = optim_max_evaluations, ftol_rel = optim_rel_tol))
@@ -646,20 +634,13 @@ fit_musse = function(	tree,
 				Niterations 	= (fit$iterations)
 				converged 		= (fit$status %in% c(0,3,4))
 				fit$par 		= fit$solution
-				#fit = subplex::subplex(par = initial_param_values[fitted_params], 
-				#						fn = function(pars){ objective_function(pars, trial) },
-				#						control = list(maxit=optim_max_iterations, reltol = optim_rel_tol, parscale=0.1), 
-				#						hessian = FALSE)
-				#LL 				= -fit$value
-				#Nevaluations 	= fit$count
-				#converged 		= (fit$convergence>=0)
 			}
 			if(is.null(LL)){ LL = NaN; converged = FALSE; }
 			if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
-			return(list(LL=LL, start_LL=start_LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit, Nstart_attempts=Nstart_attempts))
+			return(list(LL=LL, start_LL=start_LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit))
 		}else{
 			if(diagnostics) cat(sprintf("%s  Trial %d: Start loglikelihood is non-finite. Skipping trial\n",verbose_prefix,trial))
-			return(list(LL=NA, start_LL = NA, Niterations=0, Nevaluations=0, converged=FALSE, Nstart_attempts=Nstart_attempts))
+			return(list(LL=NA, start_LL = NA, Niterations=0, Nevaluations=0, converged=FALSE))
 		}
 	}
 	
@@ -685,21 +666,43 @@ fit_musse = function(	tree,
 		LLs					= numeric()
 
 	}else{
+
+		if(Ntrials>1){
+			# randomly choose multiple parameter starting points and keep the Ntrials-1 most promising ones (i.e., with smallest objective values) plus the default start
+			Nscouts = (if(is.null(Nscouts)) min(10000,10*NFP*Ntrials) else max(Ntrials-1,Nscouts))
+			if(verbose) cat(sprintf("%sGenerating %d random parameter starts and selecting the most promising ones..\n",verbose_prefix,Nscouts))
+			power_range = max(1,min(6,log2(10.0)*sqrt(Nscouts)))
+			starts_pool = lapply(seq_len(Nscouts), FUN=function(k) get_random_params(defaults=first_guess_compr, lower_bounds=param_mins, upper_bounds=param_maxs, scales=param_scales, orders_of_magnitude=power_range*(k/Nscouts)^2))
+			# compute the objective values for each start in the pool
+			if((Nthreads>1)  && (.Platform$OS.type!="windows")){
+				start_objectives = unlist(parallel::mclapply(starts_pool, FUN = function(start_params) objective_function(start_params[fitted_params], trial=-1, scaled=FALSE), mc.cores = min(Nthreads, length(starts_pool)), mc.preschedule = TRUE, mc.cleanup = TRUE))
+			}else{
+				start_objectives = sapply(starts_pool, FUN = function(start_params) objective_function(start_params[fitted_params], trial=-1))
+			}
+			# keep only the most promising starts (i.e., with lowest non-nan objectives), but always include first_guess_compr 
+			start_objectives[!is.finite(start_objectives)] = NaN
+			starts_pool	= c(list(first_guess_compr), starts_pool[get_smallest_items(values=start_objectives, N=Ntrials-1, check_nan=TRUE)])
+		}else{
+			# only consider the default guess as starting point
+			starts_pool = list(first_guess_compr)
+		}
+		Ntrials = length(starts_pool)
+
 		if((Ntrials>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
 			if(verbose) cat(sprintf("%sFitting %d model parameters (%d trials, parallelized)..\n",verbose_prefix,NFP,Ntrials))
 			# run trials in parallel using multiple forks
 			# Note: Forks (and hence shared memory) are not available on Windows
-			fits = parallel::mclapply(	1:Ntrials, 
-										FUN = function(trial) fit_single_trial(trial), 
+			fits = parallel::mclapply(	seq_len(Ntrials), 
+										FUN = function(trial) fit_single_trial(start_param_values=starts_pool[[trial]], trial=trial), 
 										mc.cores = min(Nthreads, Ntrials), 
 										mc.preschedule = FALSE, 
-										mc.cleanup = TRUE);
+										mc.cleanup = TRUE)
 		}else{
 			# run in serial mode
 			if(verbose) cat(sprintf("%sFitting %d model parameters (%s)..\n",verbose_prefix,NFP,(if(Ntrials==1) "1 trial" else sprintf("%d trials",Ntrials))))
 			fits = vector("list", Ntrials)
-			for(trial in 1:Ntrials){
-				fits[[trial]] = fit_single_trial(trial)
+			for(trial in seq_len(Ntrials)){
+				fits[[trial]] = fit_single_trial(start_param_values=starts_pool[[trial]], trial=trial)
 			}
 		}
 	
@@ -814,7 +817,7 @@ fit_musse = function(	tree,
 							root_conditioning		= root_conditioning,
 							oldest_age				= oldest_age,
 							Ntrials 				= Ntrials_per_bootstrap,
-							max_start_attempts		= max_start_attempts,
+							Nscouts					= Nscouts,
 							optim_algorithm 		= optim_algorithm,
 							optim_max_iterations	= optim_max_iterations,
 							optim_max_evaluations	= optim_max_evaluations,
@@ -870,7 +873,6 @@ fit_musse = function(	tree,
 				ML_substem_states			= final$ML_substem_states, # maximum-likelihood estimate of the state at each subtree's stem, based on the computed state-likelihoods
 				trial_start_loglikelihoods	= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$start_LL)),
 				trial_loglikelihoods		= LLs,
-				trial_Nstart_attempts		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nstart_attempts)),
 				trial_Niterations			= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Niterations)),
 				trial_Nevaluations			= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$Nevaluations)),
 				standard_errors				= (if(Nbootstraps>0) standard_errors else NULL),

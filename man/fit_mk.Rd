@@ -16,6 +16,7 @@ fit_mk( trees,
         oldest_ages             = NULL,
         guess_transition_matrix = NULL,
         Ntrials                 = 1,
+        Nscouts                 = NULL,
         max_model_runtime       = NULL,
         optim_algorithm         = "nlminb",
         optim_max_iterations    = 200,
@@ -56,7 +57,10 @@ Optional numeric or numeric vector of size Ntrees, specifying the oldest age (ti
 Optional 2D numeric matrix, specifying a reasonable first guess for the transition rate matrix. May contain \code{NA}. May also be \code{NULL}, in which case a reasonable first guess is automatically generated.
 }
 \item{Ntrials}{
-Number of trials (starting points) for fitting the transition rate matrix. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.
+Integer, number of trials (starting points) for fitting the transition rate matrix. A higher number may reduce the risk of landing in a local non-global optimum of the likelihood function, but will increase computation time during fitting.
+}
+\item{Nscouts}{
+Optional positive integer, number of randomly chosen starting points to consider for all fitting trials except the first one. Among all "scouted" starting points, the \code{Ntrials-1} most promising ones will be considered. A greater number of scouts increases the chances of finding a global likelihood maximum. Each scout costs only one evaluation of the loglikelihood function. If \code{NULL}, \code{Nscout} is automatically chosen based on the number of fitted parameters and \code{Ntrials}. Only relevant if \code{Ntrials>1}, since the first trial always uses the default or provided parameter guess.
 }
 \item{max_model_runtime}{
 Optional positive numeric, specifying the maximum time (in seconds) allowed for a single evaluation of the likelihood function. If a specific Mk model takes longer than this threshold to evaluate, then its likelihood is set to -Inf. This option can be used to avoid badly parameterized models during fitting and can thus reduce fitting time. If NULL or <=0, this option is ignored.

@@ -32,7 +32,7 @@ fit_musse(tree,
           root_conditioning     = "auto",
           oldest_age            = NULL,
           Ntrials               = 1,
-          max_start_attempts    = 10,
+          Nscouts               = NULL,
           optim_algorithm       = "nlminb",
           optim_max_iterations  = 10000,
           optim_max_evaluations = NULL,
@@ -131,8 +131,8 @@ Strictly positive numeric, specifying the oldest age (time before present) to co
 \item{Ntrials}{
 Non-negative integer, specifying the number of trials for fitting the model, using alternative (randomized) starting parameters at each trial. A larger \code{Ntrials} reduces the risk of landing on a local non-global optimum of the likelihood function, and thus increases the chances of finding the truly best fit. If 0, then no fitting is performed, and only the first-guess (i.e., provided or guessed start params) is evaluated and returned. Hence, setting \code{Ntrials=0} can be used to obtain a reasonable set of start parameters for subsequent fitting or for Markov Chain Monte Carlo.
 }
-\item{max_start_attempts}{
-Integer, specifying the number of times to attempt finding a valid start point (per trial) before giving up on that trial. Randomly chosen extreme start parameters may occasionally result in Inf/undefined likelihoods, so this option allows the algorithm to keep looking for valid starting points. For complex models (e.g., with >5 states), setting this to 10, 100 or even 1000 may be beneficial.
+\item{Nscouts}{
+Optional positive integer, number of randomly chosen starting points to consider for all fitting trials except the first one. Among all "scouted" starting points, the \code{Ntrials-1} most promising ones will be considered. A greater number of scouts increases the chances of finding a global likelihood maximum. Each scout costs only one evaluation of the loglikelihood function. If \code{NULL}, \code{Nscout} is automatically chosen based on the number of fitted parameters and \code{Ntrials}. Only relevant if \code{Ntrials>1}, since the first trial always uses the default or provided parameter guess.
 }
 \item{optim_algorithm}{
 Character, specifying the optimization algorithm for fitting. Must be one of either "optim", "nlminb" or "subplex" (requires the \code{nloptr} package).
@@ -205,6 +205,8 @@ The following arguments control the tradeoff between accuracy and computational 
 \item\code{D_temporal_resolution}: A greater value means greater accuracy, at longer runtime and more memory.
 }
 Typically, the default values for these arguments should be fine. For smaller trees, where cladogenic and sampling stochasticity is the main source of uncertainty, these parameters can probably be made less stringent (i.e., leading to lower accuracy and faster computation), but then again for small trees computational efficiency may not be an issue anyway.
+
+Note that the old option \code{max_start_attempts} has been removed. Consider using \code{Nscouts} instead.
 }
 
 
@@ -265,9 +267,6 @@ Numeric vector of length \code{Ntrials}, listing the initial loglikelihoods (i.e
 }
 \item{trial_loglikelihoods}{
 Numeric vector of length \code{Ntrials}, listing the maximized loglikelihoods for each fitting trial. These may be used for diagnosing the robustness of maximum-likelihood estimates and the assessing the needed for increasing \code{Ntrials}.
-}
-\item{trial_Nstart_attempts}{
-Integer vector of length \code{Ntrials}, listing the number of random start attempts for each trial (see option \code{max_start_attempts}).
 }
 \item{trial_Niterations}{
 Integer vector of length \code{Ntrials}, listing the number of iterations of each trial. Depending on the fitting algorithm used (option \code{optim_algorithm}), these may be \code{NA} (not available).
