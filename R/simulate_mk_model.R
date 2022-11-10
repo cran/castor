@@ -37,8 +37,14 @@ simulate_mk_model = function(	tree,
 
 	tip_states  = NULL
 	node_states = NULL
-	if(include_tips) tip_states   = 1L + as.integer(if(drop_dims && Nsimulations==1) results$tip_states else matrix(results$tip_states, ncol=Ntips, byrow=TRUE));
-	if(include_nodes) node_states = 1L + as.integer(if(drop_dims && Nsimulations==1) results$node_states else matrix(results$node_states, ncol=Nnodes, byrow=TRUE));
+	if(include_tips){
+		tip_states = 1L + (if(drop_dims && (Nsimulations==1)) results$tip_states else matrix(results$tip_states, ncol=Ntips, byrow=TRUE))
+		mode(tip_states) = "integer"
+	}
+	if(include_nodes){
+		node_states = 1L + (if(drop_dims && (Nsimulations==1)) results$node_states else matrix(results$node_states, ncol=Nnodes, byrow=TRUE))
+		mode(node_states) = "integer"
+	}
 	return(list(tip_states=tip_states, node_states=node_states));
 }
 

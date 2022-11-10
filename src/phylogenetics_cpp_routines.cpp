@@ -277,10 +277,11 @@ string makeString(const TYPE &data){
 string vstringprintf(const char *format, va_list args){
 	va_list temp;
 	va_copy(temp, args);
-	char *buffer = new char[vsnprintf(NULL, 0, format, temp) + 1];
+	const long bufsz = vsnprintf(NULL, 0, format, temp) + 1;
+	char *buffer = new char[bufsz];
 	va_end(temp);
 	
-	vsprintf(buffer, format, args);
+	vsnprintf(buffer, bufsz, format, args);
 	string s(buffer);
 	delete [] buffer;
 	return s;
@@ -2679,8 +2680,8 @@ NumericVector evaluate_spline_CPP(	const std::vector<double> 	&Xgrid,			// (INPU
 									const std::string			&extrapolate,	// (INPUT) string, specifying how to extrapolate Y beyond Xgrid if needed. Available options are "const" or "splines" (i.e. use the polynomial coefficients from the nearest grid point)
 									const long					derivative){	// (INPUT) which derivative to evaluate. Options are 0, 1 and 2. Set to 0 to get the value.
 	const long NG = Xgrid.size();
-	if(NG==0) return(Rcpp::wrap(std::vector<double>(NAN_D,Xtarget.size())));
-	if(derivative>2) return(Rcpp::wrap(std::vector<double>(NAN_D,Xtarget.size()))); // only derivatives 0,1,2 are supported right now
+	if(NG==0) return(Rcpp::wrap(std::vector<double>(Xtarget.size(),NAN_D)));
+	if(derivative>2) return(Rcpp::wrap(std::vector<double>(Xtarget.size(),NAN_D))); // only derivatives 0,1,2 are supported right now
 	const bool extrapolate_const = (extrapolate=="const");
 	
 	// get splines representation Y
@@ -2734,7 +2735,7 @@ NumericVector derivatives_of_grid_curve_CPP(const std::vector<double> 	&Xgrid,		
 	const long NG = Xgrid.size();
 	const long NA = 2*NG;
 	const long Ddegree = 1;
-	if(NG==0) return(Rcpp::wrap(std::vector<double>(NAN_D,NA*NG*(Ddegree+1))));
+	if(NG==0) return(Rcpp::wrap(std::vector<double>(NA*NG*(Ddegree+1),NAN_D)));
 	const long NperA = NG*(Ddegree+1); // number of values per derivative
 	dvector D(NA*NG*(Ddegree+1),0);
 

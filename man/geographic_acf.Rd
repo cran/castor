@@ -112,7 +112,11 @@ tip_latitudes  = simul$tip_latitudes
 tip_longitudes = simul$tip_longitudes
 
 # calculate geographical autocorrelation function
-ACF = geographic_acf(tree, tip_latitudes, tip_longitudes, Nbins=10)
+ACF = geographic_acf(tree, 
+                     tip_latitudes, 
+                     tip_longitudes,
+                     Nbins        = 10,
+                     uniform_grid = TRUE)
 
 # plot ACF (autocorrelation vs phylogenetic distance)
 plot(ACF$phylodistances, ACF$autocorrelations, type="l", xlab="distance", ylab="ACF")

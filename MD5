@@ -1,4 +1,4 @@
-42901099e7cf3b3d14e9cab9eecfbd9b *DESCRIPTION
+2644e500095f1ee8ff58b5c8747faec4 *DESCRIPTION
 72ec3dcefce57745d866b661d731beb4 *NAMESPACE
 4403b565e3a158fbe9a23546cb0d85e4 *R/RcppExports.R
 90e3e84e252598a58a812a040e2bfced *R/asr_empirical_probabilities.R
@@ -76,7 +76,7 @@ e95c195417e9b6a19c458e2db5e12892 *R/get_subtree_at_node.R
 64120cf696b998bc23c45a98fcdb04bb *R/get_subtree_with_tips.R
 d5021d6cd9470f5183dc501f7459a94c *R/get_subtrees_at_nodes.R
 7533a04be559994c0f9e665a7d5b0411 *R/get_tips_for_mrcas.R
-cd188d2f8e6e2d113eb28eee16a67daa *R/get_trait_acf.R
+4eabd20d1796c58b6a155dd2fa31a9fc *R/get_trait_acf.R
 0f05838c941e3641b58f970f29c76770 *R/get_trait_stats_over_time.R
 036544245befd90a69add4609491d2f8 *R/get_transition_index_matrix.R
 bf67c1a32504565d4bbc24c6841e1de6 *R/get_transition_matrix_from_rate_vector.R
@@ -100,7 +100,7 @@ b3effc09d0c3d17cc1d607197ba3282b *R/map_to_state_space.R
 b304982a3d70a64791a4468cfa7c05a3 *R/model_adequacy_hbd.R
 c8d41bc769024df41b8869a76abf353b *R/model_adequacy_hbds.R
 213cd2becb02df11315e05a3ebf1b895 *R/multifurcations_to_bifurcations.R
-7bca7b3341577fcccbdc2a3a9e5b4472 *R/pick_random_tips.R
+35f084b5effff4e21fef2d6934402e3e *R/pick_random_tips.R
 d860e5c78b9d576f274e4272ed27ca6d *R/read_tree.R
 5101df5ddc1816a1d427aa471ab5b3ca *R/reconstruct_past_diversification.R
 109c4a5eda914e5bf490d80c0197ea6b *R/reorder_tree_edges.R
@@ -115,7 +115,7 @@ a4fe61643cac8af88b4739237e17a9bf *R/simulate_deterministic_hbd.R
 517faf35caa9714318bcd15e68cf754e *R/simulate_deterministic_hbds.R
 f4a0c1de8e67d35f3698a571dadc2805 *R/simulate_diversification_model.R
 f4bcf1ee6a43f4f6fa4aecc6ab93a9aa *R/simulate_dsse.R
-db223ac6c2ad93e431e07fdb83085223 *R/simulate_mk_model.R
+4d422bb0a7054cd576a9111d59b80129 *R/simulate_mk_model.R
 4590adc4e6b2b6a642a729db4f51adc6 *R/simulate_musse.R
 896e3fcd5d6b4fd93094c7b6c2a9d9d6 *R/simulate_neutral_gene_evolution.R
 6d477523db92293e5d67f65355e5ed6d *R/simulate_ou_model.R
@@ -185,7 +185,7 @@ b2ec1381ecef21eded3e7d23964818c5 *man/generate_gene_tree_msc_hgt_dl.Rd
 929a4e0e1efde70c06e1f7b1aa28704c *man/generate_tree_hbd_reverse.Rd
 e61ee407c0b16eb482b76614934c572f *man/generate_tree_hbds.Rd
 ced1944aa10b12ac0d7ef46be810b85e *man/generate_tree_with_evolving_rates.Rd
-f6d55de74aa787f2c03e46ee9f71b0e3 *man/geographic_acf.Rd
+c1d5937ad726cbc3b893a31a1ea36535 *man/geographic_acf.Rd
 ae641e9d95c4a9a5600612d4359c09a6 *man/get_all_distances_to_root.Rd
 6733a06c7d305c81b873580f0ad87812 *man/get_all_node_depths.Rd
 c447f143f6e8efb3e2ccd4e81ea4fde8 *man/get_all_pairwise_distances.Rd
@@ -202,7 +202,7 @@ ed439b4a11de01cb319be81f1b60d176 *man/get_stationary_distribution.Rd
 79b26ee99426bced0ae2ac407f6f60d6 *man/get_subtree_with_tips.Rd
 e9483fd26663be9287baf2cb84165388 *man/get_subtrees_at_nodes.Rd
 734f0758ba84ad13a2a2a9dc449dfdfd *man/get_tips_for_mrcas.Rd
-e8b8a89172a89eed2ad6fb5039e47231 *man/get_trait_acf.Rd
+1b3a8950e5b56e5f95df1d5f3b8dfcc8 *man/get_trait_acf.Rd
 f7b47972f649a51c36c6c9a058dd5a2c *man/get_trait_stats_over_time.Rd
 34b9788f256e552c288515caa59f57f5 *man/get_transition_index_matrix.Rd
 89453e9c51d44f265dfb757553ef9a93 *man/get_tree_span.Rd
@@ -255,5 +255,5 @@ b1831a13ee7dc57a2a3c68a94690d293 *man/spline_coefficients.Rd
 5508fb94caf7830866eafff984ef078f *src/RcppExports.cpp
 60240b89c41cf20801bd210a3aacf566 *src/STMathExpression.cpp
 c63909f744c3da0df38702e3b4c9c767 *src/STMathExpression.h
-6f2aaba89f0b0a24e8b23a83e1d600cb *src/phylogenetics_cpp_routines.cpp
+f295556676bd0ed646b0a16faa069dd2 *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

@@ -13,6 +13,7 @@ pick_random_tips = function(tree, size=1, Nsubsets=1, with_replacement=TRUE, dro
 											
 	# Note that random_tips is a 2D array of size Nsubsets x size in row-major format
 	# So expand to 2D matrix if needed
-	tips = 1L + as.integer(if(drop_dims && Nsubsets==1) random_tips else matrix(random_tips, ncol=size, byrow=TRUE));
-	return(tips);
+	tips = 1L + (if(drop_dims && Nsubsets==1) random_tips else matrix(random_tips, ncol=size, byrow=TRUE))
+	mode(tips) = "integer"
+	return(tips)
 }

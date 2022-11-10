@@ -29,7 +29,7 @@ get_trait_acf = function(	tree,
 			tip_phylodistances	= tip_phylodistances[(tip_phylodistances>=min_phylodistance) & (tip_phylodistances<=max_phylodistance)]
 			if(length(tip_phylodistances)==0) return(list(success=FALSE, error=sprintf("Unable to determine suitable phylodistance grid: No phylodistances found in target interval")))
 			phylodistance_grid 	= sort(unique(get_inhomogeneous_grid_1D_from_samples(Xstart=min_phylodistance, Xend=max_phylodistance, Ngrid=Nbins+1, randomX=tip_phylodistances)$grid[seq_len(Nbins)]))
-			Nbins 				= length(phylodistance_grid)
+			Nbins = length(phylodistance_grid)
 		}
 	}else{
 		Nbins = length(phylodistance_grid)

@@ -36,7 +36,7 @@ Numeric, minimum phylogenetic distance to conssider. Only relevant if \code{phyl
 Numeric, optional maximum phylogenetic distance to consider. If \code{NULL}, this is automatically set to the maximum phylodistance between any two tips.
 }
 \item{uniform_grid}{
-Logical, specifying whether the phylodistance grid should be uniform, i.e., with equally sized phylodistance bins. If \code{FALSE}, then the grid is chosen non-uniformly (i.e., each bin has different size) such that each bin roughly contains the same number of tip pairs. Only relevant if \code{phylodistance_grid} is \code{NULL}. It is generally recommended to keep \code{uniform_grid=FALSE}, to avoid uneven estimation errors across bins.
+Logical, specifying whether the phylodistance grid should be uniform, i.e., with equally sized phylodistance bins. If \code{FALSE}, then the grid is chosen non-uniformly (i.e., each bin has different size) such that each bin roughly contains the same number of tip pairs. This helps equalize the estimation error across bins. Only relevant if \code{phylodistance_grid} is \code{NULL}.
 }
 \item{phylodistance_grid}{
 Numeric vector, optional explicitly specified phylodistance bins (left boundaries thereof) on which to evaluate the ACF. Must contain non-negative numbers in strictly ascending order. Hence, the first bin will range from \code{phylodistance_grid[1]} to \code{phylodistance_grid[2]}, while the last bin will range from \code{tail(phylodistance_grid,1)} to \code{max_phylodistance}. Can be used as an alternative to \code{Nbins}. If non-\code{NULL}, then \code{Nbins}, \code{min_phylodistance} and \code{uniform_grid} are irrelevant. 
@@ -94,13 +94,16 @@ J. R. Zaneveld and R. L. V. Thurber (2014). Hidden state prediction: A modificat
 
 \examples{
 # generate a random tree
-tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=1000)$tree
+tree = generate_random_tree(list(birth_rate_factor=0.1),max_tips=1000)$tree
 
 # simulate continuous trait evolution on the tree
-tip_states = simulate_bm_model(tree, diffusivity=1)$tip_states
+tip_states = simulate_ou_model(tree, 
+                               stationary_mean  = 0,
+                               spread           = 1,
+                               decay_rate       = 0.01)$tip_states
 
 # calculate autocorrelation function
-ACF = get_trait_acf(tree, tip_states, Npairs=1e7, Nbins=10)
+ACF = get_trait_acf(tree, tip_states, Nbins=10, uniform_grid=TRUE)
 
 # plot ACF (autocorrelation vs phylogenetic distance)
 plot(ACF$phylodistances, ACF$autocorrelations, type="l", xlab="distance", ylab="ACF")
