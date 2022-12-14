@@ -225,6 +225,18 @@ get_Colless_Imbalance_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, normaliz
     .Call(`_castor_get_Colless_Imbalance_CPP`, Ntips, Nnodes, Nedges, tree_edge, normalized)
 }
 
+get_ancestral_nodes_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits) {
+    .Call(`_castor_get_ancestral_nodes_CPP`, Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits)
+}
+
+extract_tip_neighborhood_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, focal_tip, Nbackward, Nforward) {
+    .Call(`_castor_extract_tip_neighborhood_CPP`, Ntips, Nnodes, Nedges, tree_edge, focal_tip, Nbackward, Nforward)
+}
+
+get_all_distances_to_tip_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_tip) {
+    .Call(`_castor_get_all_distances_to_tip_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_tip)
+}
+
 sort_tree_edges_root_to_tips_CPP <- function(Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge) {
     .Call(`_castor_sort_tree_edges_root_to_tips_CPP`, Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge)
 }

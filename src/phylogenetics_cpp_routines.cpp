@@ -3800,11 +3800,11 @@ void random_shuffle_insitu(	std::vector<TYPE> 	&values, 	// (INPUT/OUTPUT) the a
 // Based on the LCG algorithm, parameterization from Numerical Recipes, "quick and dirty generators" list.
 class RNG1{
 private:
-	long X; // internal state
-	long a,c,m; // parameters of the LCG algorithm (multiplier, increment, modulus)
+	long long X; // internal state
+	long long a,c,m; // parameters of the LCG algorithm (multiplier, increment, modulus)
 public:
 	// initialize (seed) the RNG
-	RNG1(const long seed=123456){
+	RNG1(const long long seed=123456){
 		a = 1664525;
 		c = 1013904223;
 		m = 4294967296;
@@ -14292,6 +14292,160 @@ double get_Colless_Imbalance_CPP(	const long					Ntips,
 
 
 
+
+// Given a set of clades (tips & nodes, "descendants"), find their ancestral nodes, traveling N splits back
+// [[Rcpp::export]]
+IntegerVector get_ancestral_nodes_CPP(	const long 				Ntips,
+										const long 				Nnodes,
+										const long 				Nedges,
+										const std::vector<long> &tree_edge,		// 2D array of size Nedges x 2 in row-major format
+										const std::vector<long> &descendants,	// 1D array of size ND, containing values in 0:(Nclades-1)
+										const std::vector<long> &Nsplits){		// 1D integer array of size 1 or ND, specifying the number of splits to travel backward. Values must be >=1. For example, Nsplits=1 will yield the immediate ancestral nodes.
+	const long ND = descendants.size();
+	lvector ancestral_nodes(ND);
+	if(ND==0) return Rcpp::wrap(ancestral_nodes);;
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// traverse Nplits splits upwards from each descendant
+	long clade;
+	for(long d=0, ns; d<ND; ++d){
+		ns 	  = (Nsplits.size()==1 ? Nsplits[0] : Nsplits[d]);
+		clade = descendants[d];
+		while((clade2parent[clade]>=0) && (ns>0)){
+			clade = clade2parent[clade];
+			--ns;
+		}
+		ancestral_nodes[d] = clade-Ntips;
+	}
+	
+	return Rcpp::wrap(ancestral_nodes);
+}
+
+
+// Given a rooted tree and a focal tip, find a few representative nearby tips using a heuristic algorithm
+// [[Rcpp::export]]
+IntegerVector extract_tip_neighborhood_CPP(	const long 				Ntips,
+											const long 				Nnodes,
+											const long 				Nedges,
+											const std::vector<long> &tree_edge,		// 2D array of size Nedges x 2 in row-major format
+											const long 				focal_tip,		// integer between 0 and Ntips-1, specifying the focal tip whose neighborhood to explore
+											const long 				Nbackward,
+											const long				Nforward){	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips)
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	
+	// populate clade_queue, moving backward from the focal tip
+	lvector clade_queue, Nforward_per_clade;
+	long parent_node, parent_clade, edge, child, clade = focal_tip;
+	long Nbackward_left = Nbackward;
+	while((clade2parent[clade]>=0) && (Nbackward_left>0)){
+		parent_clade = clade2parent[clade];
+		parent_node  = parent_clade-Ntips;
+		for(long e=traversal.node2first_edge[parent_node]; e<=traversal.node2last_edge[parent_node]; ++e){
+			edge  = traversal.edge_mapping[e];
+			child = tree_edge[2*edge + 1];
+			if(child==clade) continue;
+			// add this child to the queue for further exploration
+			clade_queue.push_back(child);
+			Nforward_per_clade.push_back(Nforward);
+		}
+		clade = parent_clade;
+		--Nbackward_left;
+	}
+
+	// iterate through the clade_queue (expanding it if needed) to pick representative descending tips
+	lvector neighbor_tips;	
+	neighbor_tips.push_back(focal_tip);
+	long k=0, node;
+	while(k<clade_queue.size()){
+		clade = clade_queue[k];
+		if(clade<Ntips){
+			// this clade is a tip, so no further exploration needed in this direction
+			neighbor_tips.push_back(clade);
+		}else if(Nforward_per_clade[k]>0){
+				// this clade should be further expanded, i.e., we should pick tips from each of its children
+				node = clade-Ntips;
+				for(long e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+					child = tree_edge[2*traversal.edge_mapping[e] + 1];
+					clade_queue.push_back(child);
+					Nforward_per_clade.push_back(Nforward_per_clade[k]-1);
+				}
+		}else{
+			// pick one descending tip for this clade, and don't expand it further
+			while(clade>=Ntips){
+				clade = tree_edge[2*traversal.edge_mapping[traversal.node2first_edge[clade-Ntips]] + 1];
+			}
+			neighbor_tips.push_back(clade);
+		}
+		++k;
+	}
+
+	return Rcpp::wrap(neighbor_tips);
+}
+
+
+
+// Given a rooted tree and a focal tip, compute the patristic distance of each other clade (tip & node) to this focal tip
+// [[Rcpp::export]]
+NumericVector get_all_distances_to_tip_CPP(	const long 					Ntips,
+											const long 					Nnodes,
+											const long 					Nedges,
+											const std::vector<long> 	&tree_edge,		// 2D array of size Nedges x 2 in row-major format
+											const std::vector<double> 	&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty array (all branches have length 1)
+											const long 					focal_tip){		// integer between 0 and Ntips-1, specifying the focal tip whose neighborhood to explore
+	const long Nclades = Ntips + Nnodes;
+	const bool unit_edge_lengths = (edge_length.size()==0);
+	
+	lvector clade2incoming_edge;
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2incoming_edge);
+
+	// find root using the mapping clade2incoming_edge
+	const long root = get_root_from_incoming_edge_per_clade(Ntips, tree_edge, clade2incoming_edge);
+	
+	// get tree traversal route (root --> tips), excluding tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+
+	// first travel rootwards to compute the distance of each ancestor to the focal tip
+	std::vector<bool> is_ancestor(Nclades,false); // is_ancestor[c] will be true if clade c is an ancestor of the focal tip or is the focal tip itself
+	dvector distances(Nclades);
+	distances[focal_tip]   = 0;
+	is_ancestor[focal_tip] = true;
+	long clade = focal_tip, edge, parent, child, node;
+	while(clade2incoming_edge[clade]>=0){
+		edge 				= clade2incoming_edge[clade];
+		parent 				= tree_edge[2*edge+0];
+		distances[parent] 	= distances[clade] + (unit_edge_lengths ? 1.0 : edge_length[edge]);
+		is_ancestor[parent] = true;
+		clade 				= parent;
+	}
+
+	// traverse from root to tips to compute distances of all other (non-ancestral) clades to the focal tip
+	for(long q=0; q<traversal.queue.size(); ++q){
+		clade = traversal.queue[q];
+		node  = clade-Ntips;
+		for(long e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
+			edge  = traversal.edge_mapping[e];
+			child = tree_edge[2*edge + 1];
+			if(is_ancestor[child]) continue;
+			distances[child] = distances[clade] + (unit_edge_lengths ? 1.0 : edge_length[edge]);
+		}
+	}
+
+	return Rcpp::wrap(distances);
+}
+
+
+
 #pragma mark -
 #pragma mark Generating & manipulating trees
 #pragma mark
@@ -20384,8 +20538,6 @@ bool is_monophyletic_tip_set_CPP(	const long 			Ntips,
 
 	return true;
 }
-
-
 
 
 

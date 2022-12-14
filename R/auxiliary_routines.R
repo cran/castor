@@ -69,7 +69,7 @@ get_paths_root_to_tips = function(tree){
 
 
 
-# convert a name list to a list of tip or node indices, or retain the original index list if already in integer form
+# convert a name list (A) to a list of tip or node indices, or retain the original index list if already in integer form
 # type can be 'tip', 'node' or 'both'
 map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_input=TRUE){
 	Ntips = length(tree$tip.label)
@@ -137,7 +137,7 @@ find_edge_splitting_tree = function(tree, target_tips, is_rooted=FALSE){
 											Nedges				= nrow(tree$edge),
 											tree_edge			= as.vector(t(tree$edge)) - 1,	# flatten in row-major format and adjust clade indices to 0-based
 											is_rooted			= is_rooted,
-											target_tips			= target_tips - 1,
+											target_tips			= target_tips - 1L,
 											include_misplaced 	= TRUE)
 													
 	return(list(edge					= (if(results$edge<0) NA else as.integer(results$edge+1)),
@@ -145,8 +145,8 @@ find_edge_splitting_tree = function(tree, target_tips, is_rooted=FALSE){
 				Nmisplaced_nontargets	= results$Nmisplaced_nontargets,
 				Ntargets_upstream 		= results$Ntargets_upstream,
 				Ntargets_downstream 	= results$Ntargets_downstream,
-				misplaced_targets		= results$misplaced_targets,
-				misplaced_nontargets	= results$misplaced_nontargets));
+				misplaced_targets		= results$misplaced_targets+1L,
+				misplaced_nontargets	= results$misplaced_nontargets+1L));
 				
 }
 
