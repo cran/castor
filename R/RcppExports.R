@@ -233,6 +233,10 @@ extract_tip_neighborhood_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, focal
     .Call(`_castor_extract_tip_neighborhood_CPP`, Ntips, Nnodes, Nedges, tree_edge, focal_tip, Nbackward, Nforward)
 }
 
+extract_deep_frame_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, Nsplits) {
+    .Call(`_castor_extract_deep_frame_CPP`, Ntips, Nnodes, Nedges, tree_edge, Nsplits)
+}
+
 get_all_distances_to_tip_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_tip) {
     .Call(`_castor_get_all_distances_to_tip_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_tip)
 }

@@ -764,7 +764,7 @@ fit_musse = function(	tree,
 	}
 	loglikelihood = final$loglikelihood
 	if(include_ancestral_likelihoods){
-		ancestral_likelihoods = matrix(final$ancestral_likelihoods, ncol=Nstates, byrow=TRUE, dimnames=list(tree$tip.label,NULL)) # unflatten
+		ancestral_likelihoods = matrix(final$ancestral_likelihoods, ncol=Nstates, byrow=TRUE, dimnames=list(tree$node.label,NULL)) # unflatten
 		if(oldest_age<root_age) ancestral_likelihoods[node_ages>oldest_age,] = NA; # state likelihoods are not calculated for nodes older than oldest_age
 	}
 	final$ML_subroot_states	= final$ML_subroot_states + 1 # make index 1-based

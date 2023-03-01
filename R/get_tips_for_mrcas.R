@@ -1,4 +1,4 @@
-# for each node, get a list of tips whose MRCA is that node
+# for each specified node, get a list of tips whose MRCA is that node
 get_tips_for_mrcas = function(tree, mrca_nodes, check_input=TRUE){
 	Ntips  = length(tree$tip.label)
 	Nnodes = tree$Nnode;

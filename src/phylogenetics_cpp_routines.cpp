@@ -14395,6 +14395,65 @@ IntegerVector extract_tip_neighborhood_CPP(	const long 				Ntips,
 
 
 
+// Extract a subset of tips representing the tree's deepest splits, thus obtaining a rough "frame" of the tree.
+// For example, if Nsplits=1 and the tree is bifurcating, then two tips will be extracted representing the two clades splitting at the root.
+// [[Rcpp::export]]
+IntegerVector extract_deep_frame_CPP(const long 			Ntips,
+									const long 				Nnodes,
+									const long 				Nedges,
+									const std::vector<long> &tree_edge,		// 2D array of size Nedges x 2 in row-major format
+									const long 				Nsplits){		// strictly positive integer, maximum number of splits to descend from the root
+	// determine root
+	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
+
+	// get node-->edge mappings
+	lvector node2first_edge, node2last_edge, edges;
+	get_node2edge_mappings(	Ntips,
+							Nnodes,
+							Nedges,
+							tree_edge,
+							node2first_edge,
+							node2last_edge,
+							edges);
+	
+	// move root to tips, collecting deep clades along the way
+	long child,node,level;
+	lvector clades, levels;
+	clades.reserve(pow(2,Nsplits));
+	levels.reserve(pow(2,Nsplits));
+	clades.push_back(root);
+	levels.push_back(0);
+	long queue_pointer = 0;
+	while(queue_pointer<clades.size()){
+		level = levels[queue_pointer];
+		node  = clades[queue_pointer] - Ntips;
+		queue_pointer += 1;
+		if(level>=Nsplits) continue; // reached maximum level (number of splits from root)
+		if(node<0) continue; // clades[queue_pointer] was actually a tip, not an internal node
+		for(long ei=node2first_edge[node]; ei<=node2last_edge[node]; ++ei){
+			child = tree_edge[edges[ei]*2+1];
+			// append child to queue
+			clades.push_back(child);
+			levels.push_back(level+1);
+		}
+	}
+
+	// find a representative tip for each deep clade (descend from each clade until reaching a tip)
+	lvector frame_tips;
+	frame_tips.reserve(clades.size());
+	for(long c=0, clade; c<clades.size(); ++c){
+		clade = clades[c];
+		while(clade>=Ntips){
+			// descend one level
+			clade = tree_edge[edges[node2first_edge[clade-Ntips]]*2+1];
+		}
+		frame_tips.push_back(clade);
+	}
+	
+	return Rcpp::wrap(frame_tips);
+}
+
+
 // Given a rooted tree and a focal tip, compute the patristic distance of each other clade (tip & node) to this focal tip
 // [[Rcpp::export]]
 NumericVector get_all_distances_to_tip_CPP(	const long 					Ntips,

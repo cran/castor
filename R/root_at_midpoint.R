@@ -73,8 +73,8 @@ root_at_midpoint = function(tree,
 		new_root_edge 				= midpoint_edges[which.max(max_tip_span_per_edge[midpoint_edges])] # edge within which we should place the new root
 		location					= (if(edge2length[new_root_edge]==0) 0.5 else (edge2descending_distance[new_root_edge]+edge2length[new_root_edge]-edge2upstream_distance[new_root_edge])/(2*edge2length[new_root_edge]))
 		tree = root_in_edge(tree, 
-							root_edge	= new_root_edge, 
-							location	= location, 
+							root_edge				= new_root_edge, 
+							location				= location,
 							collapse_monofurcations = FALSE)
 	}
 	

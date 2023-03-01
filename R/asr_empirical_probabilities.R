@@ -28,7 +28,7 @@ asr_empirical_probabilities = function(	tree,
 															Nstates		= Nstates,
 															tree_edge 	= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
 															tip_states	= tip_states-1);
-	ancestral_likelihoods = matrix(results$frequencies_per_node, ncol=Nstates, byrow=TRUE) # unflatten
+	ancestral_likelihoods = matrix(results$frequencies_per_node, ncol=Nstates, byrow=TRUE, dimnames=list(tree$node.label,NULL)) # unflatten
 	if(probabilities) ancestral_likelihoods = ancestral_likelihoods/rowSums(ancestral_likelihoods); 
 	return(list(success=TRUE, ancestral_likelihoods=ancestral_likelihoods));
 }

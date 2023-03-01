@@ -25,7 +25,7 @@ The input tree need not be rooted, however "descendance" from the focal node is 
 
 
 \value{
-A list with the following elements:
+A named list with the following elements:
 \item{subtree}{
 A new tree of class "phylo", containing the subtree descending from the focal node. This tree will be rooted, with the new root being the focal node.
 }

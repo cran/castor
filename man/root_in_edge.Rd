@@ -10,7 +10,7 @@ Given a tree (rooted or unrooted), this function places the new root on some spe
 root_in_edge( tree, 
               root_edge, 
               location                = 0.5,
-              new_root_name           = NULL, 
+              new_root_name           = "", 
               collapse_monofurcations = TRUE)
 }
 \arguments{
@@ -24,7 +24,7 @@ Integer, index of the edge into which the new root is to be placed. Must be betw
 Numeric, between 0 and 1, specifying the relative location along the \code{root_edge} at which to place the root (relative to the edge length, measured from the upstream node). For example, \code{location=0.5} means the root is placed in the middle of the edge, while \code{location=0.1} means that it will be place closer to the upstream node (i.e., closer to \code{tree$edge[root_edge,1]}).
 }
 \item{new_root_name}{
-Character, optional, specifying the node name to use for the new root. Only used if \code{tree$node.label} is not \code{NULL}.
+Character, specifying the node name to use for the new root. Only used if \code{tree$node.label} is not \code{NULL}.
 }
 \item{collapse_monofurcations}{
 Logical, specifying whether monofurcations in the rerooted tree (e.g. stemming from the old root) should be collapsed by connecting incoming edges with outgoing edges.

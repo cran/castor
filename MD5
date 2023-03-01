@@ -1,10 +1,10 @@
-5cf581b105e7facdb5e3fd1e6e3418cd *DESCRIPTION
-e5f9c4d73b72568d9ba74e968e8faca9 *NAMESPACE
-73c542f91d7d25ce7281cd0d98cf1240 *R/RcppExports.R
-90e3e84e252598a58a812a040e2bfced *R/asr_empirical_probabilities.R
+8b6492b36f9b11c4235919eddd4b23f0 *DESCRIPTION
+2809643b2921f4d5c27bcc227aa45bc8 *NAMESPACE
+1370c4a1f56ba99c9bc0859bdcc19d00 *R/RcppExports.R
+b723de1bb21f9fa2a21f736e2adce414 *R/asr_empirical_probabilities.R
 989b7786c5d618f4b4a278f60d277a71 *R/asr_independent_contrasts.R
 38914a7681f86198ee1c685db6d92d78 *R/asr_max_parsimony.R
-9a8ebea425c50b4057376972c47cce59 *R/asr_mk_model.R
+10ddf4fbec17ef9d6acc5a19c05bfc5a *R/asr_mk_model.R
 085126368e9a7434358a27646b8765a6 *R/asr_squared_change_parsimony.R
 f6a1c71281b5713a4f8fe75745bbc76f *R/asr_subtree_averaging.R
 f2dd2272bcc0b43074a2f9ece11359f2 *R/auxiliary_routines.R
@@ -21,6 +21,7 @@ d81ceeaec9a422307f401035a640debb *R/date_tree_red.R
 b28f83fb4229484a268f1975a921aacf *R/evaluate_spline.R
 5ca0e410c6967b748b8e0346666f9180 *R/exponentiate_matrix.R
 3f734a938a3b46655dc1f4023876786e *R/extend_tree_to_height.R
+9b7ff743c0180a8c979b71da380265de *R/extract_deep_frame.R
 33afe93c2a7a8b34d5954773c34864a4 *R/extract_fasttree_constraints.R
 53b62d256ee11316420b99d0a36e8c6b *R/extract_tip_neighborhood.R
 8f510ee65b61c32bbbdc993969a21e78 *R/extract_tip_radius.R
@@ -43,7 +44,7 @@ c51b79935430d889545599e31b0d8465 *R/fit_hbd_psr_parametric.R
 aaa485599a20efed371b8bad2ab4f0c3 *R/fit_hbds_model_on_grid.R
 0d41c4d362dd87f8b41d3d32a52d95a0 *R/fit_hbds_model_parametric.R
 fce82463fcb90bafd0b951f702ac229a *R/fit_mk.R
-c807e0ffe19f41e58c9dbb9dfefecd4e *R/fit_musse.R
+6bc5af7927a81e580251cf3d9972c278 *R/fit_musse.R
 8baaee1c6ab67bb21d791a210a161416 *R/fit_sbm_const.R
 22e4e5cac492aa3270c1a4cbb65050fe *R/fit_sbm_const_biased_sampling_unfinished.R
 48305a15e176c3d48b770a2130ed9f15 *R/fit_sbm_geobiased_const.R
@@ -79,7 +80,7 @@ f9de590cb60abf56cc29c154fccd9e85 *R/get_stationary_distribution.R
 e95c195417e9b6a19c458e2db5e12892 *R/get_subtree_at_node.R
 64120cf696b998bc23c45a98fcdb04bb *R/get_subtree_with_tips.R
 d5021d6cd9470f5183dc501f7459a94c *R/get_subtrees_at_nodes.R
-7533a04be559994c0f9e665a7d5b0411 *R/get_tips_for_mrcas.R
+ca72727da15c6e440330bb71d8e94120 *R/get_tips_for_mrcas.R
 4eabd20d1796c58b6a155dd2fa31a9fc *R/get_trait_acf.R
 0f05838c941e3641b58f970f29c76770 *R/get_trait_stats_over_time.R
 036544245befd90a69add4609491d2f8 *R/get_transition_index_matrix.R
@@ -108,9 +109,9 @@ c8d41bc769024df41b8869a76abf353b *R/model_adequacy_hbds.R
 d860e5c78b9d576f274e4272ed27ca6d *R/read_tree.R
 5101df5ddc1816a1d427aa471ab5b3ca *R/reconstruct_past_diversification.R
 109c4a5eda914e5bf490d80c0197ea6b *R/reorder_tree_edges.R
-b35a8b52d4b805094f7fd24ed6267160 *R/root_at_midpoint.R
+d8b08f6b8e452c5d8828665a68b81450 *R/root_at_midpoint.R
 6a83592733b2ce21613ade0eca1ff62e *R/root_at_node.R
-d38a23b974a96dade9b3f82a71d78e27 *R/root_in_edge.R
+99a478e498dbbd00ca2985aa14064c35 *R/root_in_edge.R
 5c9f893fac6f0d0eed73e4a63e97fdd8 *R/root_via_outgroup.R
 d09764e390dd7d999d3fa95a5999636e *R/shift_clade_times.R
 6d3b380124b5fa4d965e6865f02a15bb *R/simulate_bm_model.R
@@ -155,12 +156,13 @@ c5532d830fd70affe122a72814190a94 *man/date_tree_red.Rd
 0d8f6ac2527c4662cd30797eafbed1d8 *man/evaluate_spline.Rd
 164411f08b5adabfdc2d15d87285fe55 *man/exponentiate_matrix.Rd
 58d9586b71bea77c7e0122b13dd5dd49 *man/extend_tree_to_height.Rd
+6e01e5790f22e3de995ae8d6b564e056 *man/extract_deep_frame.Rd
 6a50c9a60123e2fa4dfd817246452dab *man/extract_fasttree_constraints.Rd
 9006761713e121ff4873cc3feca87a6d *man/extract_tip_neighborhood.Rd
 7dad2c17df92328914beba5c29db774a *man/extract_tip_radius.Rd
 763d934bec654fb2255569d3f0db6d80 *man/find_farthest_tip_pair.Rd
 1f8f19a1dbf406b0c66c10709bbae720 *man/find_farthest_tips.Rd
-143bd53b4e1f419166e3c4efb24270e6 *man/find_nearest_tips.Rd
+df6f54e120cd7b965687f14a427c5953 *man/find_nearest_tips.Rd
 474164c84fb3892a906b791c416915dc *man/find_root.Rd
 e5b3c517b235b600c18a27ef3ce044a3 *man/find_root_of_monophyletic_tips.Rd
 9fc352fb0bea5b5d31e591f8c486f467 *man/fit_and_compare_bm_models.Rd
@@ -177,7 +179,7 @@ cbe48085609ec20f52df028986345606 *man/fit_hbd_model_parametric.Rd
 d02ad04aa7d43cfcdd547bdccd3a4c7f *man/fit_hbds_model_on_grid.Rd
 cc033060596dd73a1cc583919882201a *man/fit_hbds_model_parametric.Rd
 3616cd7411eea3cbf67fcee1fc4bf8c9 *man/fit_mk.Rd
-5dfa134cad3594e60b7fa14c0d5805c5 *man/fit_musse.Rd
+71623cfba0d1f6d7d74a3c9f83e550a4 *man/fit_musse.Rd
 afde7886e8b2b668ccef2e13970c653d *man/fit_sbm_const.Rd
 0dbcd8d389910acd8f926398925d2e17 *man/fit_sbm_geobiased_const.Rd
 044c3efb0aef0264a9132b9eab93a909 *man/fit_sbm_linear.Rd
@@ -206,7 +208,7 @@ babcc004d68152620e747b60732bd313 *man/get_random_diffusivity_matrix.Rd
 1cbfd710b81b41140df8079bbe2b6c79 *man/get_random_mk_transition_matrix.Rd
 d1e3c9a79d7a603f1307ccf5e8d27d5d *man/get_reds.Rd
 ed439b4a11de01cb319be81f1b60d176 *man/get_stationary_distribution.Rd
-3423e6b79ba3323f47dd660235b02c1e *man/get_subtree_at_node.Rd
+c8ad46c3f27fcea9cc4473fcc7afe01f *man/get_subtree_at_node.Rd
 79b26ee99426bced0ae2ac407f6f60d6 *man/get_subtree_with_tips.Rd
 e9483fd26663be9287baf2cb84165388 *man/get_subtrees_at_nodes.Rd
 734f0758ba84ad13a2a2a9dc449dfdfd *man/get_tips_for_mrcas.Rd
@@ -239,7 +241,7 @@ e0239e1f85cc34601c86c6f6e7167e9c *man/reconstruct_past_diversification.Rd
 cbc664efc3dee0afa5a950bd257fb3ca *man/reorder_tree_edges.Rd
 c7d8e0c8acd5578e72550ac287a7ac69 *man/root_at_midpoint.Rd
 ec7bfbe0d0515e62b7552d3868b7c500 *man/root_at_node.Rd
-5a9a05c39dd4f388688dac0dcc6dda67 *man/root_in_edge.Rd
+0d3b5c0e9b62a06cb84beb57caf82941 *man/root_in_edge.Rd
 15d6da71a09fe60f14505b63fb2159a3 *man/root_via_outgroup.Rd
 01fb7d82701ecbb3e71c17fede952b79 *man/shift_clade_times.Rd
 6e7967df83241e1f171b7d53f434a29b *man/simulate_bm_model.Rd
@@ -260,8 +262,8 @@ b1831a13ee7dc57a2a3c68a94690d293 *man/spline_coefficients.Rd
 6ebaa422630c326b0a09b0ce3192f4ca *man/tree_imbalance.Rd
 6fa52aa5090a4e99df1b23f06119d825 *man/trim_tree_at_height.Rd
 2d6d4490a937045e02b449eb19aac446 *man/write_tree.Rd
-4d181e4a7678da775bd675f5864c959c *src/RcppExports.cpp
+b28bd5f1d6bd7d94d4b8c26085f22cbb *src/RcppExports.cpp
 60240b89c41cf20801bd210a3aacf566 *src/STMathExpression.cpp
 c63909f744c3da0df38702e3b4c9c767 *src/STMathExpression.h
-b5a3cc61174d67ce0687883cfab11ddb *src/phylogenetics_cpp_routines.cpp
+6808e1bb155f849b3a0076e4bee29fa9 *src/phylogenetics_cpp_routines.cpp
 7c22b1b500cab25872924e218f1645f5 *src/registerDynamicSymbol.c

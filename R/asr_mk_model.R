@@ -151,8 +151,7 @@ asr_mk_model = function(tree,
 																store_exponentials				= store_exponentials);
 		loglikelihood = reconstruction$loglikelihood;
 		if(include_ancestral_likelihoods){
-			ancestral_likelihoods = matrix(reconstruction$ancestral_likelihoods, ncol=Nstates, byrow=TRUE) # unflatten
-			if(!is.null(state_names)) colnames(ancestral_likelihoods) = state_names;
+			ancestral_likelihoods = matrix(reconstruction$ancestral_likelihoods, ncol=Nstates, byrow=TRUE, dimnames=list(tree$node.label,state_names)) # unflatten
 		}
 	}
 	

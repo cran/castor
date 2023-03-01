@@ -7,6 +7,8 @@ Fit a discrete-state-dependent diversification model via maximum-likelihood.
 The Binary State Speciation and Extinction (BiSSE) model (Maddison et al. 2007) and its extension to Multiple State Speciation Extinction (MuSSE) models (FitzJohn et al. 2009, 2012), Hidden State Speciation Extinction (HiSSE) models (Beaulieu and O'meara, 2016) or Several Examined and Concealed States-dependent Speciation and Extinction (SecSSE) models (van Els et al. 2018), describe a Poissonian cladogenic process whose birth/death (speciation/extinction) rates depend on the states of an evolving discrete trait. Specifically, extant tips either go extinct or split continuously in time at Poissonian rates, and birth/death rates at each extant tip depend on the current state of the tip; lineages tansition stochastically between states acccording to a continuous-time Markov process with fixed transition rates. At the end of the simulation (i.e., at "present-day"), extant lineages are sampled according to some state-dependent probability ("sampling_fraction"), which may depend on proxy state. Optionally, tips may also be sampled continuously over time according to some Poissonian rate (which may depend on proxy state), in which case the resulting tree may not be ultrametric.
 
 This function takes as main input a phylogenetic tree (ultrametric unless Poissonian sampling is included) and a list of tip proxy states, and fits the parameters of a BiSSE/MuSSE/HiSSE/SecSSE model to the data via maximum-likelihood. Tips can have missing (unknown) proxy states, and the function can account for biases in species sampling and biases in the identification of proxy states. The likelihood is calculated using a mathematically equivalent, but computationally more efficient variant, of the classical postorder-traversal BiSSE/MuSSE/HiSSE/SecSSE algorithm, as described by Louca (2019). This function has been optimized for large phylogenetic trees, with a relatively small number of states (i.e. Nstates<<Ntips); its time complexity scales roughly linearly with Ntips.
+
+If you use this function for your research please cite Louca and Pennell (2020), DOI:10.1093/sysbio/syz055.
 }
 \usage{
 fit_musse(tree, 
@@ -313,7 +315,7 @@ D. Kuehnert, T. Stadler, T. G. Vaughan, A. J. Drummond (2016). Phylodynamics wit
 
 P. van Els, R. S. Etiene, L. Herrera-Alsina (2018). Detecting the dependence of diversification on multiple traits from phylogenetic trees and trait data. Systematic Biology. syy057.
 
-S. Louca and M. W. Pennell (2020). A general and efficient algorithm for the likelihood of diversification and discrete-trait evolutionary models. Systematic Biology. 69:545-556.
+S. Louca and M. W. Pennell (2020). A general and efficient algorithm for the likelihood of diversification and discrete-trait evolutionary models. Systematic Biology. 69:545-556. DOI:10.1093/sysbio/syz055
 }
 
 \seealso{

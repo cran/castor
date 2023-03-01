@@ -51,10 +51,10 @@ An integer vector of size Ntips, listing the nearest target tip for each tip in 
 An integer vector of size Nnodes, listing the index of the nearest target tip for each node in the tree. Hence, \code{nearest_tip_per_node[i]} is the index of the nearest tip (from the set of target tips), with respect to node i (where i=1,..,Nnodes). Some values may appear multiple times in this vector, if multiple nodes share the same nearest target tip.
 }
 \item{nearest_distance_per_tip}{
-Integer vector of size Ntips. Phylogenetic ("patristic") distance of each tip in the tree to its nearest target tip. If \code{only_descending_tips} was set to \code{TRUE}, then \code{nearest_distance_per_tip[i]} will be set to infinity for any tip i that is not a target tip.
+Numeric vector of size Ntips. Phylogenetic ("patristic") distance of each tip in the tree to its nearest target tip. If \code{only_descending_tips} was set to \code{TRUE}, then \code{nearest_distance_per_tip[i]} will be set to infinity for any tip i that is not a target tip.
 }
 \item{nearest_distance_per_node}{
-Integer vector of size Nnodes. Phylogenetic ("patristic") distance of each node in the tree to its nearest target tip. If \code{only_descending_tips} was set to \code{TRUE}, then \code{nearest_distance_per_node[i]} will be set to infinity for any node i that has no descending target tips.
+Numeric vector of size Nnodes. Phylogenetic ("patristic") distance of each node in the tree to its nearest target tip. If \code{only_descending_tips} was set to \code{TRUE}, then \code{nearest_distance_per_node[i]} will be set to infinity for any node i that has no descending target tips.
 }
 }
 

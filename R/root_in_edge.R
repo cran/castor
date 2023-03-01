@@ -1,5 +1,5 @@
 # place the root of a tree in the middle of an edge (creating a new node)
-root_in_edge = function(tree, root_edge, location=0.5, new_root_name=NULL, collapse_monofurcations=TRUE){
+root_in_edge = function(tree, root_edge, location=0.5, new_root_name="", collapse_monofurcations=TRUE){
 	Ntips 		= length(tree$tip.label)
 	Nnodes 		= tree$Nnode
 	Nedges 		= nrow(tree$edge)
@@ -16,7 +16,7 @@ root_in_edge = function(tree, root_edge, location=0.5, new_root_name=NULL, colla
 	
 	# add new node
 	tree$Nnode = tree$Nnode + 1
-	if((!is.null(tree$node.label)) && (!is.null(new_root_name))) tree$node.label = c(tree$node.label,new_root_name)
+	if(!is.null(tree$node.label)) tree$node.label = c(tree$node.label,new_root_name)
 	
 	# re-root at the new root, update indices to meet root indexing convention
 	tree = root_at_node(tree, new_root_node=new_root-Ntips, update_indices=TRUE)
