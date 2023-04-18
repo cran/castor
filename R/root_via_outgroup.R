@@ -2,14 +2,15 @@
 # Note that the number of tips & nodes remains the same
 # If update_indices==FALSE, then tip & node indices also remain the same
 root_via_outgroup = function(tree, outgroup, update_indices=TRUE){ 
-	Ntips 	= length(tree$tip.label);
-	Nnodes	= tree$Nnode;
+	Ntips 	= length(tree$tip.label)
+	Nnodes	= tree$Nnode
 	
 	# figure out outgroup tip index
 	if(is.character(outgroup)){
 		if(is.null(tree$tip.label)) stop("ERROR: Tree must have tip labels when specifying outgroup as character")
-		outgroup = match(outgroup, tree$tip.label)
-		if(is.na(outgroup)) stop(sprintf("ERROR: outgroup '%s' not found in tree tips",outgroup))
+		outgroup_index = match(outgroup, tree$tip.label)
+		if(is.na(outgroup_index)) stop(sprintf("ERROR: outgroup '%s' not found in tree tips",outgroup))
+		outgroup = outgroup_index
 	}else if(is.numeric(outgroup) && (as.integer(outgroup)==outgroup)){
 		outgroup = as.integer(outgroup)
 		if((outgroup<1) || (outgroup>Ntips)) stop(sprintf("ERROR: outgroup must be between 1 and %d (=Ntips), but instead is %d",Ntips,outgroup));
@@ -19,10 +20,17 @@ root_via_outgroup = function(tree, outgroup, update_indices=TRUE){
 	
 	# determine parent of outgroup (note that edge directions may not make sense if the tree is unrooted)
 	# since the outgroup is a tip, there is exactly one edge connected to it, namely the edge connecting it to its parent
-	new_root_node = match(outgroup, tree$edge[,2]);
-	if(is.na(new_root_node)) match(outgroup, tree$edge[,1])
-	if(is.na(new_root_node)) stop("ERROR: Could not determine parent of outgroup; maybe the tree is a forest?") # something went wrong
-	
+	new_root_edge = match(outgroup, tree$edge[,2]);
+	if(!is.na(new_root_edge)){
+		new_root_node = tree$edge[new_root_edge,1] - Ntips
+	}else{
+		new_root_edge = match(outgroup, tree$edge[,1])
+		if(!is.na(new_root_edge)){
+			new_root_node = tree$edge[new_root_edge,2] - Ntips
+		}else{
+			stop("ERROR: Could not determine parent of outgroup; maybe the tree is a forest?") # something went wrong
+		}
+	}
 	
 	new_edges = root_tree_at_node_CPP(	Ntips			= Ntips,
 										Nnodes			= Nnodes,
@@ -49,7 +57,8 @@ root_via_outgroup = function(tree, outgroup, update_indices=TRUE){
 			tree$node.label[correct_root_node] 	= root_label;
 		}
 	}
+	tree$root.edge = 0 # add a dummy root.edge, so that ape knows the tree is rooted. Otherwise the root will be multifurcating, and as a result ape will think the tree is not rooted.
 	attr(tree,"order") = NULL
 	
-	return(tree);
+	return(tree)
 }

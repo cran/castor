@@ -65,7 +65,10 @@ A list with the following elements:
 Integer, indicating the number of returned time points. Equal to the provided \code{Ntimes} if applicable.
 }
 \item{times}{
-Numeric vector of size Ntimes, listing the time points at which the LTT was calculated. If \code{times} was provided as an argument to the function, then this will be the same as provided.
+Numeric vector of size Ntimes, listing the time points at which the LTT was calculated. If \code{times} was provided as an argument to the function, then this will be the same as provided, otherwise times will be listed in ascending order.
+}
+\item{ages}{
+Numeric vector of size Ntimes, listing the ages (time before the youngest tip) corresponding to the returned times[].
 }
 \item{lineages}{
 Integer vector of size Ntimes, listing the number of lineages represented in the tree at each time point that have at least \code{degree} descending tips, i.e. the LTT curve.

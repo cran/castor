@@ -2,7 +2,7 @@
 # Note that the number of tips & nodes remains the same
 # If update_indices==FALSE, then tip & node indices also remain the same
 root_at_midpoint = function(tree, 
-							split_edge		= FALSE,
+							split_edge		= TRUE,
 							update_indices	= TRUE,
 							as_edge_counts 	= FALSE,	# calculate distances in terms of cumulative edge counts (as as if each edge had length 1)
 							is_rooted		= FALSE){ 	# if TRUE, the caller guarantees that the input tree is rooted

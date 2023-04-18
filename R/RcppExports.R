@@ -321,8 +321,8 @@ assign_clades_to_taxa_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, represen
     .Call(`_castor_assign_clades_to_taxa_CPP`, Ntips, Nnodes, Nedges, tree_edge, representatives)
 }
 
-extract_independent_sister_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
-    .Call(`_castor_extract_independent_sister_tips_CPP`, Ntips, Nnodes, Nedges, tree_edge)
+get_independent_sister_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
+    .Call(`_castor_get_independent_sister_tips_CPP`, Ntips, Nnodes, Nedges, tree_edge)
 }
 
 join_rooted_trees_CPP <- function(Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2) {
@@ -517,8 +517,8 @@ simulate_Ornstein_Uhlenbeck_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_
     .Call(`_castor_simulate_Ornstein_Uhlenbeck_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, stationary_mean, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations)
 }
 
-simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations) {
-    .Call(`_castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations)
+simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations) {
+    .Call(`_castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations)
 }
 
 simulate_scalar_Brownian_motion_model_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_states, diffusivity, include_tips, include_nodes, Nsimulations) {

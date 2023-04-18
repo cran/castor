@@ -38,11 +38,11 @@ The BM model is defined by the stochastic differential equation
 \deqn{
 dX = \sigma \cdot dW
 }
-where \eqn{W} is a multidimensional Wiener process with Ndegrees independent components and \eqn{\sigma} is a matrix of size Ntraits x Ndegrees. Alternatively, the same model can be defined as a Fokker-Planck equation for the probability density \eqn{\rho}:
+where \eqn{W} is a multidimensional Wiener process with Ndegrees independent components and \eqn{\sigma} is a matrix of size Ntraits x Ndegrees, sometimes known as "volatility" or "instantaneous variance". Alternatively, the same model can be defined as a Fokker-Planck equation for the probability density \eqn{\rho}:
 \deqn{
 \frac{\partial \rho}{\partial t} = \sum_{i,j}D_{ij}\frac{\partial^2\rho}{\partial x_i\partial x_j}.
 }
-The matrix \eqn{D} is referred to as the diffusivity matrix (or diffusion tensor), and \eqn{2D=\sigma\cdot\sigma^T}. Note that \eqn{\sigma} can be obtained from \eqn{D} by means of a Cholesky decomposition.
+The matrix \eqn{D} is referred to as the diffusivity matrix (or diffusion tensor), and \eqn{2D=\sigma\cdot\sigma^T}. Note that in the multidimensional case \eqn{\sigma} can be obtained from \eqn{D} by means of a Cholesky decomposition; in the scalar case we have simply \eqn{\sigma=\sqrt{2D}}.
 
 The function uses phylogenetic independent contrasts (Felsenstein, 1985) to retrieve independent increments of the multivariate random walk. The diffusivity matrix \eqn{D} is then fitted using maximum-likelihood on the intrinsic geometry of positive-definite matrices. If multiple trees are provided as input, then independent contrasts are extracted from all trees and combined into a single set of independent contrasts (i.e., as if they had been extracted from a single tree).
 

@@ -9,8 +9,8 @@
 # 	Tree can include monofurcations and multifurcations. Multifurcations are internally expanded to bifurcations. One additional PIC is returned for each such bifurcation.
 # 	Tree can also include edges with length zero.
 #	Tree must be rooted.
-get_independent_contrasts = function(	tree, 							# a phylogenetic tree of class "phylo"
-										tip_states, 					# numeric vector of size Ntips
+get_independent_contrasts = function(	tree, 									# a phylogenetic tree of class "phylo"
+										tip_states, 							# numeric vector of size Ntips, or 2D matrix of size Ntips x Ntraits
 										scaled			 			= TRUE,		# rescale PICs by the square root of their corresponding distances (typically done to standardize their variances)
 										only_bifurcations 			= FALSE,	# if TRUE, then only existing bifurcating nodes are considered. Multifurcations will not be expanded.
 										include_zero_phylodistances	= FALSE,	# if TRUE, then returned PICs may include cases where the phylodistance is zero (this can only happen if the tree has edges with length 0).
@@ -19,9 +19,10 @@ get_independent_contrasts = function(	tree, 							# a phylogenetic tree of clas
 	scalar 	= is.vector(tip_states)
 	Ntraits = (if(scalar) 1 else ncol(tip_states))
 
-	# basic error checking
+	# basic input checking
 	if(scalar && (length(tip_states)!=Ntips)) stop(sprintf("ERROR: Length of tip_states (%d) is not the same as the number of tips in the tree (%d)",length(tip_states),Ntips));
 	if((!scalar) && (nrow(tip_states)!=Ntips)) stop(sprintf("ERROR: Number of rows in tip_states (%d) is not the same as the number of tips in the tree (%d)",nrow(tip_states),Ntips));
+	if(!is.matrix(tip_states)) tip_states = as.matrix(tip_states)
 	if(!is.numeric(tip_states)) stop(sprintf("ERROR: tip_states must be numeric"))
 	if(check_input){
 		if(scalar && (!is.null(names(tip_states))) && any(names(tip_states)!=tree$tip.label)) stop("ERROR: Names in tip_states and tip labels in tree don't match (must be in the same order).")

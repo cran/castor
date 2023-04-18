@@ -30,5 +30,7 @@ asr_empirical_probabilities = function(	tree,
 															tip_states	= tip_states-1);
 	ancestral_likelihoods = matrix(results$frequencies_per_node, ncol=Nstates, byrow=TRUE, dimnames=list(tree$node.label,NULL)) # unflatten
 	if(probabilities) ancestral_likelihoods = ancestral_likelihoods/rowSums(ancestral_likelihoods); 
-	return(list(success=TRUE, ancestral_likelihoods=ancestral_likelihoods));
+	return(list(success					= TRUE, 
+				ancestral_likelihoods	= ancestral_likelihoods,
+				ancestral_states		= sapply(seq_len(Nnodes), FUN=function(node) which.max(ancestral_likelihoods[node,]))))
 }

@@ -24,10 +24,12 @@ count_lineages_through_time = function(	tree,
 	if(((!is.null(Ntimes)) && (Ntimes==0)) || ((!is.null(times)) && (length(times)==0))){
 		return(list(Ntimes			= 0,
 					times			= c(),
+					ages			= c(),
 					lineages 		= c(),
 					slopes			= c(),
 					relative_slopes	= c()));
 	}
+	root_age = castor::get_tree_span(tree)$max_distance
 	
 	if(is.null(times) && regular_grid){
 		results = count_clades_at_regular_times_CPP(Ntips			= Ntips,
@@ -42,7 +44,8 @@ count_lineages_through_time = function(	tree,
 													degree			= degree,
 													include_slopes 	= include_slopes);
 		return(list(Ntimes			= length(results$time_points),
-					times			= results$time_points, 
+					times			= results$time_points,
+					ages			= root_age - results$time_points,
 					lineages		= results$lineages, 
 					slopes			= (if(include_slopes) results$slopes else NULL),
 					relative_slopes	= (if(include_slopes) results$relative_slopes else NULL)));
@@ -86,8 +89,10 @@ count_lineages_through_time = function(	tree,
 			slopes = NULL
 			relative_slopes = NULL
 		}
+
 		return(list(Ntimes			= length(times),
 					times			= times,
+					ages			= root_age - times,
 					lineages 		= lineages,
 					slopes			= slopes,
 					relative_slopes	= relative_slopes));

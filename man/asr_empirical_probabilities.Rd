@@ -42,8 +42,10 @@ Tips must be represented in \code{tip_states} in the same order as in \code{tree
 \value{
 A list with the following elements:
 \item{ancestral_likelihoods}{
-A 2D integer (if \code{probabilities==FALSE}) or numeric (if \code{probabilities==TRUE}) matrix, listing the frequency or probability of each state for each node. This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument or inferred from \code{tip_states}. The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the frequency or probability of the s-th state for the n-th node.
-Note that the name was chosen for compatibility with other ASR functions.
+A 2D integer (if \code{probabilities==FALSE}) or numeric (if \code{probabilities==TRUE}) matrix, listing the frequency or probability of each state for each node. This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument or inferred from \code{tip_states}. The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the frequency or probability of the s-th state for the n-th node. Note that the name was chosen for compatibility with other ASR functions.
+}
+\item{ancestral_states}{
+Integer vector of length Nnodes, listing the ancestral states with highest probability. In the case of ties, the first state with maximum probability is chosen. This vector is computed based on \code{ancestral_likelihoods}.
 }
 }
 

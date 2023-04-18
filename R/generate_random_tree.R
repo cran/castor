@@ -82,7 +82,8 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 		results$root_time 	= results$root_time + collapsing$root_shift; # update root time, in case root has changed
 		Ntips  				= length(tree$tip.label)
 		Nnodes 				= tree$Nnode
-		extant_tips 		= extant_tips[collapsing$new2old_clade[1:Ntips]]
+		extant_tips			= collapsing$old2new_clade[extant_tips]
+		extant_tips			= extant_tips[(extant_tips>0) & (extant_tips<=Ntips)]
 	}
 	
 	# rarefy if needed
@@ -96,7 +97,8 @@ generate_random_tree = function( parameters					= list(), 	# named list of model
 		results$root_time 	= results$root_time + rarefaction$root_shift; # update root time, in case root has changed
 		Ntips  				= length(tree$tip.label)
 		Nnodes 				= tree$Nnode
-		extant_tips 		= extant_tips[rarefaction$new2old_tip[1:Ntips]]
+		extant_tips			= rarefaction$old2new_tip[extant_tips]
+		extant_tips			= extant_tips[extant_tips>0]
 	}
 	
 	if(coalescent){

@@ -7669,7 +7669,7 @@ bool LinearScaledRungeKutta(const long					NR,								// (INPUT) number of rows 
 	COORDINATE currentY, candidateY, Y2, initialX;
 	double currentS, candidateS, S2, rescaling;
 	std::vector<double> A1, A2, Aconsensus, scratch1, scratch2;
-	double t=0, t2, current_dt1, current_dt2, original_dt2;
+	double t=0, t2, current_dt1, current_dt2;
 	long recorded, iterations;
 	CrossedBoundary crossedBoundary;
 	const double DeltaTime 			= endTime-startTime; // target duration of simulation
@@ -7784,8 +7784,7 @@ bool LinearScaledRungeKutta(const long					NR,								// (INPUT) number of rows 
 		apply_approximate_matrix_exponential(NR, NC, Aconsensus, current_dt2, currentY, max_exp_order, scratch1, scratch2, candidateY);
 		candidateS = currentS; // increment scale later on
 
-		// check if we crossed the domain boundary, and correct if needed		
-		original_dt2 = current_dt2;
+		// check if we crossed the domain boundary, and correct if needed
 		crossedBoundary = model.checkCrossedDomainBoundaryAndFix(startTime+t, currentY, currentS, current_dt2, candidateY, candidateS, true);
 		if(crossedBoundary==CrossedBoundaryYesButFixedBruteForce){
 			if(current_dt2>min_dt){
@@ -10765,7 +10764,6 @@ public:
 		coalescent = trajectory;
 		coalescent[NMT-1].Pextinction = 0; // probability of extinction begins at 0
 		coalescent[NMT-1].Pmissing = (resolution<=0 ? (1.0-rarefaction) : 0.0);
-		long resolution_jump = NMT-1; // will be updated (decreased) when we actually find the resolution jump
 		double total_diversity_at_resolution_age, coalescent_diversity_at_resolution_age;
 		for(long t=NMT-2; t>=0; --t){
 			const double birth_rate_pc = get_speciation_rate_at_state(times[t+1],coalescent[t+1].diversity)/coalescent[t+1].diversity;
@@ -10777,7 +10775,6 @@ public:
 			const double new_age  = final_time-times[t];
 			if((new_age>=resolution) && (last_age<resolution)){
 				// we just jumped over rarefaction_age, so apply rarefaction to Pmissing
-				resolution_jump = t+1;
 				total_diversity_at_resolution_age = trajectory[t+1].diversity + (trajectory[t].diversity-trajectory[t+1].diversity)*(resolution-last_age)/(new_age-last_age);
 				double Pmissing_at_resolution_age = coalescent[t+1].Pmissing + (coalescent[t].Pmissing-coalescent[t+1].Pmissing)*(resolution-last_age)/(new_age-last_age); // linearly interpolate to get Pmissing at resolution age
 				Pmissing_at_resolution_age = 1 - rarefaction*(1-Pmissing_at_resolution_age); // apply rarefaction at resolution age
@@ -14229,8 +14226,7 @@ double get_gamma_statistic_CPP(	const long					Ntips,
 	// calculate T[n] := \sum_{k=1}^n k*g_k, where g_k is the distance of event k to the next event
 	dvector event2T(Nnodes,0l);
 	double dist;
-	for(long event=0, node; event<Nnodes; ++event){
-		node = node_order[event];
+	for(long event=0; event<Nnodes; ++event){
 		dist = node_ages[node_order[event]] - (event==Nnodes-1 ? 0.0 : node_ages[node_order[event+1]]);
 		event2T[event] = (event==0 ? 0.0 : event2T[event-1]) + event2LTT[event]*dist;
 	}
@@ -17491,7 +17487,7 @@ bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of ti
 // The algorithm proceeds by repeatedly picking nodes with 2 descending tips until no such node is left (at which point the algorithm stops)
 // If the input tree only contains monofurcations and bifurcations (recommended), it is guaranteed that at most one unpaired tip will be left (i.e., if Ntips was odd)
 // [[Rcpp::export]]
-Rcpp::List extract_independent_sister_tips_CPP(	const long				Ntips,
+Rcpp::List get_independent_sister_tips_CPP(	const long				Ntips,
 												const long 				Nnodes,
 												const long				Nedges,
 												const std::vector<long>	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
@@ -23995,14 +23991,7 @@ Rcpp::List simulate_deterministic_HBD_model_CPP(const double				census_age,			//
 
 		// calculate PDRs from lambdas & mus
 		refined_PDRs.resize(NRG);
-		for(long t=0,tl,tr; t<NRG; ++t){
-			if(t==0){
-				tl = 0; tr = 1;
-			}else if(t==NRG-1){
-				tl = NRG-2; tr = NRG-1;
-			}else{
-				tl = t-1; tr = t+1;
-			}
+		for(long t=0; t<NRG; ++t){
 			refined_PDRs[t] = refined_lambdas[t] - refined_mus[t] + (1/refined_lambdas[t]) * piecewise_polynomial_derivative(refined_age_grid, refined_lambda_coeff, splines_degree, splines_slideX, t, refined_age_grid[t]);
 		}
 		// calculate diversification rates on refined age grid
@@ -25886,7 +25875,7 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 	bool valid = true;
 	if(has_psi){	
 		// get lambda & mu of the congruent model, based on PSR, PDR, lambda_psi and psi
-		double age, dpsi, dPDR, dPSR, dlambda_psi, dloglambda, age_shift;
+		double age, dpsi, dlambda_psi, dloglambda, age_shift;
 		mus.resize(NG);
 		Reffs.resize(NG);
 		removal_rates.resize(NG);
@@ -25894,8 +25883,6 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 		for(long g=0; g<NG; ++g){
 			age 			= age_grid[g];
 			age_shift		= (splines_slideX ? age_grid[g] : 0.0); // age-shift needed to properly evaluate piecewise polynomials in grid cell g
-			dPSR			= polynomial_derivative(PSR_degree, &PSR_coeff[g*(PSR_degree+1)], age-age_shift);
-			dPDR			= polynomial_derivative(PDR_degree, &PDR_coeff[g*(PDR_degree+1)], age-age_shift);
 			dpsi 			= polynomial_derivative(psi_degree, &psi_coeff[g*(psi_degree+1)], age-age_shift);
 			lambdas[g] 		= lambda_psis[g]/psis[g];
 			dlambda_psi		= polynomial_derivative(lambda_psi_degree, &lambda_psi_coeff[g*(lambda_psi_degree+1)], age-age_shift);
@@ -25976,9 +25963,7 @@ Rcpp::List get_congruent_HBDS_CPP(	const std::vector<double>	&CSA_ages,				// (I
 		psis.resize(NG);
 		Reffs.resize(NG);
 		removal_rates.resize(NG);
-		double age;
 		for(long g=0; g<NG; ++g){
-			age 			= age_grid[g];
 			psis[g] 		= lambda_psis[g]/lambdas[g];
 			Reffs[g]		= lambdas[g]/(mus[g] + psis[g]);
 			removal_rates[g]= psis[g] + mus[g];
@@ -26336,10 +26321,10 @@ Rcpp::List simulate_Ornstein_Uhlenbeck_on_tree_CPP(	const long			Ntips,
 Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(	const long			Ntips,
 																const long 			Nnodes,
 																const long			Nedges,
-																const std::vector<long> &tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-																const std::vector<double> &edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+																const std::vector<long> &tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+																const std::vector<double> &edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 																const double		reflection_point,		// (INPUT) the point of reflection, i.e. the ROU's minimum. This is also the deterministic equilibrium (see explanation above).
-																const double		spread,					// (INPUT) standard deviation of the stationary distribution of the corresponding unreflected OU process
+																const double		stationary_std,			// (INPUT) standard deviation of the stationary distribution of the corresponding unreflected OU process
 																const double 		decay_rate,				// (INPUT) exponential decay rate (or equilibration rate), in units 1/edge_length
 																const bool			include_tips,			// (INPUT) include states for tips in the output
 																const bool			include_nodes,			// (INPUT) include states for nodes in the output
@@ -26385,12 +26370,12 @@ Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(	const long			Ntips
 			clade = traversal_queue[q];
 			if(clade==root){
 				// set root to random state drawn from the stationary distribution
-				state = reflection_point + abs(spread*random_standard_normal());
+				state = reflection_point + abs(stationary_std*random_standard_normal());
 			}else{
 				edge 			= incoming_edge_per_clade[clade];
 				parent 			= tree_edge[edge*2+0];
 				parent_state 	= node_states[r*Nnodes + (parent-Ntips)];
-				state 			= reflection_point + abs(get_next_OU_sample(0, decay_rate, spread, (edge_length.size()==0 ? 1.0 : edge_length[edge]), parent_state-reflection_point));
+				state 			= reflection_point + abs(get_next_OU_sample(0, decay_rate, stationary_std, (edge_length.size()==0 ? 1.0 : edge_length[edge]), parent_state-reflection_point));
 			}
 			if((clade<Ntips) && include_tips) tip_states[r*Ntips + clade] = state;
 			else if(clade>=Ntips) node_states[r*Nnodes + (clade-Ntips)] = state;
@@ -26403,7 +26388,7 @@ Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(	const long			Ntips
 }
 
 
-// simulate a Brownian motion model of continuous trait evolution for a scalar continuous trait, starting from the root and moving towards the tips
+// simulate a Brownian motion model of continuous trait evolution on a tree, for a scalar continuous trait, starting from the root and moving towards the tips
 // The BM model is specified by means of its diffusivity D
 // [[Rcpp::export]]
 Rcpp::List simulate_scalar_Brownian_motion_model_CPP(	const long			Ntips,

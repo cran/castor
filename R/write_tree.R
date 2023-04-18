@@ -22,8 +22,10 @@ write_tree = function(	tree,
 										root_edge_length	= (if(is.null(tree$root.edge)) -1 else tree$root.edge),
 										quoting				= quoting);
 	if(file!=""){
-		cat(result, file=file, append=append);
+		parent_dir = dirname(file)
+		if(!file.exists(parent_dir)) dir.create(parent_dir, showWarnings = FALSE, recursive=TRUE)
+		cat(result, file=file, append=append)
 	}else{
-		return(result);
+		return(result)
 	}
 }

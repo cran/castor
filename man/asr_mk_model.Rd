@@ -118,6 +118,9 @@ Numeric, the Akaike Information Criterion for the fitted Mk model (if applicable
 \item{ancestral_likelihoods}{
 Optional, only returned if \code{include_ancestral_likelihoods} was \code{TRUE}. A 2D numeric matrix, listing the likelihood of each state at each node (marginal ancestral likelihoods). This matrix will have size Nnodes x Nstates, where Nstates was either explicitly provided as an argument, or inferred from \code{tip_states} or \code{tip_priors} (whichever was non-\code{NULL}). The rows in this matrix will be in the order in which nodes are indexed in the tree, i.e. the [n,s]-th entry will be the likelihood of the s-th state at the n-th node. For example, \code{likelihoods[1,3]} will store the likelihood of observing the tree's tip states (if \code{reroot=TRUE}) or the descending subtree's tip states (if \code{reroot=FALSE}), if the first node was in state 3. Note that likelihoods are rescaled (normalized) to sum to 1 for convenience and numerical stability. The marginal likelihoods at a node should not, however, be interpreted as a probability distribution among states.
 }
+\item{ancestral_states}{
+Integer vector of length Nnodes, listing the ancestral states with highest likelihoods. In the case of ties, the first state with maximum likelihood is chosen. This vector is computed based on \code{ancestral_likelihoods} and is only included if \code{include_ancestral_likelihoods=TRUE}.
+}
 }
 
 

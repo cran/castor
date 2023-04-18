@@ -90,5 +90,6 @@ asr_max_parsimony = function(	tree,
 	return(list(success 				= TRUE,
 				ancestral_likelihoods 	= results$posterior_probabilities,
 				scenario_counts			= matrix(results$scenario_counts, ncol=Nstates, byrow=TRUE),
+				ancestral_states		= sapply(seq_len(tree$Nnode), FUN=function(node) which.max(results$posterior_probabilities[node,])), # maximum-likelihood ancestral states
 				total_cost 				= results$best_root_cost));
 }

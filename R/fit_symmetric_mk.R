@@ -69,7 +69,7 @@ fit_symmetric_mk = function(trees, 									# either a single tree in phylo form
 		tree = multifurcations_to_bifurcations(tree)$tree
 		
 		# extract independent pairs of sister tips (independent contrasts)
-		tip_pairs = extract_independent_sister_tips(tree)
+		tip_pairs = get_independent_sister_tips(tree)
 		if(only_basal_tip_pairs){
 			# calculate number of nodes between tip pairs
 			edge_counts = get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], as_edge_counts=TRUE, check_input=FALSE)

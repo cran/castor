@@ -68,7 +68,10 @@ Ntips = 100
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=Ntips)$tree
 
 # simulate a continuous trait
-tip_states = simulate_ou_model(tree, stationary_mean=0, spread=1, decay_rate=0.001)$tip_states
+tip_states = simulate_ou_model(tree, 
+                               stationary_mean=0,
+                               stationary_std=1,
+                               decay_rate=0.001)$tip_states
 
 # print tip states
 print(tip_states)

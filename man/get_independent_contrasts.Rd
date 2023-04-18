@@ -82,7 +82,7 @@ T. Garland Jr., P. E. Midford, A. R. Ives (1999). An introduction to phylogeneti
 }
 
 \seealso{
-\code{\link{asr_independent_contrasts}}
+\code{\link{asr_independent_contrasts}}, \code{\link{get_independent_sister_tips}}
 }
 
 \examples{

@@ -64,6 +64,9 @@ Integer vector of length equal to the number of tips+nodes in the collapsed tree
 \item{new2old_edge}{
 Integer vector of length equal to the number of edges in the collapsed tree, with values in 1,..,Nedges, mapping edge indices of the collapsed tree to edge indices in the original tree.
 }
+\item{old2new_clade}{
+Integer vector of length equal to the number of tips+nodes in the original tree, mapping tip/node indices of the original tree to tip/node indices in the collapsed tree. Non-mapped tips/nodes (i.e., missing from the collapsed tree) will be represented by zeros.
+}
 }
 
 \author{Stilianos Louca}

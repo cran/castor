@@ -7,7 +7,7 @@ Simulate a reflected Ornstein-Uhlenbeck model for continuous trait evolution.
 Given a rooted phylogenetic tree and a reflected Ornstein-Uhlenbeck (ROU) model for the evolution of a continuous (numeric) trait, simulate random outcomes of the model on all nodes and/or tips of the tree. The ROU process is similar to the Ornstein-Uhlenbeck process (see \code{\link{simulate_ou_model}}), with the difference that the ROU process cannot fall below a certain value (its "reflection point"), which (in this implementation) is also its deterministic equilibrium point (Hu et al. 2015). The function traverses nodes from root to tips and randomly assigns a state to each node or tip based on its parent's previously assigned state and the specified model parameters. The generated states have joint distributions consistent with the ROU model. Optionally, multiple independent simulations can be performed using the same model.
 }
 \usage{
-simulate_rou_model(tree, reflection_point, spread, decay_rate,
+simulate_rou_model(tree, reflection_point, stationary_std, decay_rate,
                    include_tips=TRUE, include_nodes=TRUE, 
                    Nsimulations=1, drop_dims=TRUE)
 }
@@ -18,11 +18,11 @@ A rooted tree of class "phylo". The root is assumed to be the unique node with n
 \item{reflection_point}{
 Numeric. The reflection point of the ROU model. In castor, this also happens to be the deterministic equilibrium of the ROU process (i.e. if the decay rate were infinite). For example, if a trait can only be positive (but arbitrarily small), then \code{reflection_point} may be set to 0.
 }
-\item{spread}{
-Numeric. The stationary standard deviation of the corresponding unreflected OU process.
+\item{stationary_std}{
+Positive numeric. The stationary standard deviation of the corresponding unreflected OU process.
 }
 \item{decay_rate}{
-Numeric. Exponential decay rate (stabilization rate) of the ROU process (in units 1/edge_length_units).
+Positive numeric. Exponential decay rate (stabilization rate) of the ROU process (in units 1/edge_length_units).
 }
 \item{include_tips}{
 Include random states for the tips. If \code{FALSE}, no states will be returned for tips.
@@ -71,7 +71,10 @@ Y. Hu, C. Lee, M. H. Lee, J. Song (2015). Parameter estimation for reflected Orn
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=10000)$tree
 
 # simulate evolution of a continuous trait whose value is always >=1
-tip_states = simulate_rou_model(tree, reflection_point=1, spread=2, decay_rate=0.1)$tip_states
+tip_states = simulate_rou_model(tree, 
+                                reflection_point=1,
+                                stationary_std=2, 
+                                decay_rate=0.1)$tip_states
 
 # plot histogram of simulated tip states
 hist(tip_states, breaks=20, xlab="state", main="Trait probability distribution", prob=TRUE)

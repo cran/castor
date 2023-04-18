@@ -61,6 +61,9 @@ A 2D numeric matrix, listing the probability of each node being in each state. T
 \item{scenario_counts}{
 A 2D numeric matrix of size Nnodes x Nstates, listing for each node and each state the number of maximum parsimony scenarios in which the node was in the specific state. If only a single maximum parsimony scenario exists for the whole tree, then the sum of entries in each row will be one.
 }
+\item{ancestral_states}{
+Integer vector of length Nnodes, listing the ancestral states with highest likelihoods. In the case of ties, the first state with maximum likelihood is chosen. This vector is computed based on \code{ancestral_likelihoods}.
+}
 \item{total_cost}{Real number, specifying the total transition cost across the tree for the most parsimonious scenario. In the classical case where \code{transition_costs="all_equal"}, the \code{total_cost} equals the total number of state changes in the tree under the most parsimonious scenario. Under some constrained transition models (e.g., "sequential"), \code{total_cost} may sometimes be Inf, which basically means that the data violates the model.}
 }
 

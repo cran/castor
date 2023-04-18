@@ -68,6 +68,28 @@ get_paths_root_to_tips = function(tree){
 }
 
 
+# determine the parent nodes of one or more clades (tips or nodes) in a rooted tree
+# clades may be specified as integer indices or labels; in the later case, if clades incude nodes then the tree must include node labels.
+# The root's parent node does not exist, so 0 is returned in that case
+parent_nodes = function(tree, clades){
+	return(get_ancestral_nodes(tree, descendants=clades, Nsplits=1))
+	# OLD CODE
+# 	Ntips = length(tree$tip.label)
+# 	clades = map_tip_or_node_names_to_indices(tree, A=clades, type="both", list_title="clade", check_input=TRUE)
+# 	if(length(clades)==1){
+# 		# optimized code for the special case of 1 clade
+# 		edge = which(tree$edge[,2]==clades)
+# 		if(length(edge)==0) return(0)
+# 		else return(tree$edge[edge,1]-Ntips)
+# 	}else{
+# 		# general code for multiple clades
+# 		clade2parent = rep(0,Ntips+tree$Nnode)
+# 		clade2parent[tree$edge[,2]] = tree$edge[,1]-Ntips
+# 		return(clade2parent[clades])
+# 	}
+}
+
+
 
 # convert a name list (A) to a list of tip or node indices, or retain the original index list if already in integer form
 # type can be 'tip', 'node' or 'both'
@@ -961,17 +983,6 @@ evaluate_univariate_expression = function(expression, Xname="x", X){
 }
 
 
-# Split tree into pairs of sister-tips, such that the paths within distinct pairs do not overlap
-# If the input tree only contains monofurcations and bifurcations (recommended), it is guaranteed that at most one unpaired tip will be left (i.e., if Ntips was odd)
-extract_independent_sister_tips = function(tree){
-	results = extract_independent_sister_tips_CPP(	Ntips		= length(tree$tip.label),
-													Nnodes		= tree$Nnode,
-													Nedges		= nrow(tree$edge),
-													tree_edge	= as.vector(t(tree$edge))-1);
-	tip_pairs = matrix(as.integer(results$tip_pairs),ncol=2,byrow=TRUE) + 1L;
-	return(tip_pairs);
-}
-
 
 # calculate geodesic angle (aka. central angle, in radians) between two geographical locations (assuming the Earth is a sphere)
 # based on the Vincenty formula with equal major and minor axis
@@ -1826,7 +1837,7 @@ get_SBM_independent_contrasts = function(	tree,
 	}
 
 	# extract independent pairs of sister tips
-	tip_pairs = extract_independent_sister_tips(tree)
+	tip_pairs = get_independent_sister_tips(tree)
 	if(only_basal_tip_pairs){
 		# calculate number of nodes between tip pairs
 		edge_counts = get_pairwise_distances(tree, A=tip_pairs[,1], B=tip_pairs[,2], as_edge_counts=TRUE, check_input=FALSE)
@@ -2981,38 +2992,11 @@ read_distances_list = function(	file_path,
 }
 
 
-
-# compute the expected absolute displacement (jump) of a scalar (i.e., 1-dimensional) Ornstein-Uhlenbeck process after a specific time step delta, at stationarity
-# Hence, compute: E{|X(t)-X(0)|} assuming that X(0) is at stationarity, where X is the Ornstein-Uhlenbeck process
-get_mean_abs_displacement_scalar_OU = function(	stationary_mean, 		# stationary mean of the OU process, i.e., the deterministic equilibrium
-												decay_rate,				# decay rate (aka. lambda) of the OU process
-												stationary_variance,	# stationary variance of the OU process
-												delta,					# time step for the displacement
-												rel_error = 0.0001,		# relative tolerable standard estimation error (relative to the true mean abs displacement)
-												Nsamples = NULL){		# number of random samples to use for estimation. If NULL, this is determined automatically based on the desired accuracy (rel_error)
-	if(is.null(Nsamples)){
-		# start with a decent but small sample size, then increase it if needed
-		Nsamples_here = 1000
-	}else{
-		Nsamples_here = Nsamples
-	}
-	W = stationary_variance*(1 - exp(-2*decay_rate*delta)) # conditional variance of the displacements. Note that this does not depend on X(0).
-	# Method 1: Monte Carlo integration
-	# Generate many random X(0), then compute the corresponding conditional expected absolute displacements, and average those
-	X0s = rnorm(n=Nsamples_here, mean=stationary_mean, sd=sqrt(stationary_variance))
-	Ms = (stationary_mean-X0s)*(1-exp(-decay_rate*delta)) # conditional means of the displacements, i.e., conditioned on the X(0)
-	conditional_mean_abs_displacements = sqrt(2*W/pi) * exp(-(Ms**2)/(2*W)) + Ms*(1-2*pnorm(-Ms/sqrt(W)))
-	mean_abs_displacement = mean(conditional_mean_abs_displacements)
-	
-	if(is.null(Nsamples)){
-		# this was actually just a small trial to estimate the necessary sample size for the desired accuracy
-		Nsamples = min(1000000000,(sd(conditional_mean_abs_displacements)/(mean_abs_displacement*rel_error))**2)
-		# repeat estimationg using the appropriate sample size
-		if(Nsamples>Nsamples_here){
-			mean_abs_displacement = get_mean_abs_displacement_scalar_OU(stationary_mean=stationary_mean, decay_rate=decay_rate, stationary_variance=stationary_variance, delta=delta, rel_error=rel_error, Nsamples=Nsamples)
-		}
-	}
-	return(mean_abs_displacement)
+# extract a subtree with each tip label represented only once, i.e., remove tips with duplicate labels
+keep_unique_tip_labels = function(tree){
+	keep_tips = which(!duplicated(tree$tip.label))
+	return(get_subtree_with_tips(tree, only_tips=keep_tips)$subtree)
 }
+
 
 

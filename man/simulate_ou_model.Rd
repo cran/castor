@@ -7,7 +7,7 @@ Simulate an Ornstein-Uhlenbeck model for continuous trait evolution.
 Given a rooted phylogenetic tree and an Ornstein-Uhlenbeck (OU) model for the evolution of a continuous (numeric) trait, simulate random outcomes of the model on all nodes and/or tips of the tree. The function traverses nodes from root to tips and randomly assigns a state to each node or tip based on its parent's previously assigned state and the specified model parameters. The generated states have joint distributions consistent with the OU model. Optionally, multiple independent simulations can be performed using the same model.
 }
 \usage{
-simulate_ou_model(tree, stationary_mean, spread, decay_rate,
+simulate_ou_model(tree, stationary_mean, stationary_std, decay_rate,
                   include_tips=TRUE, include_nodes=TRUE, 
                   Nsimulations=1, drop_dims=TRUE)
 }
@@ -18,11 +18,11 @@ A rooted tree of class "phylo". The root is assumed to be the unique node with n
 \item{stationary_mean}{
 Numeric. The mean (center) of the stationary distribution of the OU model.
 }
-\item{spread}{
-Numeric. The standard deviation of the stationary distribution of the OU model.
+\item{stationary_std}{
+Positive numeric. The standard deviation of the stationary distribution of the OU model.
 }
 \item{decay_rate}{
-Numeric. Exponential decay rate (stabilization rate) of the OU model (in units 1/edge_length_units).
+Positive numeric. Exponential decay rate (stabilization rate) of the OU model (in units 1/edge_length_units).
 }
 \item{include_tips}{
 Include random states for the tips. If \code{FALSE}, no states will be returned for tips.
@@ -40,7 +40,7 @@ Logical, specifying whether the returned \code{tip_states} and \code{node_states
 
 
 \details{
-For each simulation, the state of the root is picked randomly from the stationary distribution of the OU model, i.e. from a normal distribution with mean = \code{stationary_mean} and standard deviation = \code{spread}.
+For each simulation, the state of the root is picked randomly from the stationary distribution of the OU model, i.e. from a normal distribution with mean = \code{stationary_mean} and standard deviation = \code{stationary_std}.
 
 If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). The asymptotic time complexity of this function is O(Nedges*Nsimulations), where Nedges is the number of edges in the tree.
 }
@@ -70,7 +70,10 @@ Either \code{NULL} (if \code{include_nodes==FALSE}), or a 2D numeric matrix of s
 tree = generate_random_tree(list(birth_rate_intercept=1),max_tips=10000)$tree
 
 # simulate evolution of a continuous trait
-tip_states = simulate_ou_model(tree, stationary_mean=10, spread=1, decay_rate=0.1)$tip_states
+tip_states = simulate_ou_model( tree, 
+                                stationary_mean = 10, 
+                                stationary_std = 1, 
+                                decay_rate = 0.1)$tip_states
 
 # plot histogram of simulated tip states
 hist(tip_states, breaks=20, xlab="state", main="Trait probability distribution", prob=TRUE)

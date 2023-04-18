@@ -36,6 +36,7 @@ collapse_tree_at_resolution = function(	tree,
 	Nclades_new		= Ntips_new+Nnodes_new
 	new2old_clade 	= results$new2old_clade + 1; # switch to 1-based indices
 	new2old_edge	= results$new2old_edge + 1;
+	old2new_clade	= results$old2new_clade + 1;
 	clade_labels	= c(tree$tip.label, tree$node.label)
 	collapsed_nodes	= results$collapsed_nodes + 1;
 	collapsed_tree = list(	Nnode 		= Nnodes_new,
@@ -44,10 +45,7 @@ collapse_tree_at_resolution = function(	tree,
 							edge 		= matrix(results$new_tree_edge,ncol=2,byrow=TRUE) + 1,
 							edge.length = (if(is.null(tree$edge.length)) NULL else (if(shorten) tree$edge.length[new2old_edge] else results$new_edge_length)),
 							root 		= results$new_root+1)
-	if(rename_collapsed_nodes){
-		old2new_clade	= results$old2new_clade + 1;
-		collapsed_tree$tip.label[old2new_clade[Ntips+results$collapsed_nodes+1]] = tree$tip.label[results$farthest_tips+1];
-	}
+	if(rename_collapsed_nodes) collapsed_tree$tip.label[old2new_clade[Ntips+results$collapsed_nodes+1]] = tree$tip.label[results$farthest_tips+1];
 	class(collapsed_tree) = "phylo";
 	attr(collapsed_tree,"order") = NULL
 
@@ -56,5 +54,6 @@ collapse_tree_at_resolution = function(	tree,
 				collapsed_nodes		= collapsed_nodes,
 				farthest_tips		= results$farthest_tips+1,
 				new2old_clade		= new2old_clade, 
-				new2old_edge		= new2old_edge))
+				new2old_edge		= new2old_edge,
+				old2new_clade		= old2new_clade))
 }

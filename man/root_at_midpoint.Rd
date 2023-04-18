@@ -8,7 +8,7 @@ Given a tree (rooted or unrooted), this function changes the direction of edges 
 }
 \usage{
 root_at_midpoint( tree, 
-                  split_edge      = FALSE,
+                  split_edge      = TRUE,
                   update_indices  = TRUE,
                   as_edge_counts  = FALSE,
                   is_rooted       = FALSE)

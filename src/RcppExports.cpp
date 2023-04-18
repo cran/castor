@@ -1279,9 +1279,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// extract_independent_sister_tips_CPP
-Rcpp::List extract_independent_sister_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge);
-RcppExport SEXP _castor_extract_independent_sister_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP) {
+// get_independent_sister_tips_CPP
+Rcpp::List get_independent_sister_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge);
+RcppExport SEXP _castor_get_independent_sister_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1289,7 +1289,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
     Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
-    rcpp_result_gen = Rcpp::wrap(extract_independent_sister_tips_CPP(Ntips, Nnodes, Nedges, tree_edge));
+    rcpp_result_gen = Rcpp::wrap(get_independent_sister_tips_CPP(Ntips, Nnodes, Nedges, tree_edge));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2249,8 +2249,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP
-Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const double reflection_point, const double spread, const double decay_rate, const bool include_tips, const bool include_nodes, const long Nsimulations);
-RcppExport SEXP _castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP reflection_pointSEXP, SEXP spreadSEXP, SEXP decay_rateSEXP, SEXP include_tipsSEXP, SEXP include_nodesSEXP, SEXP NsimulationsSEXP) {
+Rcpp::List simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const double reflection_point, const double stationary_std, const double decay_rate, const bool include_tips, const bool include_nodes, const long Nsimulations);
+RcppExport SEXP _castor_simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP reflection_pointSEXP, SEXP stationary_stdSEXP, SEXP decay_rateSEXP, SEXP include_tipsSEXP, SEXP include_nodesSEXP, SEXP NsimulationsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -2260,12 +2260,12 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
     Rcpp::traits::input_parameter< const double >::type reflection_point(reflection_pointSEXP);
-    Rcpp::traits::input_parameter< const double >::type spread(spreadSEXP);
+    Rcpp::traits::input_parameter< const double >::type stationary_std(stationary_stdSEXP);
     Rcpp::traits::input_parameter< const double >::type decay_rate(decay_rateSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_tips(include_tipsSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_nodes(include_nodesSEXP);
     Rcpp::traits::input_parameter< const long >::type Nsimulations(NsimulationsSEXP);
-    rcpp_result_gen = Rcpp::wrap(simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, spread, decay_rate, include_tips, include_nodes, Nsimulations));
+    rcpp_result_gen = Rcpp::wrap(simulate_reflected_Ornstein_Uhlenbeck_on_tree_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, reflection_point, stationary_std, decay_rate, include_tips, include_nodes, Nsimulations));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3037,7 +3037,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_merge_short_edges_CPP", (DL_FUNC) &_castor_merge_short_edges_CPP, 7},
     {"_castor_pick_random_tips_CPP", (DL_FUNC) &_castor_pick_random_tips_CPP, 7},
     {"_castor_assign_clades_to_taxa_CPP", (DL_FUNC) &_castor_assign_clades_to_taxa_CPP, 5},
-    {"_castor_extract_independent_sister_tips_CPP", (DL_FUNC) &_castor_extract_independent_sister_tips_CPP, 4},
+    {"_castor_get_independent_sister_tips_CPP", (DL_FUNC) &_castor_get_independent_sister_tips_CPP, 4},
     {"_castor_join_rooted_trees_CPP", (DL_FUNC) &_castor_join_rooted_trees_CPP, 13},
     {"_castor_congruify_trees_CPP", (DL_FUNC) &_castor_congruify_trees_CPP, 9},
     {"_castor_match_tree_nodes_CPP", (DL_FUNC) &_castor_match_tree_nodes_CPP, 6},

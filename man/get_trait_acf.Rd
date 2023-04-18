@@ -99,7 +99,7 @@ tree = generate_random_tree(list(birth_rate_factor=0.1),max_tips=1000)$tree
 # simulate continuous trait evolution on the tree
 tip_states = simulate_ou_model(tree, 
                                stationary_mean  = 0,
-                               spread           = 1,
+                               stationary_std   = 1,
                                decay_rate       = 0.01)$tip_states
 
 # calculate autocorrelation function
