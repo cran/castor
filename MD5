@@ -1,4 +1,4 @@
-39e90b94af6c71dcf2aa3d9e118bd4b3 *DESCRIPTION
+cd44c7a9a74c5759acbea085626e918e *DESCRIPTION
 20c746173ccefb8a497a45fe465d67c6 *NAMESPACE
 8b8b9c69b4fdc77ef668e274b4ab1c6b *R/RcppExports.R
 48bbb8e6675b8b36f45420f212377339 *R/asr_empirical_probabilities.R
@@ -235,7 +235,7 @@ b9b079dda8b8a4242e34056581d5afbb *man/is_monophyletic.Rd
 7f0c38ccf5e22e1f21871064fbb6b8ec *man/join_rooted_trees.Rd
 ccfe7a0d8bdd00fafcebe857d5a121fa *man/loglikelihood_hbd.Rd
 9af14b79f52f18c84edec02ab0387d72 *man/map_to_state_space.Rd
-43db9a6c5c7f9e90a39f9305b26aa13d *man/mean_abs_change_scalar_OU.Rd
+6a67fd129eef1fa6136b4f0a94cc8cb8 *man/mean_abs_change_scalar_OU.Rd
 37a4246c764d971e403eacf4d70fc9cc *man/merge_nodes_to_multifurcations.Rd
 f23b87dce36ac420b37c9eb913974a04 *man/merge_short_edges.Rd
 48697a94a9ef93ec73c261272f308849 *man/model_adequacy_hbd.Rd

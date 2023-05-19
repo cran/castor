@@ -4,7 +4,7 @@
 Compute the expected absolute change of an Ornstein-Uhlenbeck process.
 }
 \description{
-Given a scalar Ornstein-Uhlenbeck process at stationarity, compute the expected absolute net change over a specific time interval. In other words, if \eqn{X(t)} is the process at time \eqn{t}, compute \eqn{\mathbb{E}\{|X(t)-X(0)|\}} given that \eqn{X(0)} is randomly drawn from the stationary distribution. This quantity may be used as a measure for the speed at which a continuous trait evolves over time.
+Given a scalar Ornstein-Uhlenbeck process at stationarity, compute the expected absolute net change over a specific time interval. In other words, if \eqn{X(t)} is the process at time \eqn{t}, compute the conditional expectation of \eqn{|X(t)-X(0)|} given that \eqn{X(0)} is randomly drawn from the stationary distribution. This quantity may be used as a measure for the speed at which a continuous trait evolves over time.
 }
 \usage{
 mean_abs_change_scalar_OU(stationary_mean,
