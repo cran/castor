@@ -1,7 +1,7 @@
 \name{root_at_midpoint}
 \alias{root_at_midpoint}
 \title{
-Root or re-root a tree at the midpoint node.
+Root a tree at the midpoint node.
 }
 \description{
 Given a tree (rooted or unrooted), this function changes the direction of edges (\code{tree$edge}) such that the new root satisfies a "midpoint"" criterion. The number of tips and the number of nodes remain unchanged. The root can either be placed on one of the existing nodes (this node will be the one whose maximum distance to any tip is minimized) or in the middle of one of the existing edges (chosen to be in the middle of the longest path between any two tips).
@@ -32,6 +32,8 @@ Logical, specifying whether the input tree can be assumed to be rooted. If you a
 }
 
 \details{
+The midpoint rooting method performs best if the two most distant tips have been sampled at the same time (for example, at the present) and if all lineages in the tree diverged at the same evolutionary rate. If the two most distant tips are sampled at very different times, for example if one or both of them represent extinct species, then the midpoint method is not recommended.
+
 The input tree may include an arbitrary number of incoming and outgoing edges per node (but only one edge per tip), and the direction of these edges can be arbitrary. Of course, the undirected graph defined by all edges must still be a valid tree. Only set \code{is_rooted=TRUE} if you are sure that the input tree is rooted.
 
 If \code{update_indices==FALSE} and \code{split_edge=FALSE}, then node indices remain unchanged. If \code{update_indices==TRUE} (default) or \code{split_edge=TRUE}, then node indices are modified such that the new root is the first node (i.e. with index Ntips+1 in \code{edge} and with index 1 in \code{node.label}), as is common convention. Setting \code{update_indices=FALSE} (when \code{split_edge=FALSE}) reduces the computation required for rerooting. Tip indices always remain unchanged.
@@ -51,7 +53,8 @@ A tree object of class "phylo", with the \code{edge} element modified such that 
 \seealso{
 \code{\link{root_via_outgroup}},
 \code{\link{root_at_node}},
-\code{\link{root_in_edge}}
+\code{\link{root_in_edge}},
+\code{\link{root_via_rtt}}
 }
 
 \examples{
@@ -64,4 +67,4 @@ tree = root_at_midpoint(tree)
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Rerooting }
+\keyword{rooting}

@@ -1316,6 +1316,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// consensus_taxonomies_CPP
+Rcpp::List consensus_taxonomies_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<std::string>& tip_taxonomies, const std::string& delimiter);
+RcppExport SEXP _castor_consensus_taxonomies_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP tip_taxonomiesSEXP, SEXP delimiterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type tip_taxonomies(tip_taxonomiesSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
+    rcpp_result_gen = Rcpp::wrap(consensus_taxonomies_CPP(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter));
+    return rcpp_result_gen;
+END_RCPP
+}
 // congruify_trees_CPP
 Rcpp::List congruify_trees_CPP(const long RNtips, const long RNnodes, const long RNedges, const std::vector<long>& Rtree_edge, const long TNtips, const long TNnodes, const long TNedges, const std::vector<long>& Ttree_edge, const std::vector<long>& mapping);
 RcppExport SEXP _castor_congruify_trees_CPP(SEXP RNtipsSEXP, SEXP RNnodesSEXP, SEXP RNedgesSEXP, SEXP Rtree_edgeSEXP, SEXP TNtipsSEXP, SEXP TNnodesSEXP, SEXP TNedgesSEXP, SEXP Ttree_edgeSEXP, SEXP mappingSEXP) {
@@ -3039,6 +3055,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_assign_clades_to_taxa_CPP", (DL_FUNC) &_castor_assign_clades_to_taxa_CPP, 5},
     {"_castor_get_independent_sister_tips_CPP", (DL_FUNC) &_castor_get_independent_sister_tips_CPP, 4},
     {"_castor_join_rooted_trees_CPP", (DL_FUNC) &_castor_join_rooted_trees_CPP, 13},
+    {"_castor_consensus_taxonomies_CPP", (DL_FUNC) &_castor_consensus_taxonomies_CPP, 6},
     {"_castor_congruify_trees_CPP", (DL_FUNC) &_castor_congruify_trees_CPP, 9},
     {"_castor_match_tree_nodes_CPP", (DL_FUNC) &_castor_match_tree_nodes_CPP, 6},
     {"_castor_get_Robinson_Foulds_distance_CPP", (DL_FUNC) &_castor_get_Robinson_Foulds_distance_CPP, 8},

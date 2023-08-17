@@ -329,6 +329,10 @@ join_rooted_trees_CPP <- function(Ntips1, Nnodes1, Nedges1, tree_edge1, edge_len
     .Call(`_castor_join_rooted_trees_CPP`, Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2)
 }
 
+consensus_taxonomies_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter) {
+    .Call(`_castor_consensus_taxonomies_CPP`, Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter)
+}
+
 congruify_trees_CPP <- function(RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping) {
     .Call(`_castor_congruify_trees_CPP`, RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping)
 }

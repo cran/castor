@@ -1,5 +1,5 @@
-\name{mean_abs_change_scalar_OU}
-\alias{mean_abs_change_scalar_OU}
+\name{mean_abs_change_scalar_ou}
+\alias{mean_abs_change_scalar_ou}
 \title{
 Compute the expected absolute change of an Ornstein-Uhlenbeck process.
 }
@@ -7,7 +7,7 @@ Compute the expected absolute change of an Ornstein-Uhlenbeck process.
 Given a scalar Ornstein-Uhlenbeck process at stationarity, compute the expected absolute net change over a specific time interval. In other words, if \eqn{X(t)} is the process at time \eqn{t}, compute the conditional expectation of \eqn{|X(t)-X(0)|} given that \eqn{X(0)} is randomly drawn from the stationary distribution. This quantity may be used as a measure for the speed at which a continuous trait evolves over time.
 }
 \usage{
-mean_abs_change_scalar_OU(stationary_mean,
+mean_abs_change_scalar_ou(stationary_mean,
                           stationary_std,
                           decay_rate,
                           delta,
@@ -60,7 +60,7 @@ A non-negative numeric, specifying the expected absolute change of the OU proces
 
 \examples{
 # compute the expected absolute change of an OU process after 10 time units
-expected_abs_change = mean_abs_change_scalar_OU(stationary_mean=5, 
+expected_abs_change = mean_abs_change_scalar_ou(stationary_mean=5, 
                                                 stationary_std=1,
                                                 decay_rate=0.1,
                                                 delta=10)

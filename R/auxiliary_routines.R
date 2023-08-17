@@ -234,7 +234,7 @@ get_phylogram_geometry = function(tree){
 
 
 
-# assign tips & nodes of a tree to groups, such that each group is monophyletic (a "taxon") represented by exactly one of given representative tips
+# assign tips & nodes of a tree to groups, such that each group is monophyletic (a "taxon") and represented by exactly one of given representative tips
 # each representative tip is taken to represent a different taxon
 # tip2taxon[n] or node2taxon[n] will be -1 if the tip/node could not be unambiguously assigned to a taxon (e.g., it contains multiple descending representatives)
 assign_clades_to_taxa = function(tree, representative_tips){

@@ -1,7 +1,7 @@
 \name{root_at_node}
 \alias{root_at_node}
 \title{
-Root or re-root a tree at a specific node.
+Root a tree at a specific node.
 }
 \description{
 Given a tree (rooted or unrooted) and a specific node, this function changes the direction of edges (\code{tree$edge}) such that the designated node becomes the root (i.e. has no incoming edges and all other tips and nodes descend from it). The number of tips and the number of nodes remain unchanged.
@@ -42,7 +42,8 @@ A tree object of class "phylo", with the \code{edge} element modified such that 
 \seealso{
 \code{\link{root_via_outgroup}},
 \code{\link{root_at_midpoint}},
-\code{\link{root_in_edge}}
+\code{\link{root_in_edge}},
+\code{\link{root_via_rtt}}
 }
 
 \examples{
@@ -59,4 +60,4 @@ cat(sprintf("New root is \%d, expected at \%d\n",find_root(tree),new_root_node+N
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Rerooting }
+\keyword{rooting}

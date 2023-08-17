@@ -79,6 +79,7 @@ Stilianos Louca
 typedef std::complex<double> cdouble;
 typedef std::vector<double> dvector;
 typedef std::vector<long> lvector;
+typedef std::vector<std::string> svector;
 
 using namespace Rcpp;
 using namespace std;
@@ -332,23 +333,36 @@ long count_occurrences(	const std::string	&haystack,
 }
 
 
-bool extract_string_parts(	const std::string			&haystack,
-							const std::string			&delimiter,
-							const long					max_Nparts,
-							std::vector<std::string>	&parts){	// (OUTPUT) This vector will contain up to max_Nparts parts extracted from the string
+// split a string into pieces using the specified delimiter
+void split_string(	const std::string			&haystack,
+					const std::string			&delimiter,
+					const long					max_Nparts,	// (INPUT) maximum number of parts to return. If negative, this limit is ignored, i.e. all available parts are returned.
+					std::vector<std::string>	&parts){	// (OUTPUT) This vector will contain up to max_Nparts parts extracted from the string
 	long start = 0;
 	long pos;
 	parts.clear();
-	while(parts.size()<max_Nparts){
+	while((max_Nparts<0) || (parts.size()<max_Nparts)){
 		pos = haystack.find(delimiter, start);
 		if(pos==string::npos) break;
 		parts.push_back(haystack.substr(start,pos-start));
 		start = pos + delimiter.length();
 	}
-	if(parts.size()<max_Nparts){
+	if((max_Nparts<0) || (parts.size()<max_Nparts)){
 		parts.push_back(haystack.substr(start));
 	}
-	return (parts.size()==max_Nparts);
+}
+
+
+string join_strings(const svector &parts, 	// (INPUT) vector listing strings to join
+					const long first, 		// (INPUT) index of first part to include
+					const long last, 		// (INPUT) index of last part to include.
+					const std::string &delimiter){	// (INPUT) delimiter
+	if(last<first) return "";
+	string S = parts[first];
+	for(long i=first+1; i<=last; ++i){
+		S += delimiter + parts[i];
+	}
+	return S;
 }
 
 
@@ -14998,7 +15012,6 @@ Rcpp::List get_tree_with_collapsed_monofurcations_CPP(	const long 					Ntips,
 
 
 
-
 // Extract subtree with subset of tips and/or nodes
 // Requirements:
 //   tree can include multifucations and monofurcations
@@ -17289,13 +17302,13 @@ std::vector<long> pick_random_tips_CPP(	const long			Ntips,
 
 
 
-// assign tips & nodes of a tree to groups, such that each group is monophyletic (a "taxon") represented by exactly one of given representative tips
+// assign tips & nodes of a tree to groups, such that each group is monophyletic (a "taxon") and represented by exactly one of given representative tips
 // this is the "reverse" operation of picking one representative from each taxon, for a given partitioning of tips into taxa
 // The tree must be rooted; the root should be the unique node with no parent
 void assign_clades_to_taxa(	const long				Ntips,
 							const long 				Nnodes,
 							const long				Nedges,
-							const std::vector<long> 	&tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+							const std::vector<long> &tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
 							const std::vector<long>	&representatives,	// (INPUT) 1D array of size NR, each element of which is the index of a tip representing a distinct taxon
 							std::vector<long>		&clade2taxon){		// (OUTPUT) 1D array of size Nclades, mapping each tip & node of the tree to one of NR taxa. In particular, tip2taxon[representatives[r]] = r for all r=1,..,NR. Nodes with more than 1 descending representatives (and thus not part of a specific taxon) will have value -1. If NR==0, then all clades will be assigned to value -1. Also clades with ambiguous taxon assignment (as can occur due to multifurcations) will have value -1
 	const long Nclades = Ntips+Nnodes;
@@ -17372,7 +17385,7 @@ void assign_clades_to_taxa(	const long				Ntips,
 Rcpp::List assign_clades_to_taxa_CPP(	const long				Ntips,
 										const long 				Nnodes,
 										const long				Nedges,
-										const std::vector<long> 	&tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
+										const std::vector<long> &tree_edge,			// (INPUT) 2D array (in row-major format) of size Nedges x 2
 										const std::vector<long>	&representatives){	// (INPUT) 1D array of size NR, each element of which is the index of a tip representing a distinct taxon
 	std::vector<long> clade2taxon;
 	assign_clades_to_taxa(	Ntips,
@@ -17488,9 +17501,9 @@ bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of ti
 // If the input tree only contains monofurcations and bifurcations (recommended), it is guaranteed that at most one unpaired tip will be left (i.e., if Ntips was odd)
 // [[Rcpp::export]]
 Rcpp::List get_independent_sister_tips_CPP(	const long				Ntips,
-												const long 				Nnodes,
-												const long				Nedges,
-												const std::vector<long>	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+											const long 				Nnodes,
+											const long				Nedges,
+											const std::vector<long>	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
 	const long Nclades = Ntips + Nnodes;
 	
 	// determine parent clade for each clade
@@ -17685,6 +17698,77 @@ Rcpp::List join_rooted_trees_CPP(	const long					Ntips1,
 								Rcpp::Named("clade1_to_clade") 	= clade1_to_clade,
 								Rcpp::Named("clade2_to_clade") 	= clade2_to_clade);
 }
+
+
+
+
+// Given a rooted tree and taxonomies for all tips, figure out consensus taxonomies for each node in the tree
+// The consensus taxonomy of a given node is the longest possible taxonomic path (i.e., to the lowest possible level) such that the taxonomies of all descending tips are nested within that taxonomic path.
+// Some tip taxonomies may be incomplete, i.e., truncated at higher taxonomic levels. In that case, consensus taxonomy building will be conservative, i.e., no assumptions will be made about the missing taxonomic levels.
+// Examples: 
+//	If the descending tips of a node have taxonomies "A;B;C" and "A;B;C;D" and "A;B;C;E", then their consensus taxonomy is "A;B;C".
+//	If the descending tips of a node have taxonomies "A;B" and "A;B;C;D" and "A;B;C;E", then their consensus taxonomy is "A;B".
+// [[Rcpp::export]]
+Rcpp::List consensus_taxonomies_CPP(const long						Ntips,
+									const long 						Nnodes,
+									const long						Nedges,			// (INPUT) number of edges in the tree
+									const std::vector<long> 		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+									const std::vector<std::string>	&tip_taxonomies,// (INPUT) 1D array of size Ntips, each element of which is the taxonomic path of a tip
+									const std::string				&delimiter){	// (INPUT) character used to separate taxonomic levels (e.g., ";" for SILVA taxonomies)
+	// split taxonomies
+	std::vector<std::vector<std::string> > tip_taxonomies_split(Ntips);
+	for(long tip=0; tip<Ntips; ++tip){
+		split_string(tip_taxonomies[tip], delimiter, -1, tip_taxonomies_split[tip]);
+	}
+	
+	// determine parent clade for each clade
+	lvector clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// get tree traversal route (root --> tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+
+	// Step 1: calculate node consensus taxonomies while moving from tips to root, storing them as parts
+	long clade, pnode, taxref, taxlen, ptaxref, ptaxlen, new_ptaxlen;
+	lvector node2taxref(Nnodes,-1), node2taxlen(Nnodes);
+	for(long q=traversal.queue.size()-1; q>=0; --q){
+		clade = traversal.queue[q];
+		if(clade==root) continue;
+		pnode  = clade2parent[clade] - Ntips;
+		taxref = ((clade<Ntips) ? clade : node2taxref[clade-Ntips]);
+		taxlen = ((clade<Ntips) ? tip_taxonomies_split[clade].size() : node2taxlen[clade-Ntips]);
+		if(node2taxref[pnode]<0){
+			// the parent node has not yet been assigned a reference taxonomy, i.e., we are visiting this parent node for the first time, so just inherit the taxonomy of clade
+			node2taxref[pnode] = taxref;
+			node2taxlen[pnode] = taxlen;
+		}else{
+			// we have visited this parent node before, so we need to consolidate its current taxonomy with the taxonomy of clade
+			ptaxref = node2taxref[pnode];
+			ptaxlen = node2taxlen[pnode];
+			new_ptaxlen = 0;
+			while(new_ptaxlen<min(ptaxlen,taxlen)){
+				if(tip_taxonomies_split[taxref][new_ptaxlen]==tip_taxonomies_split[ptaxref][new_ptaxlen]){
+					++new_ptaxlen;
+				}else{
+					break;
+				}
+			}
+			node2taxlen[pnode] = new_ptaxlen;
+		}
+	}
+	
+	// convert split node taxonomies to strings
+	std::vector<std::string> node_taxonomies(Nnodes);
+	for(long node=0; node<Nnodes; ++node){
+		node_taxonomies[node] = join_strings(tip_taxonomies_split[node2taxref[node]], 0, node2taxlen[node]-1, delimiter);
+	}
+	
+	return Rcpp::List::create(Rcpp::Named("node_taxonomies") = node_taxonomies);
+}
+
 
 
 
@@ -32200,10 +32284,10 @@ Rcpp::List read_distances_list_CPP(	const std::string 	&file_path,
 		if((Nlines % 1000) == 0) Rcpp::checkUserInterrupt();
 		++Nlines;
 		if(line.length()==0) continue; // skip empty lines
-		extract_string_parts(line, "#", 1, parts);
+		split_string(line, "#", 1, parts);
 		line = trim_whitespace(parts[0]);
 		if(line.size()==0) continue; // this line has nothing but comments, so skip
-		extract_string_parts(line, delimiter, distances_column+1, parts);
+		split_string(line, delimiter, distances_column+1, parts);
 		if(parts.size()<=distances_column){
 			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Error on line %d: Need at least %d columns, but found only %d",Nlines,distances_column+1,parts.size()));
 		}

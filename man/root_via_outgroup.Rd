@@ -1,7 +1,7 @@
 \name{root_via_outgroup}
 \alias{root_via_outgroup}
 \title{
-Root or re-root a tree based on an outgroup tip.
+Root a tree based on an outgroup tip.
 }
 \description{
 Given a tree (rooted or unrooted) and a specific tip (``outgroup''), this function changes the direction of edges (\code{tree$edge}) such that the outgroup's parent node becomes the root. The number of tips and the number of nodes remain unchanged.
@@ -41,7 +41,8 @@ A tree object of class "phylo", with the \code{edge} element modified such that 
 \seealso{
 \code{\link{root_at_node}},
 \code{\link{root_at_midpoint}},
-\code{\link{root_in_edge}}
+\code{\link{root_in_edge}},
+\code{\link{root_via_rtt}}
 }
 
 \examples{
@@ -58,4 +59,4 @@ cat(sprintf("New root is \%d\n",find_root(tree)))
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Rerooting }
+\keyword{rooting}

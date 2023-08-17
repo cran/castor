@@ -9,7 +9,8 @@ Given a rooted tree, a focal tip and a phylogenetic (patristic) distance radius,
 \usage{
 extract_tip_radius(tree, 
                    focal_tip,
-                   radius)
+                   radius,
+                   include_subtree = TRUE)
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -21,6 +22,9 @@ Either a character, specifying the name of the focal tip, or an integer between 
 }
 \item{radius}{
 Non-negative numeric, specifying the patristic distance radius to consider around the focal tip.
+}
+\item{include_subtree}{
+Logical, whether to actually extract the subtree, rather than just returning the inferred within-radius tips.
 }
 }
 
@@ -34,11 +38,14 @@ The tree may include multi-furcations as well as mono-furcations (i.e. nodes wit
 
 \value{
 A named list with the following elements:
+\item{radius_tips}{
+Integer vector with values in 1,..,Ntips, specifying which tips were found to be within the specified radius of the focal tip.
+}
 \item{subtree}{
-A new tree of class "phylo", containing only the tips within the specified radius from the focal tip, and the nodes & edges connecting those tips to the root.
+A new tree of class "phylo", containing only the tips within the specified radius from the focal tip, and the nodes & edges connecting those tips to the root. Only returned if \code{include_subtree=TRUE}.
 }
 \item{new2old_tip}{
-Integer vector of length Ntips_extracted (=number of tips in the extracted subtree, i.e., within the specified distance radius from the focal tip) with values in 1,..,Ntips, mapping tip indices of the extracted subtree to tip indices in the original tree. In particular, \code{tree$tip.label[new2old_tip]} will be equal to \code{subtree$tip.label}.
+Integer vector of length Ntips_extracted (=number of tips in the extracted subtree, i.e., within the specified distance radius from the focal tip) with values in 1,..,Ntips, mapping tip indices of the extracted subtree to tip indices in the original tree. In particular, \code{tree$tip.label[new2old_tip]} will be equal to \code{subtree$tip.label}. Only returned if \code{include_subtree=TRUE}.
 }
 }
 

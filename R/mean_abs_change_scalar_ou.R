@@ -1,6 +1,6 @@
 # compute the expected absolute change (jump) of a scalar (i.e., 1-dimensional) Ornstein-Uhlenbeck process after a specific time step delta, at stationarity
 # Hence, compute: E{|X(t)-X(0)|} assuming that X(0) is at stationarity, where X is the Ornstein-Uhlenbeck process
-mean_abs_change_scalar_OU = function(stationary_mean, 		# stationary mean of the OU process, i.e., the deterministic equilibrium
+mean_abs_change_scalar_ou = function(stationary_mean, 		# stationary mean of the OU process, i.e., the deterministic equilibrium
 									stationary_std,			# stationary standard deviation of the OU process
 									decay_rate,				# decay rate (aka. lambda) of the OU process
 									delta,					# time step for the change
@@ -26,7 +26,7 @@ mean_abs_change_scalar_OU = function(stationary_mean, 		# stationary mean of the
 		Nsamples = min(1000000000,(sd(conditional_mean_abs_changes)/(mean_abs_change*rel_error))**2)
 		# repeat estimationg using the appropriate sample size
 		if(Nsamples>Nsamples_here){
-			mean_abs_change = mean_abs_change_scalar_OU(stationary_mean=stationary_mean, decay_rate=decay_rate, stationary_std=stationary_std, delta=delta, rel_error=rel_error, Nsamples=Nsamples)
+			mean_abs_change = mean_abs_change_scalar_ou(stationary_mean=stationary_mean, decay_rate=decay_rate, stationary_std=stationary_std, delta=delta, rel_error=rel_error, Nsamples=Nsamples)
 		}
 	}
 	return(mean_abs_change)

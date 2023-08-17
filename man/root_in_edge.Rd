@@ -1,7 +1,7 @@
 \name{root_in_edge}
 \alias{root_in_edge}
 \title{
-Root or re-root a tree in the middle of an edge.
+Root a tree in the middle of an edge.
 }
 \description{
 Given a tree (rooted or unrooted), this function places the new root on some specified edge, effectively adding one more node, one more edge and changing the direction of edges as required.
@@ -52,7 +52,8 @@ A tree object of class "phylo", representing the (re-)rooted phylogenetic tree. 
 \seealso{
 \code{\link{root_via_outgroup}},
 \code{\link{root_at_node}},
-\code{\link{root_at_midpoint}}
+\code{\link{root_at_midpoint}},
+\code{\link{root_via_rtt}}
 }
 
 \examples{
@@ -66,4 +67,4 @@ tree = root_in_edge(tree, focal_edge)
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Rerooting }
+\keyword{rooting}
