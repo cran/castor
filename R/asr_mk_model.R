@@ -54,7 +54,7 @@ asr_mk_model = function(tree,
 		if(!is.null(colnames(tip_priors))) state_names = colnames(tip_priors);
 		if(check_input){
 			if(any(tip_priors>1.0)) stop(sprintf("ERROR: Some tip_priors are larger than 1.0 (max was %g)",max(tip_priors)))
-			if((!is.null(rownames(tip_priors))) && (!is.null(tree$tip.label)) && (rownames(tip_priors)!=tree$tip.label)) stop("ERROR: Row names in tip_priors and tip labels in tree don't match")
+			if((!is.null(rownames(tip_priors))) && (!is.null(tree$tip.label)) && any(rownames(tip_priors)!=tree$tip.label)) stop("ERROR: Row names in tip_priors and tip labels in tree don't match")
 		}
 	}
 

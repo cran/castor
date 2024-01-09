@@ -1040,7 +1040,7 @@ extract_HBDS_events_from_tree = function(	tree,
 											age_epsilon = 0){
 	Ntips  	= length(tree$tip.label)
 	Nnodes 	= tree$Nnode
-	NCSA		= length(CSA_ages)
+	NCSA	= length(CSA_ages)
 	if((NCSA>=2) && (CSA_ages[1]>tail(CSA_ages,1))) return(list(success=FALSE, error="CSA_ages must be in ascending order"))
 	
 	# determine branching ages & tip ages & sampled node ages
@@ -2065,13 +2065,16 @@ fit_sbm_on_best_grid_size = function(	tree,
 }
 
 
-read_fasta = function(	file,
+# load the contents of a fasta file
+read_fasta = function(	file,						# character, path to the input fasta file. This may be gzipped (with extension .gz).
 						include_headers		= TRUE,
 						include_sequences	= TRUE,
 						truncate_headers_at	= NULL){ # optional needle string, at which to truncate headers (i.e. remove everything at and after the first instance of the needle)
-	results = read_fasta_from_file_CPP(	fasta_path			= file,
+	uncompressed_file = ensure_uncompressed(file)
+	results = read_fasta_from_file_CPP(	fasta_path			= uncompressed_file$file_path,
 										include_headers		= include_headers,
 										include_sequences	= include_sequences)
+	if(uncompressed_file$was_compressed) unlink(uncompressed_file$file_path) # delete temporary uncompressed input fasta
 	if(!results$success) return(list("success"=FALSE, error=results$error))
 	if(include_headers && (!is.null(truncate_headers_at))){
 		results$headers = sapply(seq_len(length(results$headers)), FUN=function(h){ strsplit(results$headers[h],split=truncate_headers_at,fixed=TRUE)[[1]][1] })
@@ -2999,4 +3002,171 @@ keep_unique_tip_labels = function(tree){
 }
 
 
+
+# construct a larger tree consisting of a reference tree + queries placed on nodes
+# mainly used to construct an extended tree from query placements
+place_tips_on_nodes = function(	tree,
+								placement_nodes,	# integer vector of length NP, with values in 1,..,Nnodes, specifying which node each placement is on.
+								placed_tip_labels,	# character vector of length NP, specifying the tip labels to use for the placements.
+								placement_lengths = NULL){	# optional integer vector of length NP, specifying the edge lengths for the placements, i.e. the distancen between the newly placed tips and their parent nodes. If NULL, placement lengths are either 1 (if the input tree has edge lengths) or not stored (if the input tree does not have edge lengths).
+	Ntips  	= length(tree$tip.label)
+	Nnodes 	= tree$Nnode
+	Nedges	= nrow(tree$edge)
+	NP 	 	= length(placement_nodes)
+	
+	if(NP==0) return(list(tree=tree, placed_tips=c())) # no queries to be placed
+	
+	# shift node indices in tree$edge
+	tree$edge[tree$edge>Ntips] = tree$edge[tree$edge>Ntips] + NP
+	if(!is.null(tree$root)) tree$root = tree$root + NP
+
+	# add new tips, descending directly from the placement nodes
+	tree$tip.label = c(tree$tip.label, placed_tip_labels)
+	tree$edge = rbind(tree$edge, cbind(Ntips+NP+placement_nodes,c((Ntips+1):(Ntips+NP))))
+	
+	# extend any optional data structures
+	if(!is.null(tree$edge.label)) tree$edge.label = c(tree$edge.label, rep("",NP))
+	if(!is.null(tree$node.label)) tree$node.label = c(tree$node.label, rep("",NP))
+	if((!is.null(placement_lengths)) && (!is.null(tree$edge.length))){
+		tree$edge.length = c(tree$edge.length, placement_lengths)
+	}else if(is.null(placement_lengths) && (!is.null(tree$edge.length))){
+		tree$edge.length = c(tree$edge.length, rep(1,NP))
+	}else if((!is.null(placement_lengths)) && is.null(tree$edge.length)){
+		tree$edge.length = c(rep(1,Nedges), placement_lengths)
+	}
+
+	return(list(tree		= tree, 
+				placed_tips	= c((Ntips+1):(Ntips+NP))))
+}
+
+
+# construct a larger tree consisting of a reference tree + queries placed on edges
+# mainly used to construct an extended tree from data loaded from a jplace file
+place_tips_on_edges = function(tree,
+								edges,				# integer vector of length NP, with values in 1,..,Nedges, specifying which edge each placement is on. This is field "edge_num" in the jplace file format.
+								distal_lengths,		# numeric vector of length NP, specifying the distance of each placement from the distal (child) node of the placement edge. This is field "distal_length" in the jplace file format.
+								pendant_lengths,	# numeric vector of length NP, specifying the edge length of each placement, i.e. the distance of each placed tip from its parent node. This is field "pendant_length" in the jplace file format.
+								placed_tip_labels,	# character vector of length NP, specifying the tip labels to use for the placements.
+								placed_node_labels = NULL){	# optional character vector of length NP, specifying the labels to use for the placements' parent nodes.
+	Ntips  	= length(tree$tip.label)
+	Nnodes 	= tree$Nnode
+	NP 	 	= length(edges)
+	results = tree_from_placements_CPP(	Ntips 			= Ntips,
+										Nnodes 			= Nnodes,
+										Nedges 			= nrow(tree$edge),
+										tree_edge 		= as.vector(t(tree$edge)) - 1, # flatten in row-major format and adjust clade indices to 0-based
+										edge_length		= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
+										placement_edges	= edges - 1,
+										distal_lengths	= distal_lengths,
+										pendant_lengths	= pendant_lengths)
+	new_tree = list(Nnode 		= Nnodes+NP,
+					tip.label 	= c(tree$tip.label,placed_tip_labels),
+					edge 		= matrix(as.integer(results$tree_edge),ncol=2,byrow=TRUE) + 1L,
+					edge.length = results$edge_length)
+	if((!is.null(placed_node_labels)) || (!is.null(tree$node.label))){
+		new_tree$node.label = character(new_tree$Nnode)
+		if(!is.null(tree$node.label)) new_tree$node.label[1:Nnodes] = tree$node.label
+		if(!is.null(placed_node_labels)) new_tree$node.label[(Nnodes+1):(Nnodes+NP)] = placed_node_labels
+	}
+	class(new_tree) = "phylo"
+	attr(new_tree,"order") = NULL
+	
+	return(list(tree		= new_tree,
+				placed_tips	= c((Ntips+1):(Ntips+NP))))
+}
+
+
+# load the sequence placements from a jplace file, e.g. as generated by pplacer or EPA-NG.
+# This function assumes version 3 of the jplace file format, as defined by [Matsen et al. (2012) A Format for Phylogenetic Placements. PLOS One]
+load_jplace = function(	file_path,
+						only_best_placements	= TRUE,	# only keep the best placement of each query, i.e., the placement with maximum likelihood
+						max_names_per_query		= 1){	# maximum number of sequence names to keep from each query. Placements in each query will be multiplied by the number of sequence names in the query, if max_names_per_query>1.
+	json_data 				= jsonlite::fromJSON(file_path, simplifyDataFrame=FALSE, simplifyMatrix=FALSE, simplifyVector=TRUE)
+	tree 					= read_tree(json_data$tree, look_for_edge_numbers=TRUE)
+	Nqueries				= length(json_data$placements)
+	sequence_names			= lapply(json_data$placements, FUN=function(query) if(is.null(query$nm)) query$n[seq_len(min(max_names_per_query,length(query$n)))] else query$nm[seq(1,min(2*max_names_per_query,length(query$nm)),2)])
+	edge_field				= which(json_data$fields=="edge_num")
+	distal_length_field		= which(json_data$fields=="distal_length")
+	pendant_length_field	= which(json_data$fields=="pendant_length")
+	if(only_best_placements){
+		# for every query, keep only the "best" placement, i.e. with the highest likelihood
+		likelihood_field	= which(json_data$fields=="likelihood")
+		best_placements 	= sapply(json_data$placements, FUN=function(query) which.max(sapply(query$p, FUN=function(placement) placement[likelihood_field])))
+		edges				= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][edge_field])
+		distal_lengths		= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][distal_length_field])
+		pendant_lengths		= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][pendant_length_field])
+	}else{
+		# keep all placements from each query, replicate sequence names as needed
+		Nplacements_per_query	= sapply(json_data$placements, FUN=function(query) length(query$p))
+		edges					= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[edge_field])))
+		distal_lengths			= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[distal_length_field])))
+		pendant_lengths			= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[pendant_length_field])))
+		sequence_names			= rep(sequence_names, Nplacements_per_query)
+	}
+	Nplacements 		 = length(edges)
+	Nnames_per_placement = sapply(sequence_names, FUN=function(seqnames) length(seqnames))
+
+	if(max_names_per_query>1){
+		# replicate each placement for the number of sequence names in the corresponding query
+		replication_indices = rep(seq_len(Nplacements), Nnames_per_placement)
+		edges 				= edges[replication_indices]
+		distal_lengths 		= distal_lengths[replication_indices]
+		pendant_lengths 	= pendant_lengths[replication_indices]
+	}
+	sequence_names = unlist(sequence_names)
+
+	# match placement edge indices to edge order in the tree, based on the edge numbers provided in the jplace file
+	# Originally, placement edges refer to edge numbers as defined in the jplace file. Here we convert edge numbers to edge indices matching the actual order in which edges are listed in the tree.
+	old2new_edge = integer(nrow(tree$edge))
+	old2new_edge[1+tree$edge.number] = seq_len(nrow(tree$edge))
+	edges = old2new_edge[1+edges]
+	tree$edge.number = NULL
+
+	return(list(tree			= tree,
+				Nqueries		= Nqueries,
+				sequence_names	= sequence_names,	# character vector of length NP, listing sequence names for the placements
+				edges			= edges,			# integer vector of length NP, with values in 1,..,Nedges, specifying the indices of the placement edges on the tree
+				distal_lengths	= distal_lengths,	# numeric vector of length NP, specifying the placement distances from the distal (i.e. child) nodes of the edges on which the placements are done
+				pendant_lengths	= pendant_lengths))	# numeric vector of length NP, specifying the lengths of the new edges leading into the placed sequences
+}
+
+
+get_file_extension = function(file_path, skip_gz){
+	if(skip_gz && endsWith(tolower(file_path),".gz")) file_path = substr(file_path,1,nchar(file_path)-3)
+	extension = tail(strsplit(file_path, ".", fixed=TRUE)[[1]],1)
+	return(extension)
+}
+
+
+# uncompress a file if needed, and return the path to an uncompressed version of it
+ensure_uncompressed = function(file_path, place_next_to_original=FALSE){
+	if(endsWith(tolower(file_path),".gz")){
+		if(place_next_to_original){
+			uncompressed_file_path = substr(file_path,1,nchar(file_path)-3)
+		}else{
+			uncompressed_file_path = tempfile(pattern=basename(file_path), fileext=get_file_extension(file_path, skip_gz=TRUE))
+		}
+		if(.Platform$OS.type=="windows"){
+			fin  = gzfile(file_path, "r")
+			fout = file(file_path, "w")
+			while(TRUE){
+				line = readLines(fin, n=1)
+				if(length(line)==0) break
+				writeLines(line, con=fout)
+			}
+			close(fout)
+			close(fin)
+		}else{
+			system(sprintf("gunzip -c '%s' > '%s'",file_path,uncompressed_file_path))
+		}
+		return(list(file_path=uncompressed_file_path, was_compressed=TRUE))
+	}else{
+		return(list(file_path=file_path, was_compressed=FALSE))
+	}
+}
+
+
+open_file = function(file_path, mode){
+	return (if(endsWith(tolower(file_path),".gz")) gzfile(file_path, mode) else file(file_path,mode))
+}
 

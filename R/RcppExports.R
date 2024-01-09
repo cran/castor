@@ -21,6 +21,14 @@ first_Wasserstein_distance_CPP <- function(X, Y) {
     .Call(`_castor_first_Wasserstein_distance_CPP`, X, Y)
 }
 
+find_non_zeros_int_CPP <- function(NR, NC, A, transpose = FALSE) {
+    .Call(`_castor_find_non_zeros_int_CPP`, NR, NC, A, transpose)
+}
+
+find_non_zeros_float_CPP <- function(NR, NC, A, transpose = FALSE) {
+    .Call(`_castor_find_non_zeros_float_CPP`, NR, NC, A, transpose)
+}
+
 split_undirected_graph_CPP <- function(Nnodes, Nedges, edges) {
     .Call(`_castor_split_undirected_graph_CPP`, Nnodes, Nedges, edges)
 }
@@ -331,6 +339,14 @@ join_rooted_trees_CPP <- function(Ntips1, Nnodes1, Nedges1, tree_edge1, edge_len
 
 consensus_taxonomies_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter) {
     .Call(`_castor_consensus_taxonomies_CPP`, Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter)
+}
+
+place_tips_taxonomically_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, clade_taxonomies, query_taxonomies, tree_taxon_delimiter, query_taxon_delimiter, allow_placement_at_tips) {
+    .Call(`_castor_place_tips_taxonomically_CPP`, Ntips, Nnodes, Nedges, tree_edge, clade_taxonomies, query_taxonomies, tree_taxon_delimiter, query_taxon_delimiter, allow_placement_at_tips)
+}
+
+tree_from_placements_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, placement_edges, distal_lengths, pendant_lengths) {
+    .Call(`_castor_tree_from_placements_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, placement_edges, distal_lengths, pendant_lengths)
 }
 
 congruify_trees_CPP <- function(RNtips, RNnodes, RNedges, Rtree_edge, TNtips, TNnodes, TNedges, Ttree_edge, mapping) {

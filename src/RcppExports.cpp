@@ -74,6 +74,34 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// find_non_zeros_int_CPP
+Rcpp::List find_non_zeros_int_CPP(long NR, long NC, const IntegerMatrix& A, bool transpose);
+RcppExport SEXP _castor_find_non_zeros_int_CPP(SEXP NRSEXP, SEXP NCSEXP, SEXP ASEXP, SEXP transposeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< long >::type NR(NRSEXP);
+    Rcpp::traits::input_parameter< long >::type NC(NCSEXP);
+    Rcpp::traits::input_parameter< const IntegerMatrix& >::type A(ASEXP);
+    Rcpp::traits::input_parameter< bool >::type transpose(transposeSEXP);
+    rcpp_result_gen = Rcpp::wrap(find_non_zeros_int_CPP(NR, NC, A, transpose));
+    return rcpp_result_gen;
+END_RCPP
+}
+// find_non_zeros_float_CPP
+Rcpp::List find_non_zeros_float_CPP(long NR, long NC, const NumericMatrix& A, bool transpose);
+RcppExport SEXP _castor_find_non_zeros_float_CPP(SEXP NRSEXP, SEXP NCSEXP, SEXP ASEXP, SEXP transposeSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< long >::type NR(NRSEXP);
+    Rcpp::traits::input_parameter< long >::type NC(NCSEXP);
+    Rcpp::traits::input_parameter< const NumericMatrix& >::type A(ASEXP);
+    Rcpp::traits::input_parameter< bool >::type transpose(transposeSEXP);
+    rcpp_result_gen = Rcpp::wrap(find_non_zeros_float_CPP(NR, NC, A, transpose));
+    return rcpp_result_gen;
+END_RCPP
+}
 // split_undirected_graph_CPP
 Rcpp::List split_undirected_graph_CPP(const long Nnodes, const long Nedges, const std::vector<long>& edges);
 RcppExport SEXP _castor_split_undirected_graph_CPP(SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP edgesSEXP) {
@@ -1329,6 +1357,43 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<std::string>& >::type tip_taxonomies(tip_taxonomiesSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
     rcpp_result_gen = Rcpp::wrap(consensus_taxonomies_CPP(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// place_tips_taxonomically_CPP
+Rcpp::List place_tips_taxonomically_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<std::string>& clade_taxonomies, const std::vector<std::string>& query_taxonomies, const std::string& tree_taxon_delimiter, const std::string& query_taxon_delimiter, const bool allow_placement_at_tips);
+RcppExport SEXP _castor_place_tips_taxonomically_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP clade_taxonomiesSEXP, SEXP query_taxonomiesSEXP, SEXP tree_taxon_delimiterSEXP, SEXP query_taxon_delimiterSEXP, SEXP allow_placement_at_tipsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type clade_taxonomies(clade_taxonomiesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type query_taxonomies(query_taxonomiesSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type tree_taxon_delimiter(tree_taxon_delimiterSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type query_taxon_delimiter(query_taxon_delimiterSEXP);
+    Rcpp::traits::input_parameter< const bool >::type allow_placement_at_tips(allow_placement_at_tipsSEXP);
+    rcpp_result_gen = Rcpp::wrap(place_tips_taxonomically_CPP(Ntips, Nnodes, Nedges, tree_edge, clade_taxonomies, query_taxonomies, tree_taxon_delimiter, query_taxon_delimiter, allow_placement_at_tips));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tree_from_placements_CPP
+Rcpp::List tree_from_placements_CPP(const long Ntips, const long Nnodes, const long Nedges, std::vector<long> tree_edge, std::vector<double> edge_length, const std::vector<long>& placement_edges, const std::vector<double>& distal_lengths, const std::vector<double>& pendant_lengths);
+RcppExport SEXP _castor_tree_from_placements_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP placement_edgesSEXP, SEXP distal_lengthsSEXP, SEXP pendant_lengthsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< std::vector<long> >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< std::vector<double> >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type placement_edges(placement_edgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type distal_lengths(distal_lengthsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type pendant_lengths(pendant_lengthsSEXP);
+    rcpp_result_gen = Rcpp::wrap(tree_from_placements_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, placement_edges, distal_lengths, pendant_lengths));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -2978,6 +3043,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_member_lists_from_group_assignments_CPP", (DL_FUNC) &_castor_get_member_lists_from_group_assignments_CPP, 2},
     {"_castor_place_sorted_values_into_bins_CPP", (DL_FUNC) &_castor_place_sorted_values_into_bins_CPP, 3},
     {"_castor_first_Wasserstein_distance_CPP", (DL_FUNC) &_castor_first_Wasserstein_distance_CPP, 2},
+    {"_castor_find_non_zeros_int_CPP", (DL_FUNC) &_castor_find_non_zeros_int_CPP, 4},
+    {"_castor_find_non_zeros_float_CPP", (DL_FUNC) &_castor_find_non_zeros_float_CPP, 4},
     {"_castor_split_undirected_graph_CPP", (DL_FUNC) &_castor_split_undirected_graph_CPP, 3},
     {"_castor_evaluate_spline_CPP", (DL_FUNC) &_castor_evaluate_spline_CPP, 6},
     {"_castor_get_spline_CPP", (DL_FUNC) &_castor_get_spline_CPP, 3},
@@ -3056,6 +3123,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_independent_sister_tips_CPP", (DL_FUNC) &_castor_get_independent_sister_tips_CPP, 4},
     {"_castor_join_rooted_trees_CPP", (DL_FUNC) &_castor_join_rooted_trees_CPP, 13},
     {"_castor_consensus_taxonomies_CPP", (DL_FUNC) &_castor_consensus_taxonomies_CPP, 6},
+    {"_castor_place_tips_taxonomically_CPP", (DL_FUNC) &_castor_place_tips_taxonomically_CPP, 9},
+    {"_castor_tree_from_placements_CPP", (DL_FUNC) &_castor_tree_from_placements_CPP, 8},
     {"_castor_congruify_trees_CPP", (DL_FUNC) &_castor_congruify_trees_CPP, 9},
     {"_castor_match_tree_nodes_CPP", (DL_FUNC) &_castor_match_tree_nodes_CPP, 6},
     {"_castor_get_Robinson_Foulds_distance_CPP", (DL_FUNC) &_castor_get_Robinson_Foulds_distance_CPP, 8},

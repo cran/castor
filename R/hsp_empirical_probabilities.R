@@ -54,10 +54,13 @@ hsp_empirical_probabilities = function(	tree,
 														tree_edge			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
 														attributes_known	= likelihoods_known,
 														attributes			= as.vector(t(likelihoods))); # flatten in row-major format	
-	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
-	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
+	likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE) # unflatten returned table
+	colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods)
+	states = sapply(seq_len(Ntips+Nnodes), FUN=function(n) which.max(likelihoods[n,])) # maximum-likelihood tip & node states
 		
-	return(list(likelihoods=likelihoods, success=TRUE))
+	return(list(success 	= TRUE,
+				likelihoods	= likelihoods,
+				states		= states))
 }
 
 

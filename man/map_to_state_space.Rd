@@ -8,20 +8,17 @@ Given a list of states (e.g., for each tip in a tree), map the unique states to 
 }
 \usage{
 map_to_state_space(raw_states, fill_gaps=FALSE, 
-                   sort_order="natural", include_state_values=FALSE)
+                   sort_order="natural")
 }
 \arguments{
 \item{raw_states}{
-A vector of values (states), each of which can be converted to a different character. This list can include the same value multiple times, for example if values represent the trait's states for tips in a tree.
+A vector of values (states), each of which can be converted to a character. This vector can include the same value multiple times, for example if values represent the trait's states for tips in a tree. The vector may also include \code{NA}, for example if they represent unknown states for some tree tips. NAs are omitted from the state space.
 }
 \item{fill_gaps}{
 Logical. If \code{TRUE}, then states are converted to integers using \code{as.integer(as.character())}, and then all missing intermediate integer values are included as additional possible states. For example, if \code{raw_states} contained the values 2,4,6, then 3 and 5 are assumed to also be possible states.
 }
 \item{sort_order}{
 Character, specifying the order in which raw_states should be mapped to ascending integers. Either "natural" or "alphabetical". If "natural", numerical parts of characters are sorted numerically, e.g. as in "3"<"a2"<"a12"<"b1".
-}
-\item{include_state_values}{
-Logical, specifying whether to also return a numerical version of the unique states. For example, the states "3","a2","4.5" will be mapped to the numeric values 3, NA, 4.5.
 }
 }
 
@@ -35,13 +32,14 @@ A list with the following elements:
 Integer. Number of possible states for the trait, based on the unique values encountered in \code{raw_states} (after conversion to characters). This may be larger than the number of unique values in \code{raw_states}, if \code{fill_gaps} was set to \code{TRUE}.
 }
 \item{state_names}{
-Character vector of size Nstates, storing the original name (character version) of each state. For example, if \code{raw_states} was \code{c("b1","3","a12","a2","b1","a2")} and \code{sort_order=="natural"}, then \code{Nstates} will be 4 and \code{state_names} will be \code{c("3","a2","a12","b1")}.
+Character vector of size Nstates, storing the original name (character version) of each unique state. For example, if \code{raw_states} was \code{c("b1","3","a12","a2","b1","a2", NA)} and \code{sort_order=="natural"}, then \code{Nstates} will be 4 and \code{state_names} will be \code{c("3","a2","a12","b1")}.
 }
 \item{state_values}{
-Optional, only included if \code{include_state_values==TRUE}. A numeric vector of size \code{Nstates}, providing the numerical value for each unique state.
+A numeric vector of size \code{Nstates}, providing the numerical value for each unique state. For example, the states "3","a2","4.5" will be mapped to the numeric values 3, NA, 4.5. Note that this may not always be meaningful, depending on the biological interpretation of the states.
+
 }
 \item{mapped_states}{
-Integer vector of size equal to \code{length(raw_states)}, listing the integer representation of each value in \code{raw_states}.
+Integer vector of size equal to \code{length(raw_states)}, listing the integer representation of each value in \code{raw_states}. May also include \code{NA}, at those locations where \code{raw_states} was \code{NA}.
 }
 \item{name2index}{
 An integer vector of size Nstates, with \code{names(name2index)} set to \code{state_names}. This vector can be used to map any new list of states (in character format) to their integer representation. In particular, \code{name2index[as.character(raw_states)]} is equal to \code{mapped_states}.

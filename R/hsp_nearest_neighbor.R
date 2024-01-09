@@ -13,7 +13,7 @@ hsp_nearest_neighbor = function(tree,
 	
 	# find known & unknown tips and calculate nearest distances between them
 	known_tips = which(!is.na(tip_states));
-	if(length(known_tips)==0) stop("ERROR: All tip states are hidden");
+	if(length(known_tips)==0) return(list(success=FALSE, error="ERROR: All tip states are hidden"))
 	unknown_tips = which(is.na(tip_states));
 	if(length(unknown_tips)==0){
 		nearest_distances	= rep(0, times=Ntips)

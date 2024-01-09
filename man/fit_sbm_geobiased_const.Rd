@@ -262,3 +262,5 @@ if(!fit$success){
 \keyword{random}
 \keyword{fitting}
 \keyword{simulation}
+\keyword{phylogeography}
+\keyword{dispersal}

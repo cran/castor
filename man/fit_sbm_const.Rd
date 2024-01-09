@@ -194,3 +194,5 @@ cat(sprintf('True D=\%g, fitted D=\%g\\n',D,fit$diffusivity))
 \keyword{random}
 \keyword{fitting}
 \keyword{simulation}
+\keyword{phylogeography}
+\keyword{dispersal}

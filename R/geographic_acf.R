@@ -86,28 +86,28 @@ geographic_acf = function(	trees,
 		}
 	}
 
-	# calculate ACF for each tree on the same phylodistance tree, and average all ACFs
+	# calculate ACF for each tree on the same phylodistance grid, and average all ACFs
 	mean_autocorrelations 	= numeric(Nbins)
-	SS_autocorrelations 	= numeric(Nbins) # sum of squared autocorrelations per phylodistance bin
+	SS_autocorrelations 	= numeric(Nbins) # sum of squared autocorrelations per phylodistance bin. Used to compute the standard deviations of autocorrelations across trees.
 	mean_geodistances		= numeric(Nbins)
 	SS_geodistances			= numeric(Nbins)
 	Npairs_per_distance		= integer(Nbins)
 	max_encountered_phylodistance = 0
 	for(tr in seq_len(Ntrees)){	
 		tree = trees[[tr]]
-		results = ACF_spherical_CPP(	Ntips 				= length(tree$tip.label),
-										Nnodes 				= tree$Nnode,
-										Nedges 				= nrow(tree$edge),
-										tree_edge			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
-										edge_length		 	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
-										tip_latitudes 		= tip_latitudes[[tr]],
-										tip_longitudes 		= tip_longitudes[[tr]],
-										max_Npairs			= Npairs,
-										phylodistance_grid	= phylodistance_grid,
-										max_phylodistance	= max_phylodistance,
-										grid_is_uniform		= grid_is_uniform,
-										verbose 			= FALSE,
-										verbose_prefix 		= "")
+		results = ACF_spherical_CPP(Ntips 				= length(tree$tip.label),
+									Nnodes 				= tree$Nnode,
+									Nedges 				= nrow(tree$edge),
+									tree_edge			= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+									edge_length		 	= (if(is.null(tree$edge.length)) numeric() else tree$edge.length),
+									tip_latitudes 		= tip_latitudes[[tr]],
+									tip_longitudes 		= tip_longitudes[[tr]],
+									max_Npairs			= Npairs,
+									phylodistance_grid	= phylodistance_grid,
+									max_phylodistance	= max_phylodistance,
+									grid_is_uniform		= grid_is_uniform,
+									verbose 			= FALSE,
+									verbose_prefix 		= "")
 		valid_bins = which(is.finite(results$mean_autocorrelations))
 		max_encountered_phylodistance		= max(max_encountered_phylodistance, results$max_encountered_phylodistance)
 		mean_autocorrelations[valid_bins] 	= mean_autocorrelations[valid_bins] + results$mean_autocorrelations[valid_bins] * results$N_per_grid_point[valid_bins]

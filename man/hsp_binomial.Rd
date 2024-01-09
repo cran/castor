@@ -67,6 +67,9 @@ Numeric vector of length Ntips+Nnodes, listing the estimated probability of bein
 \item{STE}{
 Numeric vector of length Ntips+Nnodes, listing the standard error of the estimated P1 at each tip and node, according to the Observed Fisher Information Criterion. Note that the latter strictly speaking only provides a lower bound on the standard error.
 }
+\item{states}{
+Integer vector of length Ntips+Nnodes, with values in \{1,2\}, listing the maximum-likelihood estimate of the state in each tip & node.
+}
 \item{reveal_counts}{
 Integer vector of length Ntips+Nnodes, listing the number of tips with non-hidden state descending from each tip and node.
 }

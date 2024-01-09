@@ -150,7 +150,7 @@ fit_musse = function(	tree,
 		if(check_input){
 			max_tip_prior = max(tip_priors[known_priors,])
 			if(max_tip_prior>1.0) stop(sprintf("ERROR: Some tip_priors are larger than 1.0 (max was %g)",max_tip_prior))
-			if((!is.null(rownames(tip_priors))) && (!is.null(tree$tip.label)) && (rownames(tip_priors)!=tree$tip.label)) stop("ERROR: Row names in tip_priors and tip labels in tree don't match")
+			if((!is.null(rownames(tip_priors))) && (!is.null(tree$tip.label)) && any(rownames(tip_priors)!=tree$tip.label)) stop("ERROR: Row names in tip_priors and tip labels in tree don't match")
 		}
 		Nknown_priors  = length(known_priors)
 		unknown_priors = get_complement(Ntips, known_priors)

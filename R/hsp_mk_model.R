@@ -19,9 +19,9 @@ hsp_mk_model = function(tree,
 						store_exponentials 		= TRUE,
 						check_input 			= TRUE,				# (bool) perform some basic sanity checks on the input data. Set this to FALSE if you're certain your input data is valid.
 						Nthreads 				= 1){				# (integer) number of threads for running multiple fitting trials in parallel
-    Ntips 			= length(tree$tip.label);
-    Nnodes 			= tree$Nnode;
-    Nedges 			= nrow(tree$edge);
+    Ntips	= length(tree$tip.label)
+    Nnodes 	= tree$Nnode
+    Nedges 	= nrow(tree$edge)
 	
 	# basic error checking
 	if((!is.null(tip_states)) && (!is.null(tip_priors))) stop("ERROR: tip_states and tip_priors are both non-NULL, but exactly one of them should be NULL")
@@ -40,7 +40,8 @@ hsp_mk_model = function(tree,
 	}else{
 		known_tips = which(rowSums(is.na(tip_priors))==0);
 	}
-	if(length(known_tips)==0) stop("ERROR: All tip states are hidden");
+	if(length(known_tips)==0) return(list(success=FALSE, error="All tip states are hidden"))
+	else if(length(known_tips)==1) return(list(success=FALSE, error="Only one tip has known state, which is insufficient for Mk HSP"))
 	unknown_tips = get_complement(Ntips, known_tips)
 	
 	if(has_reveal_fractions){
@@ -73,7 +74,7 @@ hsp_mk_model = function(tree,
 									optim_rel_tol			= optim_rel_tol,
 									store_exponentials 		= store_exponentials,
 									check_input 			= check_input,
-									Nthreads				= Nthreads);
+									Nthreads				= Nthreads)
 		Nstates 			= asr_results$Nstates
 		loglikelihood 		= asr_results$loglikelihood
 		transition_matrix 	= asr_results$transition_matrix
@@ -122,7 +123,7 @@ hsp_mk_model = function(tree,
 		known_subtree		= extraction$subtree;
 		known2all_tips		= extraction$new2old_tip;
 		known2all_nodes		= extraction$new2old_node;
-		if(length(known_subtree$tip.label)==0) stop("ERROR: Subtree with known tip-states is empty")
+		if(length(known_subtree$tip.label)==0) return(list(success=FALSE, error="ERROR: Subtree with known tip-states is empty"))
 		if(!is.null(tip_states)){
 			known_tip_states	= tip_states[known2all_tips]
 			known_tip_priors	= NULL
@@ -181,9 +182,11 @@ hsp_mk_model = function(tree,
 																				likelihoods				= as.vector(t(likelihoods)), # flatten in row-major format	
 																				unknown_likelihoods_as_priors = FALSE);
 			likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
-			colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
+			colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods)
+			states = sapply(seq_len(Ntips+Nnodes), FUN=function(n) which.max(likelihoods[n,]))
 		}else{
 			likelihoods = NULL
+			states = NULL
 		}
 	}
 		
@@ -191,5 +194,6 @@ hsp_mk_model = function(tree,
 				Nstates				= Nstates,
 				transition_matrix	= transition_matrix, 
 				loglikelihood 		= loglikelihood, 
-				likelihoods			= likelihoods));
+				likelihoods			= likelihoods,
+				states				= states)) # maximum-likelihood tip & node states
 }

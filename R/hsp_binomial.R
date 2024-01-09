@@ -108,7 +108,8 @@ hsp_binomial = function(tree,
 		
 	return(list(success			= TRUE, 
 				P1				= P1s,
-				STE				= STEs, 
+				STE				= STEs,
+				states			= 1+(P1s<=0.5), # maximum-likelihood tip states
 				reveal_counts	= asr_results$reveal_counts,
 				inheritted		= inheritted))
 }

@@ -107,6 +107,9 @@ Log-likelihood of the Markov model. If \code{transition_matrix} was \code{NULL} 
 \item{likelihoods}{
 A 2D numeric matrix, listing the probability of each tip and node being in each state. Only included if \code{include_likelihoods} was \code{TRUE}. This matrix will have (Ntips+Nnodes) rows and Nstates columns, where Nstates was either explicitly provided as an argument, or inferred from \code{tip_states} or \code{tip_priors} (whichever was non-\code{NULL}). The rows in this matrix will be in the order in which tips and nodes are indexed in the tree, i.e. rows 1,..,Ntips store the probabilities for tips, while rows (Ntips+1),..,(Ntips+Nnodes) store the probabilities for nodes. For example, \code{likelihoods[1,3]} will store the probability that tip 1 is in state 3. Each row in this matrix will sum up to 1. Note that for tips with known state or fully provided prior, the likelihoods will be unchanged, i.e. these are not the posteriors in a Bayesian sense.
 }
+\item{states}{
+Integer vector of length Ntips+Nnodes, with values in \{1,..,Nstates\}, specifying the maximum-likelihood estimate of the state of each tip & node. Only included if \code{include_likelihoods} was \code{TRUE}.
+}
 }
 
 

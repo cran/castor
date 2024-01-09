@@ -98,6 +98,7 @@ Integer vector of size Nbins, storing the number of random tip pairs associated 
 %}
 
 \seealso{
+\code{\link{correlate_phylo_geodistances}},
 \code{\link{consentrait_depth}}, 
 \code{\link{get_trait_acf}}
 }
@@ -123,4 +124,5 @@ plot(ACF$phylodistances, ACF$autocorrelations, type="l", xlab="distance", ylab="
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-\keyword{trait evolution}
+\keyword{phylogeography}
+\keyword{dispersal}

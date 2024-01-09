@@ -1,6 +1,6 @@
 # Read tree from a Newick-formatted string or file
-read_tree = function(	string="",
-						file="",
+read_tree = function(	string					= "", # optional character, encoding a single tree in Newick format
+						file					= "", # optional path to a Newick tree file, which may be gzipped.
 						edge_order				= "cladewise", # how to order edges. Options are "cladewise" (i.e. depth-first-search) or "pruningwise" (i.e. iterating through edge[] leads a post-order traversal) or "none" (unspecified, i.e. depending on how the tree was written in the file)
 						include_edge_lengths 	= TRUE, 
 						look_for_edge_labels 	= FALSE, 

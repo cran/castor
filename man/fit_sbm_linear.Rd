@@ -273,3 +273,5 @@ print(fit$diffusivities)
 \keyword{random}
 \keyword{fitting}
 \keyword{simulation}
+\keyword{phylogeography}
+\keyword{dispersal}

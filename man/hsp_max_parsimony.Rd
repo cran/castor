@@ -59,6 +59,9 @@ Logical, indicating whether HSP was successful. If \code{FALSE}, some return val
 \item{likelihoods}{
 A 2D numeric matrix, listing the probability of each tip and node being in each state. This matrix will have (Ntips+Nnodes) rows and Nstates columns, where Nstates was either explicitly provided as an argument or inferred based on the number of unique values in \code{tip_states} (if \code{Nstates} was passed as NULL). In the latter case, the column names of this matrix will be the unique values found in \code{tip_states}. The rows in this matrix will be in the order in which tips and nodes are indexed in the tree, i.e. the rows 1,..,Ntips store the probabilities for tips, while rows (Ntips+1),..,(Ntips+Nnodes) store the probabilities for nodes. Each row in this matrix will sum up to 1. Note that the return value is named this way for compatibility with other HSP functions.
 }
+\item{states}{
+Integer vector of length Ntips+Nnodes, with values in \{1,..,Nstates\}, specifying the maximum-likelihood estimate of the state of each tip & node.
+}
 }
 
 

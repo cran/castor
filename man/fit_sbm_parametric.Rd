@@ -319,3 +319,5 @@ print(fit$param_fitted)
 \keyword{random}
 \keyword{fitting}
 \keyword{simulation}
+\keyword{phylogeography}
+\keyword{dispersal}

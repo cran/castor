@@ -295,3 +295,5 @@ lines(x     = fit$time_grid,
 \keyword{random}
 \keyword{fitting}
 \keyword{simulation}
+\keyword{phylogeography}
+\keyword{dispersal}

@@ -43,9 +43,9 @@ A character vector of length Nnodes, listing the inferred consensus taxonomies f
 %\references{
 %}
 
-%\seealso{
-%\code{\link{find_nearest_tips}}
-%}
+\seealso{
+\code{\link{place_tips_taxonomically}}
+}
 
 \examples{
 # generate a random tree
@@ -62,4 +62,4 @@ tree$node.label = castor::consensus_taxonomies(tree,
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-%\keyword{ Pruning }
+\keyword{taxonomy}

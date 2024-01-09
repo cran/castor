@@ -150,9 +150,18 @@ typedef enum {
 
 
 
-// ****************************************************** //
-// BASIC AUXILIARY FUNCTIONS
+#pragma mark -
+#pragma mark Declarations
+#pragma mark
 
+
+long most_recent_common_ancestor(const long 			Ntips,
+								const long 				Nnodes,
+								const long 				Nedges,
+								const long				root,
+								const std::vector<long> &clade2parent,
+								const std::vector<long> &tree_edge,
+								const std::vector<long> &descendants);
 
 
 #pragma mark -
@@ -188,8 +197,12 @@ void print_as_python_matrix(const long NR, const long NC, const ARRAY_TYPE &A){
 	Rcout << "]\n";
 }
 
+// print a 2D array stored in row-major format
+// One of NR or NC may be negative, in which case it is automatically inferred from the remaining information
 template<class ARRAY_TYPE>
-void print_as_matrix(const long NR, const long NC, const ARRAY_TYPE &A, const int Ndigits=6){
+void print_as_matrix(long NR, long NC, const ARRAY_TYPE &A, const int Ndigits=6){
+	if(NR<0) NR = long(A.size()/NC);
+	else if(NC<0) NC = long(A.size()/NR);
 	for(long r=0; r<NR; ++r){
 		for(long c=0; c<NC; ++c){
 			Rcout << std::setprecision(Ndigits) << (c>0 ? ", " : "") << A[r*NC+c];
@@ -881,6 +894,22 @@ inline long count_values_below_threshold(const ARRAY_TYPE &values, double thresh
 }
 
 
+// determine whether a putative child taxon descends from a parent taxon (or is equal to the taxon), based on their taxonomic paths
+// the function returns 1 if true, 0 if false, or -1 if unknown
+// For example, "A;B;C;D" descends from "A;B;C", does not descend from "A;B;E", and it is unknown whether it descends from "A;B;C;D;G"
+inline int taxon_descends(const std::vector<std::string> &parent_taxonomy,	// (INPUT) full taxonomic path of the putative parent
+						  const std::vector<std::string> &child_taxonomy){	// (INPUT) full taxonomic path of the putative descendant
+	for(long level=0; level<min(parent_taxonomy.size(),	child_taxonomy.size()); ++level){
+		if(parent_taxonomy[level]!=child_taxonomy[level]) return 0; // surely does not descend
+	}
+	if(parent_taxonomy.size()>child_taxonomy.size()){
+		return -1; // unknown relationship
+	}else{
+		return 1; // surely descends or is equal
+	}
+}
+
+
 // remove an item from a vector, by replacing it with the last item in the list and then removing the last item
 // if the order of items in the vector do not matter, then this is more efficient than removing an item from within a vector
 // index is assumed to be a valid location in the vector
@@ -1295,6 +1324,91 @@ double first_Wasserstein_distance_CPP(	const std::vector<double> &X, 	// 1D nume
 	return(W);
 }
 
+
+// Find non-zero elements in a dense integer matrix.
+// This function may be useful for large matrixes, since vanilla R can't handle large matrices/vectors.
+// Returned non-zero entries will be listed in ascending row order, in other words non-zeros are detected in row-major format.
+// [[Rcpp::export]]
+Rcpp::List find_non_zeros_int_CPP(	long NR,					// (INPUT) number of rows in the matrix
+									long NC,					// (INPUT) number of columns in the matrix
+									const IntegerMatrix &A,		// (INPUT) 2D array of size NR x NC
+									bool transpose = false){	// (INPUT) whether to consider the transpose of A instead of A. This can be used to effectively pass t(A), without allocating additional memory to actually create t(A). Note that the input NR and NC still refer to the original A, but the output $rows and $columns refer to t(A)
+	// count non-zeros
+	long NNZ = 0;
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			NNZ += (A(r,c)!=0 ? 1 : 0);
+		}
+	}
+	if(transpose){
+		// swap NR & NC so that they refer to the rows & columns of the transposed A
+		long temp = NR; NR = NC; NC = temp;
+	}
+	// allocate storage space for results
+	lvector non_zero_rows(NNZ);
+	lvector non_zero_cols(NNZ);
+	lvector non_zero_vals(NNZ);
+	//extract non-zeros
+	long next_nz = 0;
+	long value;
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			value = (transpose ? A(c,r) : A(r,c));
+			if(value!=0){
+				non_zero_rows[next_nz] = r;
+				non_zero_cols[next_nz] = c;
+				non_zero_vals[next_nz] = value;
+				next_nz += 1;
+			}
+		}
+	}
+	return Rcpp::List::create(	Rcpp::Named("rows")		= non_zero_rows,
+								Rcpp::Named("columns")	= non_zero_cols,
+								Rcpp::Named("values")	= non_zero_vals);
+}
+
+
+// Find non-zero elements in a dense floating-point matrix.
+// This function may be useful for large matrixes, since vanilla R can't handle large matrices/vectors.
+// Returned non-zero entries will be listed in ascending row order, in other words non-zeros are detected in row-major format.
+// [[Rcpp::export]]
+Rcpp::List find_non_zeros_float_CPP(long NR,					// (INPUT) number of rows in the matrix
+									long NC,					// (INPUT) number of columns in the matrix
+									const NumericMatrix &A,		// (INPUT) 2D array of size NR x NC
+									bool transpose = false){	// (INPUT) whether to consider the transpose of A instead of A. This can be used to effectively pass t(A), without allocating additional memory to actually create t(A). Note that the input NR and NC still refer to the original A, but the output $rows and $columns refer to t(A)
+	// count non-zeros
+	long NNZ = 0;
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			NNZ += (A(r,c)!=0 ? 1 : 0);
+		}
+	}
+	if(transpose){
+		// swap NR & NC so that they refer to the rows & columns of the transposed A
+		long temp = NR; NR = NC; NC = temp;
+	}
+	// allocate storage space for results
+	lvector non_zero_rows(NNZ);
+	lvector non_zero_cols(NNZ);
+	dvector non_zero_vals(NNZ);
+	//extract non-zeros
+	long next_nz = 0;
+	double value;
+	for(long r=0; r<NR; ++r){
+		for(long c=0; c<NC; ++c){
+			value = (transpose ? A(c,r) : A(r,c));
+			if(value!=0){
+				non_zero_rows[next_nz] = r;
+				non_zero_cols[next_nz] = c;
+				non_zero_vals[next_nz] = value;
+				next_nz += 1;
+			}
+		}
+	}
+	return Rcpp::List::create(	Rcpp::Named("rows")		= non_zero_rows,
+								Rcpp::Named("columns")	= non_zero_cols,
+								Rcpp::Named("values")	= non_zero_vals);
+}
 
 
 
@@ -11969,7 +12083,7 @@ template<class ARRAY_TYPE>
 void get_tree_traversal_root_to_tips(	const long			Ntips,
 										const long 			Nnodes,
 										const long			Nedges,
-										const long 			root, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1)
+										long 				root, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1). If negative, this will be computed automatically, at some cost.
 										const ARRAY_TYPE	&tree_edge, 					// (INPUT) 2D array (in row-major format) of size Nedges x 2
 										const bool			include_tips,					// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
 										const bool			precalculated_edge_mappings,	// (INPUT) if true, then the edge mapping tables node2first_edge[], node2last_edge[] and edges[] are taken as is. Otherwise, they are calculated from scratch.
@@ -11989,6 +12103,9 @@ void get_tree_traversal_root_to_tips(	const long			Ntips,
 								node2last_edge,
 								edges);
 	}
+	
+	// determine root if needed
+	if(root<0) root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
 	
 	// fill queue from root to tips
 	long child,node;
@@ -12021,16 +12138,12 @@ Rcpp::List get_tree_traversal_root_to_tips_CPP(	const long			Ntips,
 												const long 			Nnodes,
 												const long			Nedges,
 												const std::vector<long>	&tree_edge, 		// (INPUT) 2D array (in row-major format) of size Nedges x 2
-												const bool			include_tips){		// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
-	// determine root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-	
-	// get tree traversal
+												const bool			include_tips){		// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].	
 	std::vector<long> queue, node2first_edge, node2last_edge, edges;
 	get_tree_traversal_root_to_tips(Ntips,
 									Nnodes,
 									Nedges,
-									root,
+									-1,
 									tree_edge,
 									include_tips,
 									false,
@@ -12300,7 +12413,7 @@ public:
 	tree_traversal(	const long			Ntips_,
 					const long 			Nnodes_,
 					const long			Nedges_,
-					const long 			root, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1)
+					const long			root, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1). If negative, this will be computed automatically, at some cost.
 					const ARRAY_TYPE	&tree_edge, 					// (INPUT) 2D array (in row-major format) of size Nedges x 2
 					const bool			include_tips,					// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
 					const bool			precalculated_edge_mappings){	// (INPUT) if true, then the edge mapping tables node2first_edge[], node2last_edge[] and edges[] are taken as is. Otherwise, they are calculated from scratch.
@@ -17772,6 +17885,143 @@ Rcpp::List consensus_taxonomies_CPP(const long						Ntips,
 
 
 
+// Given a rooted tree and taxonomies for all or some tips & nodes (typically these will be consensus taxonomies), as well as a list of additional query taxonomies (e.g., of new strains), place the queries onto the tree based on taxonomic identity.
+// Each placement defines a new tip, descending directly from some node in the input tree.
+// Each query is placed at the deepest possible node (furthest from the root in terms of splits) for which it is certain that the query is a descendant of.
+// Any queries that don't even descend from the tree's root will not be placed.
+// Examples: 
+//	If a parental node has taxonomy N1="A;B;C;D" and its two children have taxonomies N2="A;B;C;D;E1" & N2="A;B;C;D;E2", then the query taxonomy "A;B;C;D;F" will be placed on the parental node N1, while the taxonomy "A;B;C;D;E1;F" would be placed at or below the node N2.
+// [[Rcpp::export]]
+Rcpp::List place_tips_taxonomically_CPP(const long						Ntips,
+										const long 						Nnodes,
+										const long						Nedges,						// (INPUT) number of edges in the tree
+										const std::vector<long> 		&tree_edge,					// (INPUT) 2D array (in row-major format) of size Nedges x 2
+										const std::vector<std::string>	&clade_taxonomies,			// (INPUT) 1D array of size Nclades, each element of which is the taxonomic path of a tip or node
+										const std::vector<std::string>	&query_taxonomies,			// (INPUT) 1D array of size Nqueries, each element of which is the taxonomic path of a query to be placed on the tree
+										const std::string				&tree_taxon_delimiter,		// (INPUT) character used to separate taxonomic levels in tip & node taxonomies (e.g., ";" for SILVA taxonomies)
+										const std::string				&query_taxon_delimiter,		// (INPUT) character used to separate taxonomic levels in query taxonomies (e.g., ";" for SILVA taxonomies)
+										const bool						allow_placement_at_tips){	// (INPUT) allow placement of queries on tips of the tree. If false, queries will only be placed on a tip's parent node instead of the tip, if applicable.
+	const long Nclades  = Ntips+Nnodes;
+	const long Nqueries = query_taxonomies.size();
+	
+	// split taxonomies
+	std::vector<std::vector<std::string> > clade_taxonomies_split(Nclades), query_taxonomies_split(Nqueries);
+	for(long clade=0; clade<Nclades; ++clade){
+		split_string(clade_taxonomies[clade], tree_taxon_delimiter, -1, clade_taxonomies_split[clade]);
+	}
+	for(long query=0; query<Nqueries; ++query){
+		split_string(query_taxonomies[query], query_taxon_delimiter, -1, query_taxonomies_split[query]);
+	}
+	
+	// determine parent clade for each clade
+	lvector clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+		
+	// get tree traversal route (root --> tips), including tips
+	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	
+	lvector candidate_stack, fits, precise_fits, placement_clades(Nqueries,-1);
+	bool descended;
+	long max_precision;
+	for(long query=0, clade; query<Nqueries; ++query){
+		if((clade_taxonomies[root]!="") && (!taxon_descends(clade_taxonomies_split[root], query_taxonomies_split[query]))) continue; // this query does not even fit into the root, so don't place it
+		candidate_stack.clear();
+		fits.clear();
+		max_precision = 0;
+		candidate_stack.push_back(root);
+		while(candidate_stack.size()>0){
+			clade = candidate_stack.back();
+			candidate_stack.pop_back();
+			descended = false;
+			for(long e=traversal.node2first_edge[clade-Ntips], edge, child; e<=traversal.node2last_edge[clade-Ntips]; ++e){
+				edge  = traversal.edge_mapping[e];
+				child = tree_edge[2*edge+1];
+				if(taxon_descends(clade_taxonomies_split[child], query_taxonomies_split[query]) && (child>=Ntips)){
+					candidate_stack.push_back(child);
+					descended = true;
+				}
+			}
+			if(!descended){
+				fits.push_back(clade);
+				max_precision = max(max_precision, long(clade_taxonomies_split[clade].size()));
+			}
+		}
+		// only keep clade fits reaching the maximum encountered precision
+		precise_fits.clear();
+		for(long f=0; f<fits.size(); ++f){
+			if(clade_taxonomies_split[fits[f]].size()==max_precision) precise_fits.push_back(fits[f]);
+		}
+		placement_clades[query] = most_recent_common_ancestor(Ntips, Nnodes, Nedges, root, clade2parent, tree_edge, precise_fits);
+	}
+	
+	return Rcpp::List::create(Rcpp::Named("placement_clades") = placement_clades); 	// 1D integer array of length Nqueries, with values in 0,..,Nclades-1, specifying the clade at which each query was placed
+}
+
+
+
+// This function guarantees that:
+//    The newly placed tips will be appended to the end of existing tips, enumerated in the order of the specified placements.
+//    The newly created nodes (at theinsertion points) will be appended to the end of existing nodes, enumerated in the order of the specified placements.
+// [[Rcpp::export]]
+Rcpp::List tree_from_placements_CPP(const long					Ntips,				// (INPUT) number of tips in the reference tree
+									const long 					Nnodes,				// (INPUT) number of nodes in the reference tree
+									const long					Nedges,				// (INPUT) number of edges in the reference tree
+									std::vector<long>			tree_edge,			// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1), defining edges in the reference tree
+									std::vector<double> 		edge_length,		// (INPUT) 1D array of size Nedges listing edge lengths in the reference tree, or an empty vector (all edges have length 1)
+									const std::vector<long>		&placement_edges,	// (INPUT) 1D array of size NP, with values in 0,..,Nedges-1, listing the edges on which to place the new tips
+									const std::vector<double>	&distal_lengths,	// (INPUT) 1D array of size NP, listing the placement distance from the receiving edge's distal (child) node
+									const std::vector<double>	&pendant_lengths){	// (INPUT) 1D array of size NP, listing the length of the newly created edges leading to the new tips
+	const long NP = placement_edges.size();
+	const bool unit_edge_lengths = (edge_length.size()==0);
+	
+	// sort placements by decreasing distal_lengths
+	// this way the placement edge indices remain valid even as we perform the various placements
+	std::vector<long> placement_order(NP);
+	qsortIndices_reverse(distal_lengths, placement_order);
+	
+	// reserve space for amended tree, which will have NP new tips and 2*NP new edges
+	tree_edge.reserve(tree_edge.size()+3*NP*2);
+	edge_length.reserve(edge_length.size()+3*NP);
+
+	// renumber the original nodes in the tree to account for the anticipated increase in the number of tips
+	// do this prior to actually defining the new tips & nodes, to avoid ambiguities
+	for(long i=0; i<tree_edge.size(); ++i){
+		if(tree_edge[i]>=Ntips) tree_edge[i] += NP;
+	}
+
+	// iterate over all placements, splitting and defining new edges on the fly
+	long ref_parent, ref_edge, insertion_clade;
+	for(long pi=0, p; pi<NP; ++pi){
+		p 			= placement_order[pi];
+		ref_edge 	= placement_edges[p];
+		ref_parent	= tree_edge[2*ref_edge+0];
+		insertion_clade	= Ntips+NP+Nnodes+p;
+		// split the receiving edge into two edges, at the "insertion" point
+		//    upstream part becomes a new edge
+		tree_edge.push_back(ref_parent);
+		tree_edge.push_back(insertion_clade);		
+		edge_length.push_back((unit_edge_lengths ? 1 : edge_length[ref_edge]) - distal_lengths[p]);
+		//    downstream (distal) part is adjusted
+		tree_edge[2*ref_edge+0] = insertion_clade;
+		edge_length[ref_edge]   = distal_lengths[p];		
+		// add new edge connecting the insertion point to the new tip (placed query sequence)
+		tree_edge.push_back(insertion_clade);
+		tree_edge.push_back(Ntips+p);
+		edge_length.push_back(pendant_lengths[p]);
+	}	
+
+	return Rcpp::List::create(	Rcpp::Named("tree_edge")	= tree_edge,
+								Rcpp::Named("edge_length")	= edge_length);
+
+}
+
+								
+
+
+
 #pragma mark -
 #pragma mark Comparing trees
 #pragma mark 
@@ -20585,29 +20835,23 @@ IntegerVector get_most_recent_common_ancestors_CPP(	const long 			Ntips,
 
 
 
-
 // Given a set of clades (tips & nodes, "descendants"), find their most recent common ancestor
-// [[Rcpp::export]]
-long get_most_recent_common_ancestor_CPP(	const long 			Ntips,
-											const long 			Nnodes,
-											const long 			Nedges,
-											const std::vector<long> &tree_edge,			// 2D array of size Nedges x 2 in row-major format
-											const std::vector<long> &descendants){		// 1D array of size ND, containing values in 0:(Nclades-1)
+// This function requires that some auxiliary data structures of the tree have already been prepared, so it is more efficient when called multiple times on the same tree
+long most_recent_common_ancestor(const long 			Ntips,
+								const long 				Nnodes,
+								const long 				Nedges,
+								const long				root,			// (INPUT) root clade of the tree
+								const std::vector<long> &clade2parent,	// (INPUT) 1D array of size Nclades, with values in -1,..,Nclades-1, specifying the parent of each clade (-1 for the root).
+								const std::vector<long> &tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
+								const std::vector<long> &descendants){	// (INPUT) 1D array of size ND, containing values in 0:(Nclades-1)
 	const long Nclades = Ntips + Nnodes;
 	const long ND = descendants.size();
 	if(ND==0) return 0;
 	if(ND==1) return descendants[0];
 	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-
 	// traverse upwards from each descendant and count the number of visits to each clade in the tree
 	long clade;
-	std::vector<long> visits_per_clade(Nclades, 0);
+	lvector visits_per_clade(Nclades, 0);
 	for(long d=0; d<ND; ++d){
 		clade = descendants[d];
 		++visits_per_clade[clade];
@@ -20624,6 +20868,30 @@ long get_most_recent_common_ancestor_CPP(	const long 			Ntips,
 		clade = clade2parent[clade];
 	}
 	return root;
+}
+
+
+
+// Given a set of clades (tips & nodes, "descendants"), find their most recent common ancestor
+// [[Rcpp::export]]
+long get_most_recent_common_ancestor_CPP(	const long 			Ntips,
+											const long 			Nnodes,
+											const long 			Nedges,
+											const std::vector<long> &tree_edge,			// 2D array of size Nedges x 2 in row-major format
+											const std::vector<long> &descendants){		// 1D array of size ND, containing values in 0:(Nclades-1)
+	const long ND = descendants.size();
+	if(ND==0) return 0;
+	if(ND==1) return descendants[0];
+	
+	// determine parent clade for each clade
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// find root using the mapping clade2parent
+	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	
+	// determine MRCA
+	return most_recent_common_ancestor(Ntips, Nnodes, Nedges, root, clade2parent, tree_edge, descendants);
 }
 
 
@@ -32144,7 +32412,6 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 																	verbose,
 																	verbose_prefix));
 																		
-	// determine phylodistance bins
 																		
 	// calculate correlation within each phylodistance-bin
 	const long Nbins = phylodistance_grid.size();
@@ -32210,9 +32477,9 @@ Rcpp::List ACF_spherical_CPP(	const long 					Ntips,
 
 // Efficiently load a non-compressed fasta file
 // [[Rcpp::export]]
-Rcpp::List read_fasta_from_file_CPP(	const std::string 	&fasta_path,
-										const bool			include_headers,
-										const bool			include_sequences){
+Rcpp::List read_fasta_from_file_CPP(const std::string 	&fasta_path,
+									const bool			include_headers,
+									const bool			include_sequences){
 	std::ifstream fin(fasta_path);
 	if(!fin.is_open()){
 		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not open input file");
@@ -32251,7 +32518,6 @@ Rcpp::List read_fasta_from_file_CPP(	const std::string 	&fasta_path,
 								Rcpp::Named("Nlines") 		= Nlines,
 								Rcpp::Named("Nsequences") 	= Nsequences);
 }
-
 
 
 
