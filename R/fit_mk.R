@@ -189,7 +189,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 	objective_function = function(dense_rates, trial){
 		if(any(is.nan(dense_rates)) || any(is.infinite(dense_rates))){
 			if(diagnostics) cat(sprintf("%s  Trial %d: Objective requested for invalid rates: %s\n",verbose_prefix,trial,paste(sprintf("%.4g", dense_rates), collapse=", ")))
-			return(Inf)
+			return(if(optim_algorithm == "optim") 1e100 else Inf)
 		}
 		Q = get_transition_matrix_from_rate_vector(dense_rates, index_matrix, Nstates)
 		if(root_prior[1]=="stationary"){
@@ -215,7 +215,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 											max_polynomials				= 1000)
 			if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)){
 				if(diagnostics) cat(sprintf("%s  Trial %d, tree %d (%d tips): Model evaluation failed: %s\n",verbose_prefix,trial,tr,length(focal_tree$tip.label),results$error))
-				return(Inf)
+				return(if(optim_algorithm == "optim") 1e100 else Inf)
 			}
 			loglikelihood = loglikelihood + results$loglikelihood
 		}
@@ -259,7 +259,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 	if(Ntrials>1){
 		# randomly choose multiple parameter starting points and keep the Ntrials-1 most promising ones (i.e., with smallest objective values) plus the defaut_start
 		Nscouts = (if(is.null(Nscouts)) min(10000,10*Nrates*Ntrials) else max(Ntrials-1,Nscouts))
-		if(verbose) cat(sprintf("%sGenerating %d random parameter starts and selecting the most promising ones..\n",verbose_prefix,Nscouts))
+		if(verbose) cat(sprintf("%sGenerating %d random parameter starts ('scouts') and selecting the most promising ones..\n",verbose_prefix,Nscouts))
 		starts_pool = lapply(seq_len(Nscouts), FUN=function(k) first_guess_rate * 10**runif(n=Nrates, min=-((k/Nscouts)^2)*power_range/2, max=((k/Nscouts)^2)*power_range/2))
 		# compute the objective values for each start in the pool
 		if((Nthreads>1)  && (.Platform$OS.type!="windows")){

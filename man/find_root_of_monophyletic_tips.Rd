@@ -25,7 +25,7 @@ Logical, specifying whether the input tree can be assumed to be rooted. If you a
 }
 
 \details{
-The input tree may include an arbitrary number of incoming and outgoing edges per node (but only one edge per tip), and the direction of these edges can be arbitrary. Of course, the undirected graph defined by all edges must still be a valid tree (i.e. a connected acyclic graph). Note that this function does not change the tree, it just determines which tip or node should be made root for the target tips to be a monophyletic group.
+The input tree may include an arbitrary number of incoming and outgoing edges per node (but only one edge per tip), and the direction of these edges can be arbitrary. Of course, the undirected graph defined by all edges must still be a valid tree (i.e. a connected acyclic graph). This function does not change the tree, it just determines which tip or node should be made root for the target tips to be a monophyletic group. If the target tips do not form a monophyletic group regardless of root placement (this is typical if the tips are simply chosen randomly), this function returns \code{NA}.
 
 
 The asymptotic time complexity of this function is O(Nedges).

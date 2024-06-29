@@ -2456,16 +2456,16 @@ bootstrap_Kolmogorov_Smirnov_test = function(	bootstraps,	# list of length NB, l
 	empirical_KS = max(abs(empirical_CDF_values-reference_CDF_values))
 	
 	# calculate KS distance of each boostrap to the reference CDF
-	boostrap_KSs = rep(NA, NB)
+	bootstrap_KSs = rep(NA, NB)
 	for(b in seq_len(NB)){
-		boostrap_KSs[b] = max(abs(bootstrap_CDF_values[b,]-reference_CDF_values))
+		bootstrap_KSs[b] = max(abs(bootstrap_CDF_values[b,]-reference_CDF_values))
 	}
 
 	# compare empirical_KS to bootstrap_KSs
-	mean_bootstrap_KS 	= mean(boostrap_KSs)
-	std_bootstrap_KS 	= sd(boostrap_KSs)
-	median_bootstrap_KS = median(boostrap_KSs)
-	Pvalue 				= mean(boostrap_KSs>=empirical_KS)
+	mean_bootstrap_KS 	= mean(bootstrap_KSs)
+	std_bootstrap_KS 	= sd(bootstrap_KSs)
+	median_bootstrap_KS = median(bootstrap_KSs)
+	Pvalue 				= mean(bootstrap_KSs>=empirical_KS)
 	return(list(empirical_KS		= empirical_KS,
 				mean_bootstrap_KS	= mean_bootstrap_KS, 
 				std_bootstrap_KS	= std_bootstrap_KS, 
@@ -3169,4 +3169,8 @@ ensure_uncompressed = function(file_path, place_next_to_original=FALSE){
 open_file = function(file_path, mode){
 	return (if(endsWith(tolower(file_path),".gz")) gzfile(file_path, mode) else file(file_path,mode))
 }
+
+
+
+
 
