@@ -1,5 +1,5 @@
-889e58f560abe8a8314e74eac41fcfd1 *DESCRIPTION
-ae7796e4b84cafa1cbe7df512c91bba8 *NAMESPACE
+a0b296517027f368dcd24187d1e733e5 *DESCRIPTION
+f2eaf491c0fc3d2e33b80c5ab057f19c *NAMESPACE
 913da055bed292caf25ebe2a746bb557 *R/RcppExports.R
 48bbb8e6675b8b36f45420f212377339 *R/asr_empirical_probabilities.R
 989b7786c5d618f4b4a278f60d277a71 *R/asr_independent_contrasts.R
@@ -7,7 +7,7 @@ bd143fa1ee70e02d379843ae2ddd3b27 *R/asr_max_parsimony.R
 854e7d283cf2ceec80a7bc8c38ba1758 *R/asr_mk_model.R
 085126368e9a7434358a27646b8765a6 *R/asr_squared_change_parsimony.R
 f6a1c71281b5713a4f8fe75745bbc76f *R/asr_subtree_averaging.R
-78b4b583e527eebd9dd7ed1701cb8389 *R/auxiliary_routines.R
+7723837b22f44eba78c3f1e994927881 *R/auxiliary_routines.R
 3d3a8ca9e053dbba55087b1d077daa4e *R/biom.R
 e1de6dad7f288ea93beb0393dedda65d *R/clade_densities.R
 3701dd6dd45a1e72c5d7e8ebeb49fb6d *R/collapse_monofurcations.R
@@ -115,6 +115,7 @@ c8d41bc769024df41b8869a76abf353b *R/model_adequacy_hbds.R
 213cd2becb02df11315e05a3ebf1b895 *R/multifurcations_to_bifurcations.R
 35f084b5effff4e21fef2d6934402e3e *R/pick_random_tips.R
 764954b840916871db85259e3949403d *R/place_tips_taxonomically.R
+6ce3befa2949aa1984dbdc360376b103 *R/read_fasta.R
 6fffa4e524490180aa3b3c053d324b76 *R/read_tree.R
 5101df5ddc1816a1d427aa471ab5b3ca *R/reconstruct_past_diversification.R
 109c4a5eda914e5bf490d80c0197ea6b *R/reorder_tree_edges.R
@@ -255,6 +256,7 @@ b656110b8a8a45f8628f588db7b265e6 *man/model_adequacy_hbds.Rd
 272fc97c1aa0226120b0f1712a8d2ddd *man/multifurcations_to_bifurcations.Rd
 cce605ef7ec59ba910a8b49f31c9fdda *man/pick_random_tips.Rd
 c06591f8d0f2f279a3053d15a844308f *man/place_tips_taxonomically.Rd
+2341995cb72aecd7ebb83c7ec2142174 *man/read_fasta.Rd
 96f2d39ad1da2b2aae61b60f218891e4 *man/read_tree.Rd
 e0239e1f85cc34601c86c6f6e7167e9c *man/reconstruct_past_diversification.Rd
 cbc664efc3dee0afa5a950bd257fb3ca *man/reorder_tree_edges.Rd
