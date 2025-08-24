@@ -244,6 +244,15 @@ void print_as_matrix_column_major(const long NR, const long NC, const ARRAY_TYPE
 #pragma mark 
 
 
+// Convert a string to a vector of ASCII codes
+void string_to_ascii(const std::string	&input,		// (INPUT)
+					 lvector 			&ascii){	// (OUTPUT)
+    ascii.resize(input.length());
+    for(long i=0; i<input.length(); ++i){
+        ascii[i] = static_cast<long>(input[i]);
+    }
+}
+
 
 // returns the number of seconds since an arbitrary (but consistent) point in the past
 // The timer is monotonic (i.e. not affected by manual changes in the system time), and is specific to the calling thread
@@ -12087,7 +12096,7 @@ void get_tree_traversal_root_to_tips(	const long			Ntips,
 										const ARRAY_TYPE	&tree_edge, 					// (INPUT) 2D array (in row-major format) of size Nedges x 2
 										const bool			include_tips,					// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
 										const bool			precalculated_edge_mappings,	// (INPUT) if true, then the edge mapping tables node2first_edge[], node2last_edge[] and edges[] are taken as is. Otherwise, they are calculated from scratch.
-										std::vector<long>	&queue,							// (OUTPUT) 1D array of size Nnodes if include_tips==false, or size (Ntips+Nnodes) if include_tips==true.
+										std::vector<long>	&queue,							// (OUTPUT) 1D array of size Nnodes if include_tips==false, or size (Ntips+Nnodes) if include_tips==true. The first element will be the root's index.
 										std::vector<long>	&node2first_edge,				// (INPUT/OUTPUT) 1D array of size Nnodes, with values in 0:(Nedges-1), mapping nodes to their first outgoing edge. Either pre-calculated, or to be calculated by this function.
 										std::vector<long>	&node2last_edge,				// (INPUT/OUTPUT) 1D array of size Nnodes, with values in 0:(Nedges-1), mapping nodes to their last outgoing edge. Either pre-calculated, or to be calculated by this function.
 										std::vector<long>	&edges,							// (INPUT/OUTPUT) 1D array of size Nedges, with values in 0:(Nedges-1). Maps internal edge indices (i.e. as listed in node2first_edge[] and node2last_edge[]) to original edge indices. Either pre-calculated, or to be calculated by this function.
@@ -12400,40 +12409,43 @@ std::vector<std::vector<long> > get_adjacent_edges_per_edge_CPP(const long 				N
 
 
 
-class tree_traversal{
+class tree_context{
 public:
-	bool includes_tips;
-	long Ntips, Nnodes, Nedges;
+	bool traverses_tips;
+	long Ntips, Nnodes, Nedges, root;
 	std::vector<long> queue;
 	std::vector<long> node2first_edge, node2last_edge;
 	std::vector<long> edge_mapping;
+	lvector clade2parent;
 	
 	// Constructor/initializer
 	template<class ARRAY_TYPE>
-	tree_traversal(	const long			Ntips_,
+	tree_context(	const long			Ntips_,
 					const long 			Nnodes_,
 					const long			Nedges_,
-					const long			root, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1). If negative, this will be computed automatically, at some cost.
+					const long			root_, 							// (INPUT) index of root node, i.e. an integer in 0:(Ntips+Nnodes-1). If negative, this will be computed automatically, at some cost.
 					const ARRAY_TYPE	&tree_edge, 					// (INPUT) 2D array (in row-major format) of size Nedges x 2
-					const bool			include_tips,					// (INPUT) if true, then tips are included in the returned queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
-					const bool			precalculated_edge_mappings){	// (INPUT) if true, then the edge mapping tables node2first_edge[], node2last_edge[] and edges[] are taken as is. Otherwise, they are calculated from scratch.
-		includes_tips = include_tips;
+					const bool			traverse_tips){					// (INPUT) if true, then tips are included in the returned traversal queue[]. This does not affect the returned arrays node2first_edge[], node2last_edge[], edges[].
+		traverses_tips = traverse_tips;
 		Ntips  = Ntips_;
 		Nnodes = Nnodes_;
 		Nedges = Nedges_;
+		get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+		root = (root_<0 ? get_root_from_clade2parent(Ntips, clade2parent) : root_);
 		get_tree_traversal_root_to_tips(Ntips,
 										Nnodes,
 										Nedges,
 										root,
 										tree_edge,
-										include_tips,
-										precalculated_edge_mappings,
+										traverse_tips,
+										false,
 										queue,
 										node2first_edge,
 										node2last_edge,
 										edge_mapping,
 										false,
 										"");
+		
 	}
 };
 
@@ -12538,59 +12550,51 @@ IntegerVector get_total_tip_count_per_node_CPP(	const long			Ntips,
 
 
 
-
-// For each node, calculate the mean phylogenetic distance to its descending tips
+// For each node, calculate the mean phylogenetic distance from that node to its descending tips
 // Requirements:
 //   The tree must be rooted; the root should be the unique node with no parent
 //   The tree can include multifurcations as well as monofurcations
-// [[Rcpp::export]]
-NumericVector get_mean_depth_per_node_CPP(	const long					Ntips,
-											const long 					Nnodes,
-											const long					Nedges,
-											const std::vector<long> 	&tree_edge, 	// (INPUT) 2D array (in row-major format) of size Nedges x 2
-											const std::vector<double> 	&edge_length){ 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+void get_mean_depth_per_node(const long		Ntips,
+							const long 		Nnodes,
+							const long		Nedges,
+							const lvector 	&tree_edge, 		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+							const dvector	&edge_length, 		// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+							dvector			&node2tip_depth){	// (OUTPUT) 1D array of size Nnodes, specifying for each node the mean distance to its descending tips
 
 	// get incoming edge for each clade
-	std::vector<long> incoming_edge_per_clade;
+	lvector incoming_edge_per_clade;
 	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
 
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-
 	// get tree traversal route (tips --> root)
-	// traversal_queue[] will be of size Nclades, and will have entries in 0:(Nclades-1)
-	std::vector<long> traversal_queue, traversal_node2first_edge, traversal_node2last_edge, traversal_edges;
-	get_tree_traversal_root_to_tips(	Ntips,
-										Nnodes,
-										Nedges,
-										root,
-										tree_edge,
-										true, 	// include tips
-										false, 	// no precalculated edge mappings
-										traversal_queue,
-										traversal_node2first_edge,
-										traversal_node2last_edge,
-										traversal_edges,
-										false,
-										"");
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// calculate number of descending tips per node & mean distance to tips, traversing tips-->root (excluding the root)
-	std::vector<long> node2tip_count(Nnodes,0);
-	std::vector<double> node2tip_depth(Nnodes,0);
-	for(long q=traversal_queue.size()-1, clade, parent, cnode; q>=1; --q){
-		clade	= traversal_queue[q];
+	lvector node2tip_count(Nnodes,0);
+	node2tip_depth.assign(Nnodes,0);
+	for(long q=context.queue.size()-1, clade, parent, cnode; q>=1; --q){
+		clade	= context.queue[q];
 		cnode	= clade-Ntips;
-		parent 	= clade2parent[clade];
+		parent 	= context.clade2parent[clade];
 		node2tip_count[parent-Ntips] += (clade<Ntips ? 1 : node2tip_count[cnode]);
 		node2tip_depth[parent-Ntips] += (clade<Ntips ? 0 : node2tip_depth[cnode]) + (clade<Ntips ? 1 : node2tip_count[cnode]) * (edge_length.size()==0 ? 1 : edge_length[incoming_edge_per_clade[clade]]);
 	}
 	for(long node=0; node<Nnodes; ++node){
 		node2tip_depth[node] /= node2tip_count[node];
 	}
+}
+
+
+
+// For each node, calculate the mean phylogenetic distance from that node to its descending tips
+// Basically an RCpp wrapper for get_mean_depth_per_node()
+// [[Rcpp::export]]
+NumericVector get_mean_depth_per_node_CPP(	const long					Ntips,
+											const long 					Nnodes,
+											const long					Nedges,
+											const std::vector<long> 	&tree_edge, 	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+											const std::vector<double> 	&edge_length){ 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+	dvector node2tip_depth;
+	get_mean_depth_per_node(Ntips, Nnodes, Nedges, tree_edge, edge_length, node2tip_depth);
 	return Rcpp::wrap(node2tip_depth);
 }
 
@@ -12731,19 +12735,19 @@ void get_distances_from_root(	const long 				Ntips,
 								const long 				Nedges,
 								const ARRAY_TYPE_INT 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
 								const ARRAY_TYPE_D		&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-								const tree_traversal	&traversal,		// (INPUT) tree traversal data structure (root-->tips). Can (but does not need to) include tips.
+								const tree_context		&context,		// (INPUT) tree_context data structure. Can (but does not need to) traverse tips.
 								dvector					&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
 	const long Nclades = Ntips + Nnodes;
 	const bool got_edge_lengths = (edge_length.size()>0);				
-	const long root = traversal.queue[0];
+	const long root = context.queue[0];
 
 	distances.resize(Nclades);
 	distances[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue;
-		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-Ntips], edge; e<=context.node2last_edge[clade-Ntips]; ++e){
+			edge  = context.edge_mapping[e];
 			distances[tree_edge[2*edge+1]] = distances[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
 	}
@@ -12760,15 +12764,8 @@ void get_distances_from_root(	const long 				Ntips,
 								const ARRAY_TYPE_INT 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
 								const ARRAY_TYPE_D		&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 								std::vector<double>		&distances){	// (OUTPUT) 1D array of size Nclades, listing the phylogenetic distance of each clade from the root
-
-	// find root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-
-	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
-
-	// calculate distances from root
-	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, distances);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, context, distances);
 }
 
 
@@ -12779,20 +12776,20 @@ void get_clade_ages(const long 					Ntips,
 					const long 					Nedges,
 					const std::vector<long> 	&tree_edge,		// (INPUT) 2D array of size Nedges x 2 in row-major format
 					const std::vector<double>	&edge_length, 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-					const tree_traversal		&traversal,		// (INPUT) tree traversal data structure (root-->tips). Can (but does not need to) include tips.
+					const tree_context			&context,		// (INPUT) tree_context data structure. Can (but does not need to) traverse tips.
 					dvector						&ages){			// (OUTPUT) 1D array of size Nclades, listing the age of each clade
 	const long Nclades = Ntips + Nnodes;
 	const bool got_edge_lengths = (edge_length.size()>0);				
-	const long root = traversal.queue[0];
+	const long root = context.queue[0];
 
 	// first calculate distances from root (use ages[] as convenient temporary storage)
 	ages.resize(Nclades);
 	ages[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue;
-		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-Ntips], edge; e<=context.node2last_edge[clade-Ntips]; ++e){
+			edge  = context.edge_mapping[e];
 			ages[tree_edge[2*edge+1]] = ages[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
 	}
@@ -13113,22 +13110,15 @@ Rcpp::List get_farthest_tips_per_edge_CPP(	const long 					Ntips,
 	long parent, clade, node, tip, incoming_edge;
 	double candidate_distance;
 	const bool unit_edge_lengths = (edge_length.size()==0);
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
 	
 	// determine incoming edge per clade
 	std::vector<long> incoming_edge_per_clade(Nclades,-1);
 	for(long edge=0; edge<Nedges; ++edge){
 		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
 	}
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
+		
 	// get tree traversal route (root --> tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// Step 1: calculate farthest descending tip per clade (traverse tips --> root), and thus per edge
 	lvector farthest_descending_tip_per_clade(Nclades,-1);
@@ -13147,11 +13137,11 @@ Rcpp::List get_farthest_tips_per_edge_CPP(	const long 					Ntips,
 			distance_to_farthest_descending_tip_per_clade[tip] = 0;
 		}
 	}
-	for(long q=traversal.queue.size()-1; q>=0; --q){
-		clade = traversal.queue[q];
-		if(clade==root) continue;
+	for(long q=context.queue.size()-1; q>=0; --q){
+		clade = context.queue[q];
+		if(clade==context.root) continue;
 		if(farthest_descending_tip_per_clade[clade]<0) continue; // no descending tip available from this clade
-		parent			= clade2parent[clade];
+		parent			= context.clade2parent[clade];
 		incoming_edge	= incoming_edge_per_clade[clade];
 		// propagate information about farthest descending tip, to parent (if more distant than already saved for the parent)
 		candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[incoming_edge]) + distance_to_farthest_descending_tip_per_clade[clade];
@@ -13171,14 +13161,14 @@ Rcpp::List get_farthest_tips_per_edge_CPP(	const long 					Ntips,
 	// Step 2: calculate farthest upstream tip per edge (traverse edges root --> tips)
 	lvector farthest_upstream_tip_per_edge(Nedges,-1);
 	dvector distance_to_farthest_upstream_tip_per_edge(Nedges,NAN_D);
-	for(long q=0; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	for(long q=0; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue;
 		node = clade-Ntips;
-		for(long e=traversal.node2first_edge[node], edge; e<=traversal.node2last_edge[node]; ++e){
-			edge = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[node], edge; e<=context.node2last_edge[node]; ++e){
+			edge = context.edge_mapping[e];
 			// check incoming edge
-			if(clade!=root){
+			if(clade!=context.root){
 				incoming_edge = incoming_edge_per_clade[clade];
 				if(farthest_upstream_tip_per_edge[incoming_edge]>=0){
 					farthest_upstream_tip_per_edge[edge] = farthest_upstream_tip_per_edge[incoming_edge];
@@ -13186,8 +13176,8 @@ Rcpp::List get_farthest_tips_per_edge_CPP(	const long 					Ntips,
 				}
 			}
 			// check all sister edges in an attempt to find more distant upstream tips
-			for(long se=traversal.node2first_edge[node], sister_edge; se<=traversal.node2last_edge[node]; ++se){
-				sister_edge = traversal.edge_mapping[se];
+			for(long se=context.node2first_edge[node], sister_edge; se<=context.node2last_edge[node]; ++se){
+				sister_edge = context.edge_mapping[se];
 				if(sister_edge==edge) continue;
 				if(farthest_descending_tip_per_edge[sister_edge]<0) continue; // no valid tip descending from sister_edge
 				candidate_distance = (unit_edge_lengths ? 1.0 : edge_length[sister_edge]) + distance_to_farthest_descending_tip_per_edge[sister_edge];
@@ -13474,20 +13464,13 @@ Rcpp::List get_farthest_tip_pair_CPP(	const long 					Ntips,
 										const std::vector<double> 	&edge_length){ 		// 1D array of size Nedges, or an empty std::vector (all branches have length 1)
 	const long Nclades = Ntips + Nnodes;
 	const bool has_edge_lengths = (edge_length.size()>0);
-
-	// determine parent clade for each clade
-	lvector clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
 	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
-
 	// get incoming edge for each clade
 	lvector clade2incoming_edge;
 	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2incoming_edge);
 
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 	
 	// determine farthest tip descending from each node, traversing tips-->root
 	// also simultaneously keep track of furthest tip pair found
@@ -13499,9 +13482,9 @@ Rcpp::List get_farthest_tip_pair_CPP(	const long 					Ntips,
 		clade2farthest_tip[tip] = tip;
 	}
 	double candidate_distance;
-	for(long q=traversal.queue.size()-1, clade, parent, edge; q>0; --q){
-		clade  	= traversal.queue[q];
-		parent	= clade2parent[clade];
+	for(long q=context.queue.size()-1, clade, parent, edge; q>0; --q){
+		clade  	= context.queue[q];
+		parent	= context.clade2parent[clade];
 		edge	= clade2incoming_edge[clade];
 		candidate_distance = (has_edge_lengths ? edge_length[edge] : 1.0) + clade2max_tip_distance[clade];
 		if(clade2farthest_tip[parent]<0){
@@ -13608,24 +13591,17 @@ Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 	const long Nclades = Ntips + Nnodes;
 	const bool got_edge_lengths = (edge_length.size()>0);
 	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
-
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// calculate distances from root (traverse root-->tips)
 	std::vector<double> clade_times(Nclades);
-	clade_times[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	clade_times[context.root] = 0;
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue;
-		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-Ntips], edge; e<=context.node2last_edge[clade-Ntips]; ++e){
+			edge  = context.edge_mapping[e];
 			clade_times[tree_edge[2*edge+1]] = clade_times[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
 	}
@@ -13637,10 +13613,10 @@ Rcpp::List count_clades_at_regular_times_CPP(	const long 			Ntips,
 	if(degree>1){
 		clade2tips.assign(Nclades,0);
 		for(long tip=0; tip<Ntips; ++tip){ clade2tips[tip] = 1; }
-		for(long q=traversal.queue.size()-1, clade; q>=0; --q){
-			clade = traversal.queue[q];
-			if(clade==root) continue;
-			clade2tips[clade2parent[clade]] += clade2tips[clade];
+		for(long q=context.queue.size()-1, clade; q>=0; --q){
+			clade = context.queue[q];
+			if(clade==context.root) continue;
+			clade2tips[context.clade2parent[clade]] += clade2tips[clade];
 		}
 	}
 	
@@ -13715,25 +13691,18 @@ IntegerVector count_clades_at_times_CPP(const long					Ntips,
 	const long Nclades = Ntips + Nnodes;
 	const bool got_edge_lengths = (edge_length.size()>0);
 	if(times.empty()) return(Rcpp::wrap(std::vector<long>()));
-
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
 	
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 	
 	// calculate distances from root (traverse root-->tips)
 	std::vector<double> distances_from_root(Nclades);
-	distances_from_root[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	distances_from_root[context.root] = 0;
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue;
-		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-Ntips], edge; e<=context.node2last_edge[clade-Ntips]; ++e){
+			edge = context.edge_mapping[e];
 			distances_from_root[tree_edge[2*edge+1]] = distances_from_root[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
 	}
@@ -13745,10 +13714,10 @@ IntegerVector count_clades_at_times_CPP(const long					Ntips,
 	if(degree>1){
 		clade2tips.assign(Nclades,0);
 		for(long tip=0; tip<Ntips; ++tip){ clade2tips[tip] = 1; }
-		for(long q=traversal.queue.size()-1, clade; q>=0; --q){
-			clade = traversal.queue[q];
-			if(clade==root) continue;
-			clade2tips[clade2parent[clade]] += clade2tips[clade];
+		for(long q=context.queue.size()-1, clade; q>=0; --q){
+			clade = context.queue[q];
+			if(clade==context.root) continue;
+			clade2tips[context.clade2parent[clade]] += clade2tips[clade];
 		}
 	}
 	
@@ -13757,12 +13726,12 @@ IntegerVector count_clades_at_times_CPP(const long					Ntips,
 	std::vector<long> lineages(Ntimes,0);
 	for(long t=0; t<Ntimes; ++t){
 		if(times[t]==0){
-			lineages[t] = ((degree<=1) || (clade2tips[root]>=degree) ? 1l : 0l); // at most one lineage at root
+			lineages[t] = ((degree<=1) || (clade2tips[context.root]>=degree) ? 1l : 0l); // at most one lineage at root
 			continue;
 		}
 		for(long clade=0; clade<Nclades; ++clade){
-			if(clade==root) continue;
-			if((distances_from_root[clade]>=times[t]-(clade<Ntips ? epsilon : 0.0)) && (distances_from_root[clade2parent[clade]]<=times[t]) && ((degree<=1) || (clade2tips[clade]>=degree))){
+			if(clade==context.root) continue;
+			if((distances_from_root[clade]>=times[t]-(clade<Ntips ? epsilon : 0.0)) && (distances_from_root[context.clade2parent[clade]]<=times[t]) && ((degree<=1) || (clade2tips[clade]>=degree))){
 				lineages[t] += 1;
 			}
 		}
@@ -14032,27 +14001,20 @@ void get_relative_evolutionary_divergences(	const long				Ntips,
 											std::vector<double>		&REDs){				// (OUTPUT) 1D array of size Nnodes, listing the RED for each node	
 	const bool unit_edge_lengths = (edge_length.size()==0);
 
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	// get tree traversal route (root --> tips), including tips										
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// get incoming edge for each clade
 	std::vector<long> incoming_edge_per_clade;
 	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
-
-	// get tree traversal route (root --> tips), including tips										
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
 									
 	// get mean distance of each node to its descending tips (traversing tips-->root, exclude root)
 	std::vector<long> node2tip_count(Nnodes,0);
 	std::vector<double> node2tip_depth(Nnodes,0);
-	for(long q=traversal.queue.size()-1, clade, pnode, cnode; q>=1; --q){
-		clade	= traversal.queue[q];
+	for(long q=context.queue.size()-1, clade, pnode, cnode; q>=1; --q){
+		clade	= context.queue[q];
 		cnode	= clade-Ntips;
-		pnode 	= clade2parent[clade] - Ntips;
+		pnode 	= context.clade2parent[clade] - Ntips;
 		node2tip_count[pnode] += (clade<Ntips ? 1 : node2tip_count[cnode]);
 		node2tip_depth[pnode] += (clade<Ntips ? 0 : node2tip_depth[cnode]) + (clade<Ntips ? 1 : node2tip_count[cnode]) * (unit_edge_lengths ? 1 : edge_length[incoming_edge_per_clade[clade]]);
 	}
@@ -14062,11 +14024,11 @@ void get_relative_evolutionary_divergences(	const long				Ntips,
 		
 	// calculate RED for each node (traverse root --> tips)
 	REDs.resize(Nnodes);
-	REDs[root-Ntips] = 0;
-	for(long q=1, clade, pnode, cnode; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	REDs[context.root-Ntips] = 0;
+	for(long q=1, clade, pnode, cnode; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue; // skip tips
-		pnode 	= clade2parent[clade] - Ntips;
+		pnode 	= context.clade2parent[clade] - Ntips;
 		cnode	= clade - Ntips;
 		const double mean_distance_to_tips  = node2tip_depth[cnode];
 		const double incoming_edge_length 	= (unit_edge_lengths ? 1.0 : edge_length[incoming_edge_per_clade[clade]]);
@@ -14100,13 +14062,13 @@ NumericVector get_relative_evolutionary_divergences_CPP(const long					Ntips,
 // For each edge, the RED difference between child & parent is used to set the new length of that edge (times some scaling factor to reproduce the anchor age).
 // The tree must be rooted, but may include monofurcations and multifurcations
 // [[Rcpp::export]]
-Rcpp::List date_tree_via_RED_CPP(	const long				Ntips,
-									const long 				Nnodes,
-									const long				Nedges,
+Rcpp::List date_tree_via_RED_CPP(	const long					Ntips,
+									const long 					Nnodes,
+									const long					Nedges,
 									const std::vector<long>		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
-									const std::vector<double>		&edge_length,	// (INPUT) 1D array of size Nedges, or empty in which case each edge is interpreted as having length 1)
-									const long				anchor_node,	// (INPUT) Index of node to be used as anchor, an integer between 0,..,Nnodes-1. Can also be negative, in which case the root is used as anchor.
-									const long				anchor_age){	// (INPUT) Age of the anchor node, a positive real number. If anchor_node<0, then this specifies the age of the root.
+									const std::vector<double>	&edge_length,	// (INPUT) 1D array of size Nedges, or empty in which case each edge is interpreted as having length 1)
+									long						anchor_node,	// (INPUT) Index of node to be used as anchor, an integer between 0,..,Nnodes-1. Can also be negative, in which case the root is used as anchor.
+									double						anchor_age){	// (INPUT) Age of the anchor node, a positive real number. If anchor_node<0, then this specifies the age of the root. If anchor_age<0, then it is set to the average distance of any descending tip from the anchor.
 	// get node REDs
 	std::vector<double> node_REDs;
 	get_relative_evolutionary_divergences(Ntips, Nnodes, Nedges, tree_edge, edge_length, node_REDs);
@@ -14114,6 +14076,14 @@ Rcpp::List date_tree_via_RED_CPP(	const long				Ntips,
 	// find scaling factor (time_units/RED_units)
 	const double anchor_RED = (anchor_node<0 ? 0 : node_REDs[anchor_node]);
 	if(anchor_RED==1) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Anchor is essentially a tip (its relative evolutionary divergence is 1).");
+	
+	if(anchor_age<0){
+		// set anchor_age to the average distance of any descending tip from the anchor
+		if(anchor_node<0) anchor_node = get_root_clade(Ntips, Nnodes, Nedges, tree_edge) - Ntips;
+		dvector node2tip_depth;
+		get_mean_depth_per_node(Ntips, Nnodes, Nedges, tree_edge, edge_length, node2tip_depth);
+		anchor_age = node2tip_depth[anchor_node];
+	}
 
 	const double scaling = anchor_age/(1-anchor_RED);
 	std::vector<double> edge_times(Nedges);
@@ -14137,7 +14107,7 @@ Rcpp::List date_tree_via_RED_CPP(	const long				Ntips,
 //     Column 1: Parent clade index
 //     Columns 2-(Nsplits+1): Child clade indices, where Nsplits is the maximum number of splits at a node (e.g. Nsplits=2 for bifurcating trees)
 //   lengths[]: 1D array of size Nclades, listing incoming edge lengths for each clade (will be negative for the root)
-//   Rows in clades[] and entries in length[] can be ordered according to clade indices, or according to post-order traversal.
+//   Rows in clades[] and entries in length[] can be ordered according to clade indices, or according to post-order context.
 // Negative values indicate missing values (e.g., no parent for the root, no children for tips)
 // This function is loosely analogous (but not identical) to the function phybase::read.tree.nodes
 // Requirements:
@@ -14159,7 +14129,6 @@ Rcpp::List tree_to_clade_list_CPP( 	const long					Ntips,
 		if(root<0) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error")="Tree is properly rooted");
 
 		// get tree traversal route (root --> tips), excluding tips										
-		//tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
 		std::vector<long> queue, node2first_edge, node2last_edge, edge_mapping;
 		get_tree_traversal_depth_first_search(	Ntips,
 												Nnodes,
@@ -14229,32 +14198,25 @@ Rcpp::List extract_fasttree_constraints_CPP( const long				Ntips,
 											const std::vector<long>		&tree_edge){		// (INPUT) 2D array (in row-major format) of size Nedges x 2
 	const long Nclades = Ntips+Nnodes;
 	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
+	// get tree traversal route (root --> tips), including tips			
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// enumerate the children of each node
 	std::vector<long> clade2child_index(Nclades,-1);
 	std::vector<long> node2child_count(Nnodes,0);
 	for(long clade=0, parent; clade<Nclades; ++clade){
-		parent = clade2parent[clade];
+		parent = context.clade2parent[clade];
 		if(parent>=0){
 			clade2child_index[clade] = node2child_count[parent-Ntips];
 			++node2child_count[parent-Ntips];
 		}
 	}
 	
-	// get tree traversal route (root --> tips), including tips			
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
-
 	// calculate number of descending tips per node, traversing tips-->root (excluding the root)
 	std::vector<long> node2tip_count(Nnodes,0);
-	for(long q=traversal.queue.size()-1, clade; q>=1; --q){
-		clade = traversal.queue[q];
-		node2tip_count[clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2tip_count[clade-Ntips]);
+	for(long q=context.queue.size()-1, clade; q>=1; --q){
+		clade = context.queue[q];
+		node2tip_count[context.clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2tip_count[clade-Ntips]);
 	}
 	
 	// identify each bifurcating node with >=3 descending tips with a constraint
@@ -14282,8 +14244,8 @@ Rcpp::List extract_fasttree_constraints_CPP( const long				Ntips,
 	std::vector<char> constraints(Ntips*Nconstraints,'-'); // 2D array of size Ntips x Nconstraints, in row-major format
 	for(long tip=0, clade, parent, pnode; tip<Ntips; ++tip){
 		clade = tip;
-		while(clade!=root){
-			parent 	= clade2parent[clade];
+		while(clade!=context.root){
+			parent 	= context.clade2parent[clade];
 			pnode 	= parent-Ntips;
 			if(node2constraint[pnode]>=0){
 				// this node is guaranteed to be bifurcating, so we are either coming from the "left" or "right" (there's no 3rd option)
@@ -14312,20 +14274,18 @@ double get_gamma_statistic_CPP(	const long					Ntips,
 								const std::vector<double>	&edge_length){		// (INPUT) 1D array of size Nedges, or empty
 	const bool got_edge_lengths = (edge_length.size()>0);
 	const long Nclades = Ntips + Nnodes;
-	// find root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
 	
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// calculate distances from root (traverse root-->tips)
 	std::vector<double> clade_times(Nclades);
-	clade_times[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	clade_times[context.root] = 0;
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue;
-		for(long e=traversal.node2first_edge[clade-Ntips], edge; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-Ntips], edge; e<=context.node2last_edge[clade-Ntips]; ++e){
+			edge  = context.edge_mapping[e];
 			clade_times[tree_edge[2*edge+1]] = clade_times[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
 	}
@@ -14347,7 +14307,7 @@ double get_gamma_statistic_CPP(	const long					Ntips,
 	lvector	event2LTT(Nnodes,0l);
 	for(long event=0, node; event<Nnodes; ++event){
 		node = node_order[event];
-		event2LTT[event] = (event==0 ? 1l : event2LTT[event-1]) + (traversal.node2last_edge[node]-traversal.node2first_edge[node]);
+		event2LTT[event] = (event==0 ? 1l : event2LTT[event-1]) + (context.node2last_edge[node]-context.node2first_edge[node]);
 	}
 	
 	// calculate T[n] := \sum_{k=1}^n k*g_k, where g_k is the distance of event k to the next event
@@ -14379,32 +14339,25 @@ double get_Colless_Imbalance_CPP(	const long					Ntips,
 									const std::vector<long>		&tree_edge,	// (INPUT) 2D array (in row-major format) of size Nedges x 2
 									const bool					normalized){// (INPUT) whether to normalize the Colless index based on the maximum expected value for bifurcating trees
 
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-
 	// get tree traversal route (root --> tips)
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// calculate number of descending tips per node, traversing tips-->root (excluding the root)
 	dvector node2tip_count(Nnodes,0);
-	for(long q=traversal.queue.size()-1, clade; q>=1; --q){
-		clade = traversal.queue[q];
-		node2tip_count[clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2tip_count[clade-Ntips]);
+	for(long q=context.queue.size()-1, clade; q>=1; --q){
+		clade = context.queue[q];
+		node2tip_count[context.clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2tip_count[clade-Ntips]);
 	}
 	
 	// calculate Colless Index
 	double colless = 0;
-	for(long q=traversal.queue.size()-1, parent_node, child1, child2; q>=0; --q){
-		parent_node = traversal.queue[q] - Ntips;
+	for(long q=context.queue.size()-1, parent_node, child1, child2; q>=0; --q){
+		parent_node = context.queue[q] - Ntips;
 		if(parent_node<0) continue;
-		for(long e1=traversal.node2first_edge[parent_node]; e1<=traversal.node2last_edge[parent_node]; ++e1){
-			child1  = tree_edge[2*traversal.edge_mapping[e1] + 1];
-			for(long e2=e1+1; e2<=traversal.node2last_edge[parent_node]; ++e2){
-				child2  = tree_edge[2*traversal.edge_mapping[e2] + 1];
+		for(long e1=context.node2first_edge[parent_node]; e1<=context.node2last_edge[parent_node]; ++e1){
+			child1  = tree_edge[2*context.edge_mapping[e1] + 1];
+			for(long e2=e1+1; e2<=context.node2last_edge[parent_node]; ++e2){
+				child2  = tree_edge[2*context.edge_mapping[e2] + 1];
 				colless += abs((child1<Ntips ? 1l : node2tip_count[child1-Ntips]) - (child2<Ntips ? 1l : node2tip_count[child2-Ntips]));
 			}
 		}
@@ -14457,25 +14410,18 @@ IntegerVector extract_tip_neighborhood_CPP(	const long 				Ntips,
 											const long 				focal_tip,		// integer between 0 and Ntips-1, specifying the focal tip whose neighborhood to explore
 											const long 				Nbackward,
 											const long				Nforward){	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
 	// get tree traversal route (root --> tips)
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 	
 	// populate clade_queue, moving backward from the focal tip
 	lvector clade_queue, Nforward_per_clade;
 	long parent_node, parent_clade, edge, child, clade = focal_tip;
 	long Nbackward_left = Nbackward;
-	while((clade2parent[clade]>=0) && (Nbackward_left>0)){
-		parent_clade = clade2parent[clade];
+	while((context.clade2parent[clade]>=0) && (Nbackward_left>0)){
+		parent_clade = context.clade2parent[clade];
 		parent_node  = parent_clade-Ntips;
-		for(long e=traversal.node2first_edge[parent_node]; e<=traversal.node2last_edge[parent_node]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[parent_node]; e<=context.node2last_edge[parent_node]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge + 1];
 			if(child==clade) continue;
 			// add this child to the queue for further exploration
@@ -14498,15 +14444,15 @@ IntegerVector extract_tip_neighborhood_CPP(	const long 				Ntips,
 		}else if(Nforward_per_clade[k]>0){
 				// this clade should be further expanded, i.e., we should pick tips from each of its children
 				node = clade-Ntips;
-				for(long e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-					child = tree_edge[2*traversal.edge_mapping[e] + 1];
+				for(long e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+					child = tree_edge[2*context.edge_mapping[e] + 1];
 					clade_queue.push_back(child);
 					Nforward_per_clade.push_back(Nforward_per_clade[k]-1);
 				}
 		}else{
 			// pick one descending tip for this clade, and don't expand it further
 			while(clade>=Ntips){
-				clade = tree_edge[2*traversal.edge_mapping[traversal.node2first_edge[clade-Ntips]] + 1];
+				clade = tree_edge[2*context.edge_mapping[context.node2first_edge[clade-Ntips]] + 1];
 			}
 			neighbor_tips.push_back(clade);
 		}
@@ -14590,12 +14536,9 @@ NumericVector get_all_distances_to_tip_CPP(	const long 					Ntips,
 	
 	lvector clade2incoming_edge;
 	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2incoming_edge);
-
-	// find root using the mapping clade2incoming_edge
-	const long root = get_root_from_incoming_edge_per_clade(Ntips, tree_edge, clade2incoming_edge);
 	
 	// get tree traversal route (root --> tips), excluding tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, false);
 
 	// first travel rootwards to compute the distance of each ancestor to the focal tip
 	std::vector<bool> is_ancestor(Nclades,false); // is_ancestor[c] will be true if clade c is an ancestor of the focal tip or is the focal tip itself
@@ -14612,11 +14555,11 @@ NumericVector get_all_distances_to_tip_CPP(	const long 					Ntips,
 	}
 
 	// traverse from root to tips to compute distances of all other (non-ancestral) clades to the focal tip
-	for(long q=0; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	for(long q=0; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		node  = clade-Ntips;
-		for(long e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge + 1];
 			if(is_ancestor[child]) continue;
 			distances[child] = distances[clade] + (unit_edge_lengths ? 1.0 : edge_length[edge]);
@@ -15767,7 +15710,7 @@ long get_tip_by_random_traversal(	const long					Ntips,
 									const std::vector<long>		&node2first_child,		// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1). Should be in the format returned by get_children_per_node(..).
 									const std::vector<long>		&node2last_child,		// (INPUT) 1D array of size Nnodes, with values in 0:(Nedges-1). Should be in the format returned by get_children_per_node(..).
 									const std::vector<long>		&children,				// (INPUT) 1D array of size Nedges, with values in 0:(Nclades-1). Should be in the format returned by get_children_per_node(..).
-									const std::vector<double>	&clade2weight){			// (INPUT) 1D array of non-negative numbers, of size Nclades, giving probability weights to each clade. Weights are normalized among children of each node, during traversal.
+									const std::vector<double>	&clade2weight){			// (INPUT) 1D array of non-negative numbers, of size Nclades, giving probability weights to each clade. Weights are normalized among children of each node, during context.
 	double p, total_weight;
 	long node;
 	long clade = root;
@@ -16566,14 +16509,14 @@ Rcpp::List split_tree_at_height_CPP(const long			Ntips,
 		clade2subtree.assign(Nclades,0);
 	}else{
 		// get tree traversal route (root --> tips), not including tips
-		tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+		tree_context context(Ntips, Nnodes, Nedges, root, tree_edge, false);
 		// iterate through the tree (root --> tips)														
-		for(long q=0; q<traversal.queue.size(); ++q){
-			parent = traversal.queue[q];
+		for(long q=0; q<context.queue.size(); ++q){
+			parent = context.queue[q];
 			if(parent<Ntips) continue;
 			node = parent - Ntips;
-			for(long e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-				edge 	= traversal.edge_mapping[e];
+			for(long e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+				edge 	= context.edge_mapping[e];
 				child 	= tree_edge[edge*2+1];
 				distances_from_root[child] = (unit_edge_lengths ? 1.0 : edge_length[edge]) + distances_from_root[parent];
 				split_edge[edge] = ((distances_from_root[parent]<split_height) && (distances_from_root[child]>=split_height));
@@ -16900,7 +16843,7 @@ Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
 	const long root = get_root_from_clade2parent(Ntips, clade2parent);
 
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, root, tree_edge, true);
 	
 	// tag nodes to be merged upwards and determine how many nodes & edges will remain after merging
 	// every node merging reduces the number of nodes and the number of edges by 1
@@ -16920,8 +16863,8 @@ Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
 		// the child-nodes of nodes_to_merge[] should be merged into their parents
 		for(long n=0, e, pnode, child; n<nodes_to_merge.size(); ++n){
 			pnode = nodes_to_merge[n];
-			for(e=traversal.node2first_edge[pnode]; e<=traversal.node2last_edge[pnode]; ++e){
-				child = tree_edge[2*traversal.edge_mapping[e]+1];
+			for(e=context.node2first_edge[pnode]; e<=context.node2last_edge[pnode]; ++e){
+				child = tree_edge[2*context.edge_mapping[e]+1];
 				if(child>=Ntips){
 					// this child is a node and should be merged into pnode
 					merge_node[child-Ntips] = true;
@@ -16938,10 +16881,10 @@ Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
 	if(!keep_ancestral_ages){
 		// determine maximum allowed time shifts based on non-merged nodes (whose ages are assumed solid), traverse tips-->root
 		dvector clade_times;
-		get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, clade_times);
+		get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, context, clade_times);
 		dvector max_allowed_ancestor_times(Nclades,INFTY_D);
-		for(long q=traversal.queue.size()-1, clade, parent; q>=1; --q){
-			clade = traversal.queue[q];
+		for(long q=context.queue.size()-1, clade, parent; q>=1; --q){
+			clade = context.queue[q];
 			if((clade<Ntips) || (!merge_node[clade-Ntips])){
 				// this clade will not be merged upwards, so consider its time solid. Hence, no ancestor can have a later time than this clade
 				max_allowed_ancestor_times[clade] = clade_times[clade];
@@ -16956,8 +16899,8 @@ Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
 			Nmerged_children 		= 0;
 			sum_merged_child_edges 	= 0;
 			max_allowed_time		= INFTY_D;
-			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-				edge  = traversal.edge_mapping[e];
+			for(e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+				edge  = context.edge_mapping[e];
 				child = tree_edge[2*edge+1];
 				max_allowed_time = min(max_allowed_time, max_allowed_ancestor_times[child]);
 				if((child>=Ntips) && merge_node[child-Ntips]){
@@ -16982,16 +16925,16 @@ Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
 	}else{
 		modified_edge_length.assign(Nedges,1.0);
 	}
-	for(long q=0, clade, node, absorbing_ancestor, parent, child, e, edge, inedge; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	for(long q=0, clade, node, absorbing_ancestor, parent, child, e, edge, inedge; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue; // tips are never merged upwards
 		node  	= clade-Ntips;
 		inedge  = clade2inedge[clade];
 		if((!merge_node[node]) && (absorbing_node_time_shifts[node]!=0)){
 			// this is an absorbing ancestor that will be shifted in time, so adjust the length of its incoming edge, as well as its outgoing non-merged-child edges (so that the ages of unmerged children remain unchanged)
 			if(inedge>=0) modified_edge_length[inedge] += absorbing_node_time_shifts[node];
-			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-				edge  = traversal.edge_mapping[e];
+			for(e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+				edge  = context.edge_mapping[e];
 				child = tree_edge[2*edge+1];
 				if((child<Ntips) || (!merge_node[child-Ntips])){
 					modified_edge_length[edge] -= absorbing_node_time_shifts[node];
@@ -17001,8 +16944,8 @@ Rcpp::List merge_nodes_to_multifurcations_CPP(	const long					Ntips,
 			// merge this node upwards into its parent, eventually eliminating its incoming edge
 			parent = clade2parent[clade];
 			absorbing_ancestor = modified_tree_edge[2*inedge+0]; // this may be an ancestor further back than the node's original parent, if the node's parent was also merged upwards
-			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-				edge = traversal.edge_mapping[e];
+			for(e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+				edge = context.edge_mapping[e];
 				modified_tree_edge[2*edge+0] = absorbing_ancestor;
 				modified_edge_length[edge] += modified_edge_length[inedge] - (parent==absorbing_ancestor ? absorbing_node_time_shifts[absorbing_ancestor-Ntips] : 0.0);
 			}
@@ -17074,7 +17017,7 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 	const long root = get_root_from_clade2parent(Ntips, clade2parent);
 	
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, root, tree_edge, true);
 
 	// shift clades
 	double time_shift;
@@ -17088,8 +17031,8 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 		new_edge_length[inedge] += time_shift;
 		if((clade>=Ntips) && (!shift_descendants)){
 			// also adjust outgoing edge lengths, so that descendant tips & nodes retain their original times
-			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-				new_edge_length[traversal.edge_mapping[e]] -= time_shift;
+			for(e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+				new_edge_length[context.edge_mapping[e]] -= time_shift;
 			}
 		}
 	}
@@ -17102,8 +17045,8 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 	}else if(negative_edge_lengths=="move_child"){
 		// move root-->tips, moving nodes & tips away from the root as needed
 		double error;
-		for(long q=1, clade, node, inedge, e; q<traversal.queue.size(); ++q){
-			clade 	= traversal.queue[q];
+		for(long q=1, clade, node, inedge, e; q<context.queue.size(); ++q){
+			clade 	= context.queue[q];
 			inedge	= clade2inedge[clade];
 			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
 			error = abs(new_edge_length[inedge]);
@@ -17111,15 +17054,15 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 			if(clade<Ntips) continue; // clade is a tip, so no need to adjust outgoing edges
 			node = clade - Ntips;
 			// shorten outgoing edges, so that descendant times remain the same
-			for(e=traversal.node2first_edge[node]; e<=traversal.node2last_edge[node]; ++e){
-				new_edge_length[traversal.edge_mapping[e]] -= error;
+			for(e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+				new_edge_length[context.edge_mapping[e]] -= error;
 			}
 		}
 	}else if(negative_edge_lengths=="move_parent"){
 		// move tips-->root, moving nodes & tips towards the root as needed
 		double error;
-		for(long q=traversal.queue.size()-1, clade, parent, pnode, inedge, e, edge; q>=1; --q){
-			clade 	= traversal.queue[q];
+		for(long q=context.queue.size()-1, clade, parent, pnode, inedge, e, edge; q>=1; --q){
+			clade 	= context.queue[q];
 			inedge	= clade2inedge[clade];
 			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
 			parent = clade2parent[clade];
@@ -17127,8 +17070,8 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 			new_edge_length[inedge] = 0;
 			// extend sister edges, so that sister clades remain "parallel" to this subclade and the parent moves backward on its own
 			pnode = parent-Ntips;
-			for(e=traversal.node2first_edge[pnode]; e<=traversal.node2last_edge[pnode]; ++e){
-				edge = traversal.edge_mapping[e];
+			for(e=context.node2first_edge[pnode]; e<=context.node2last_edge[pnode]; ++e){
+				edge = context.edge_mapping[e];
 				if(edge!=inedge) new_edge_length[edge] += error;
 			}
 			if(parent==root) continue; // parent is root, so no need to adjust its incoming edge
@@ -17136,8 +17079,8 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 		}
 	}else if(negative_edge_lengths=="move_all_descendants"){
 		// move root-->tips, moving descending subclades away from the root as needed
-		for(long q=1, clade, inedge; q<traversal.queue.size(); ++q){
-			clade 	= traversal.queue[q];
+		for(long q=1, clade, inedge; q<context.queue.size(); ++q){
+			clade 	= context.queue[q];
 			inedge	= clade2inedge[clade];
 			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
 			new_edge_length[inedge] = 0;
@@ -17145,8 +17088,8 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 	}else if(negative_edge_lengths=="move_all_ancestors"){
 		// move tips-->root, moving all ancestors towards the root as needed
 		double error;
-		for(long q=traversal.queue.size()-1, clade, inedge, e, edge; q>=1; --q){
-			clade 	= traversal.queue[q];
+		for(long q=context.queue.size()-1, clade, inedge, e, edge; q>=1; --q){
+			clade 	= context.queue[q];
 			inedge	= clade2inedge[clade];
 			if(new_edge_length[inedge]>=0) continue; // nothing to fix here
 			error = abs(new_edge_length[inedge]);
@@ -17155,8 +17098,8 @@ Rcpp::List shift_clade_times_CPP(const long					Ntips,
 			while(clade2parent[clade]>=0){
 				inedge 	= clade2inedge[clade];
 				clade 	= clade2parent[clade];
-				for(e=traversal.node2first_edge[clade-Ntips]; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-					edge = traversal.edge_mapping[e];
+				for(e=context.node2first_edge[clade-Ntips]; e<=context.node2last_edge[clade-Ntips]; ++e){
+					edge = context.edge_mapping[e];
 					if(edge!=inedge) new_edge_length[edge] += error;
 				}
 			}
@@ -17517,20 +17460,20 @@ Rcpp::List assign_clades_to_taxa_CPP(	const long				Ntips,
 // pick one tip descending from a clade
 // if multiple tips descend from a clade, then which tip is returned may be arbitrary
 // returns false on failure
-bool aux_get_one_descending_tip(const long				Ntips,			// (INPUT) number of tips in the tree
-								const long 				Nnodes,			// (INPUT) number of internal nodes in the tree
-								const long				Nedges,			// (INPUT) number of edges in the tree
-								const lvector			&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
-								const tree_traversal	&traversal, 	// (INPUT) tree traversal struct, for traversing tree root-->tips
-								const lvector			&tips_per_clade,// (INPUT) 1D array of size Nclades, listing the number of available tips per clade for picking. tips_per_clade[c] may be less than the actual number of descending tips, e.g. if some tips are deemed "non-available". tips_per_clade[] must be self-consistent, i.e. tips_per_clade[c] must be the sum of tips_per_clade[cc] across all child-clades cc of c.
-								const long				start_clade,	// (INPUT) start clade, i.e. from which to pick a descending tip. If the clade is a tip, it is returned itself (if it is "available").
-								long					&tip){			// (OUTPUT) the returned descending tip.
+bool aux_get_one_descending_tip(const long			Ntips,			// (INPUT) number of tips in the tree
+								const long 			Nnodes,			// (INPUT) number of internal nodes in the tree
+								const long			Nedges,			// (INPUT) number of edges in the tree
+								const lvector		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+								const tree_context	&context, 		// (INPUT) tree_context structure, for traversing tree root-->tips
+								const lvector		&tips_per_clade,// (INPUT) 1D array of size Nclades, listing the number of available tips per clade for picking. tips_per_clade[c] may be less than the actual number of descending tips, e.g. if some tips are deemed "non-available". tips_per_clade[] must be self-consistent, i.e. tips_per_clade[c] must be the sum of tips_per_clade[cc] across all child-clades cc of c.
+								const long			start_clade,	// (INPUT) start clade, i.e. from which to pick a descending tip. If the clade is a tip, it is returned itself (if it is "available").
+								long				&tip){			// (OUTPUT) the returned descending tip.
 	long clade = start_clade;
 	bool moved;
 	while(clade>=Ntips){
 		moved = false;
-		for(long e=traversal.node2first_edge[clade-Ntips], edge, child; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-Ntips], edge, child; e<=context.node2last_edge[clade-Ntips]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge + 1];
 			if(tips_per_clade[child]>0){
 				// found a child with available tips, so move down there
@@ -17553,15 +17496,15 @@ bool aux_get_one_descending_tip(const long				Ntips,			// (INPUT) number of tips
 // pick two tips descending from a node
 // if more than 2 tips descend from a node, then which tips are returned may be arbitrary
 // Returns false on error (e.g. if the node does not have >=2 descending tips)
-bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of tips in the tree
-									const long 				Nnodes,			// (INPUT) number of internal nodes in the tree
-									const long				Nedges,			// (INPUT) number of edges in the tree
-									const lvector			&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
-									const tree_traversal	&traversal, 	// (INPUT) tree traversal struct, for traversing tree root-->tips
-									const lvector			&tips_per_clade,// (INPUT) 1D array of size Nclades, listing the number of available tips per clade for picking. tips_per_clade[c] may be less than the actual number of descending tips, e.g. if some tips are deemed "non-available". tips_per_clade[] must be self-consistent, i.e. tips_per_clade[c] must be the sum of tips_per_clade[cc] across all child-clades cc of c.
-									const long				start_clade,	// (INPUT) start clade, i.e. from which to pick the descending tips
-									long					&tip1,			// (OUTPUT) the 1st descending tip
-									long					&tip2){			// (OUTPUT) the 2nd descending tip
+bool aux_get_two_descending_tips(	const long			Ntips,			// (INPUT) number of tips in the tree
+									const long 			Nnodes,			// (INPUT) number of internal nodes in the tree
+									const long			Nedges,			// (INPUT) number of edges in the tree
+									const lvector		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+									const tree_context	&context,	 	// (INPUT) tree_context structure, for traversing tree root-->tips
+									const lvector		&tips_per_clade,// (INPUT) 1D array of size Nclades, listing the number of available tips per clade for picking. tips_per_clade[c] may be less than the actual number of descending tips, e.g. if some tips are deemed "non-available". tips_per_clade[] must be self-consistent, i.e. tips_per_clade[c] must be the sum of tips_per_clade[cc] across all child-clades cc of c.
+									const long			start_clade,	// (INPUT) start clade, i.e. from which to pick the descending tips
+									long				&tip1,			// (OUTPUT) the 1st descending tip
+									long				&tip2){			// (OUTPUT) the 2nd descending tip
 	long clade = start_clade;
 	long node, tip;
 	tip1 = -1;
@@ -17569,8 +17512,8 @@ bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of ti
 	// move root-->tips until we find a bifurcation (or multifurcation), then pick one tip from each of the first two descending lineages
 	while(clade>=Ntips){
 		node = clade - Ntips;
-		for(long e=traversal.node2first_edge[node], child; e<=traversal.node2last_edge[node]; ++e){
-			child = tree_edge[2*traversal.edge_mapping[e]+1];
+		for(long e=context.node2first_edge[node], child; e<=context.node2last_edge[node]; ++e){
+			child = tree_edge[2*context.edge_mapping[e]+1];
 			if(tips_per_clade[child]>=2){
 				// this child has at least two available tips
 				if(tip1<0){
@@ -17579,13 +17522,13 @@ bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of ti
 					break;
 				}else{
 					// only need one more tip, so just get it from this child
-					if(!aux_get_one_descending_tip(Ntips, Nnodes, Nedges, tree_edge, traversal, tips_per_clade, child, tip)) return false; // something went wrong
+					if(!aux_get_one_descending_tip(Ntips, Nnodes, Nedges, tree_edge, context, tips_per_clade, child, tip)) return false; // something went wrong
 					tip2 = tip;
 					return true;
 				}
 			}else if(tips_per_clade[child]==1){
 				// this node has exactly one available tip, so get it
-				if(!aux_get_one_descending_tip(Ntips, Nnodes, Nedges, tree_edge, traversal, tips_per_clade, child, tip)) return false; // something went wrong
+				if(!aux_get_one_descending_tip(Ntips, Nnodes, Nedges, tree_edge, context, tips_per_clade, child, tip)) return false; // something went wrong
 				if(tip1<0){
 					tip1 = tip;
 				}else if(tip2<0){
@@ -17609,6 +17552,7 @@ bool aux_get_two_descending_tips(	const long				Ntips,			// (INPUT) number of ti
 	}
 }
 
+
 // Split tree into pairs of sister-tips, such that the paths within distinct pairs do not overlap
 // The algorithm proceeds by repeatedly picking nodes with 2 descending tips until no such node is left (at which point the algorithm stops)
 // If the input tree only contains monofurcations and bifurcations (recommended), it is guaranteed that at most one unpaired tip will be left (i.e., if Ntips was odd)
@@ -17619,23 +17563,16 @@ Rcpp::List get_independent_sister_tips_CPP(	const long				Ntips,
 											const std::vector<long>	&tree_edge){	// (INPUT) 2D array (in row-major format) of size Nedges x 2
 	const long Nclades = Ntips + Nnodes;
 	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-
 	// get tree traversal route (root --> tips), including tips			
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 		
 	// count number of tips descending from each node
 	lvector tips_per_clade(Nclades,0);
 	for(long tip=0; tip<Ntips; ++tip) tips_per_clade[tip] = 1;
-	for(long q=traversal.queue.size()-1, clade, parent; q>=0; --q){
-		clade = traversal.queue[q];
-		if(clade==root) continue;
-		parent = clade2parent[clade];
+	for(long q=context.queue.size()-1, clade, parent; q>=0; --q){
+		clade = context.queue[q];
+		if(clade==context.root) continue;
+		parent = context.clade2parent[clade];
 		tips_per_clade[parent] += tips_per_clade[clade];
 	}
 	
@@ -17659,12 +17596,12 @@ Rcpp::List get_independent_sister_tips_CPP(	const long				Ntips,
 		node  = dnodes[dn];
 		clade = node+Ntips;
 		// find tips descending from this node
-		if(!aux_get_two_descending_tips(Ntips, Nnodes, Nedges, tree_edge, traversal, tips_per_clade, clade, tip1, tip2)) Rcout << "ERROR: Something went wrong. Maybe a bug?" << endl;
+		if(!aux_get_two_descending_tips(Ntips, Nnodes, Nedges, tree_edge, context, tips_per_clade, clade, tip1, tip2)) Rcout << "ERROR: Something went wrong. Maybe a bug?" << endl;
 		tip_pairs.push_back(tip1);
 		tip_pairs.push_back(tip2);
 		// update the (unpaired) tip counts of all ancestral nodes starting at tip1 and tip2 (traverse tips --> root)
 		// also remove or add nodes from the dnodes[] list as appropriate
-		clade = clade2parent[tip1];
+		clade = context.clade2parent[tip1];
 		while(clade>=0){
 			node = clade-Ntips;
 			tips_per_clade[clade] -= 1;
@@ -17676,9 +17613,9 @@ Rcpp::List get_independent_sister_tips_CPP(	const long				Ntips,
 				node2dnode_index[node] = dnodes.size();
 				dnodes.push_back(node);
 			}
-			clade = clade2parent[clade];
+			clade = context.clade2parent[clade];
 		}
-		clade = clade2parent[tip2];
+		clade = context.clade2parent[tip2];
 		while(clade>=0){
 			node = clade-Ntips;
 			tips_per_clade[clade] -= 1;
@@ -17690,7 +17627,7 @@ Rcpp::List get_independent_sister_tips_CPP(	const long				Ntips,
 				node2dnode_index[node] = dnodes.size();
 				dnodes.push_back(node);
 			}
-			clade = clade2parent[clade];
+			clade = context.clade2parent[clade];
 		}
 	}
 	return Rcpp::List::create(Rcpp::Named("tip_pairs") = tip_pairs);
@@ -17834,23 +17771,16 @@ Rcpp::List consensus_taxonomies_CPP(const long						Ntips,
 		split_string(tip_taxonomies[tip], delimiter, -1, tip_taxonomies_split[tip]);
 	}
 	
-	// determine parent clade for each clade
-	lvector clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-	
 	// get tree traversal route (root --> tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 
 	// Step 1: calculate node consensus taxonomies while moving from tips to root, storing them as parts
 	long clade, pnode, taxref, taxlen, ptaxref, ptaxlen, new_ptaxlen;
 	lvector node2taxref(Nnodes,-1), node2taxlen(Nnodes);
-	for(long q=traversal.queue.size()-1; q>=0; --q){
-		clade = traversal.queue[q];
-		if(clade==root) continue;
-		pnode  = clade2parent[clade] - Ntips;
+	for(long q=context.queue.size()-1; q>=0; --q){
+		clade = context.queue[q];
+		if(clade==context.root) continue;
+		pnode  = context.clade2parent[clade] - Ntips;
 		taxref = ((clade<Ntips) ? clade : node2taxref[clade-Ntips]);
 		taxlen = ((clade<Ntips) ? tip_taxonomies_split[clade].size() : node2taxlen[clade-Ntips]);
 		if(node2taxref[pnode]<0){
@@ -17912,32 +17842,25 @@ Rcpp::List place_tips_taxonomically_CPP(const long						Ntips,
 	for(long query=0; query<Nqueries; ++query){
 		split_string(query_taxonomies[query], query_taxon_delimiter, -1, query_taxonomies_split[query]);
 	}
-	
-	// determine parent clade for each clade
-	lvector clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-	
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);
-		
+			
 	// get tree traversal route (root --> tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 	
 	lvector candidate_stack, fits, precise_fits, placement_clades(Nqueries,-1);
 	bool descended;
 	long max_precision;
 	for(long query=0, clade; query<Nqueries; ++query){
-		if((clade_taxonomies[root]!="") && (!taxon_descends(clade_taxonomies_split[root], query_taxonomies_split[query]))) continue; // this query does not even fit into the root, so don't place it
+		if((clade_taxonomies[context.root]!="") && (!taxon_descends(clade_taxonomies_split[context.root], query_taxonomies_split[query]))) continue; // this query does not even fit into the root, so don't place it
 		candidate_stack.clear();
 		fits.clear();
 		max_precision = 0;
-		candidate_stack.push_back(root);
+		candidate_stack.push_back(context.root);
 		while(candidate_stack.size()>0){
 			clade = candidate_stack.back();
 			candidate_stack.pop_back();
 			descended = false;
-			for(long e=traversal.node2first_edge[clade-Ntips], edge, child; e<=traversal.node2last_edge[clade-Ntips]; ++e){
-				edge  = traversal.edge_mapping[e];
+			for(long e=context.node2first_edge[clade-Ntips], edge, child; e<=context.node2last_edge[clade-Ntips]; ++e){
+				edge  = context.edge_mapping[e];
 				child = tree_edge[2*edge+1];
 				if(taxon_descends(clade_taxonomies_split[child], query_taxonomies_split[query]) && (child>=Ntips)){
 					candidate_stack.push_back(child);
@@ -17954,7 +17877,7 @@ Rcpp::List place_tips_taxonomically_CPP(const long						Ntips,
 		for(long f=0; f<fits.size(); ++f){
 			if(clade_taxonomies_split[fits[f]].size()==max_precision) precise_fits.push_back(fits[f]);
 		}
-		placement_clades[query] = most_recent_common_ancestor(Ntips, Nnodes, Nedges, root, clade2parent, tree_edge, precise_fits);
+		placement_clades[query] = most_recent_common_ancestor(Ntips, Nnodes, Nedges, context.root, context.clade2parent, tree_edge, precise_fits);
 	}
 	
 	return Rcpp::List::create(Rcpp::Named("placement_clades") = placement_clades); 	// 1D integer array of length Nqueries, with values in 0,..,Nclades-1, specifying the clade at which each query was placed
@@ -18550,7 +18473,7 @@ std::vector<double> propagate_max_ages_downstream_CPP(	const long 					Ntips,
 
 // calculate the geometric placement of tips & nodes for plotting a tree as a phylogram
 // The root is placed on the left end, tips are placed on the right end, edges extend horizontally left to right
-// tips y-coordinates of all clades will be within 0 and Ntips
+// The y-coordinates of all clades will be within 0 and Ntips
 // [[Rcpp::export]]
 Rcpp::List get_phylogram_geometry_CPP(	const long			Ntips,
 										const long 			Nnodes,
@@ -18637,6 +18560,132 @@ Rcpp::List get_phylogram_geometry_CPP(	const long			Ntips,
 								Rcpp::Named("max_y")	= Ntips-0.5,
 								Rcpp::Named("root_y")	= clade_y[root]);
 }
+
+
+
+// calculate the geometric placement of tips & nodes for plotting a radial (circular) tree
+// The root is placed on the center, tips are placed on the perimeter (if ultrametric), edges extend from the center outwards
+// The function returns all locations in polar coordinates (angles in radians, distances from center in edge length units)
+// [[Rcpp::export]]
+Rcpp::List get_radial_tree_geometry_CPP(const long					Ntips,
+										const long 					Nnodes,
+										const long					Nedges,
+										std::vector<long>			tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+										const std::vector<double>	&edge_length,	// (INPUT) 1D array of size Nedges, or empty
+										const double				root_edge = 0,	// (INPUT) optional edge length leading into the root
+										const bool					symmetric_arcs = true,// (INPUT) whether to place each node in the middle of its arc, rather than in the middle of its descending tips.
+										const double				opening = 0){		// (INPUT) optional opening angle (in radians), i.e., separating the two flanks of the tree. If 0, the tips will uniformly cover the whole circle. Must be between 0 and 2*pi.
+	const long Nclades = Ntips + Nnodes;
+	const bool has_edge_lengths = (!edge_length.empty());
+										
+	// get tree context, including traversal route (root --> tips) including tips			
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
+	
+	// determine incoming edge per clade
+	lvector incoming_edge_per_clade(Nclades,-1);
+	for(long edge=0; edge<Nedges; ++edge){
+		incoming_edge_per_clade[tree_edge[edge*2+1]] = edge;
+	}
+										
+	// calculate number of descending tips per node, traversing tips-->root (excluding the root)
+	lvector node2total_tip_count(Nnodes,0);
+	for(long q=context.queue.size()-1, clade; q>=1; --q){
+		clade = context.queue[q];
+		node2total_tip_count[context.clade2parent[clade]-Ntips] += (clade<Ntips ? 1 : node2total_tip_count[clade-Ntips]);
+	}
+	
+	// calculate angular intervals of clades (traverse root-->tips)
+	dvector clade_min_phi(Nclades), clade_max_phi(Nclades);
+	clade_min_phi[context.root] = 0;
+	clade_max_phi[context.root] = max(0.0, 2*M_PI-opening);
+	for(long q=0, clade, node, edge, child; q<context.queue.size(); ++q){
+		clade = context.queue[q];
+		if(clade<Ntips) continue;
+		node = clade - Ntips;
+		double cumulative_fraction = 0, fraction;
+		for(long e=context.node2first_edge[node]; e<=context.node2last_edge[node]; ++e){
+			edge				 = context.edge_mapping[e];
+			child 				 = tree_edge[2*edge+1];
+			fraction			 = (child<Ntips ? 1l : node2total_tip_count[child-Ntips])/double(node2total_tip_count[node]);
+			clade_min_phi[child] = clade_min_phi[clade] + cumulative_fraction*(clade_max_phi[clade]-clade_min_phi[clade]);
+			clade_max_phi[child] = clade_min_phi[clade] + (cumulative_fraction+fraction)*(clade_max_phi[clade]-clade_min_phi[clade]);
+			cumulative_fraction += fraction;
+		}
+	}
+	
+	// calculate angular coordinates of clades (centers of angular intervals)
+	dvector clade_phi(Nclades);
+	if(symmetric_arcs){
+		// place each node in the middle of its arc.
+		// This requires that we compute node locations in post-order traversal (tips-->root)
+		for(long q=context.queue.size()-1, clade, node, first_edge, last_edge; q>=0; --q){
+			clade = context.queue[q];
+			if(clade<Ntips){
+				clade_phi[clade] = 0.5*(clade_min_phi[clade] + clade_max_phi[clade]);
+			}else{
+				node 		= clade - Ntips;
+				first_edge 	= context.edge_mapping[context.node2first_edge[node]];
+				last_edge 	= context.edge_mapping[context.node2last_edge[node]];
+				clade_phi[clade] = 0.5*(clade_phi[tree_edge[2*first_edge+1]] + clade_phi[tree_edge[2*last_edge+1]]);
+			}
+		}
+	}else{
+		// place each node in the middle of its descending tips
+		for(long clade=0; clade<Nclades; ++clade){
+			clade_phi[clade] = 0.5*(clade_min_phi[clade] + clade_max_phi[clade]);
+		}
+	}
+
+	// calculate distance from center for each clade
+	// (traverse root --> tips, excluding the root)
+	dvector clade_rho(Nclades);
+	clade_rho[context.root] = root_edge;
+	for(long q=1, clade, parent; q<context.queue.size(); ++q){
+		clade  = context.queue[q];
+		parent = context.clade2parent[clade];
+		clade_rho[clade] = (has_edge_lengths ? edge_length[incoming_edge_per_clade[clade]] : 1.0) + clade_rho[parent];
+	}
+	
+	// calculate angular coordinates and start_rho & end_rho of edges
+	// also calculate the number of tips descending from each edge
+	dvector edge_phi(Nedges), edge_rho0(Nedges), edge_rho1(Nedges);
+	lvector edge_mass(Nedges);
+	for(long edge=0, parent, child; edge<Nedges; ++edge){
+		parent 			= tree_edge[2*edge+0];
+		child 			= tree_edge[2*edge+1];
+		edge_phi[edge] 	= clade_phi[child];
+		edge_rho0[edge] = clade_rho[parent];
+		edge_rho1[edge]	= edge_rho0[edge] + (has_edge_lengths ? edge_length[edge] : 1.0);
+		edge_mass[edge] = (child<Ntips ? 1l : node2total_tip_count[child-Ntips]);
+	}
+	
+	// calculate for each node the arc connecting all of its descending edges
+	// this arc extends from the min to the max angle of any descending edge
+	dvector node_arc_phi0(Nnodes), node_arc_phi1(Nnodes);
+	lvector node_arc_mass(Nnodes);
+	for(long node=0; node<Nnodes; ++node){
+		node_arc_phi0[node]	= edge_phi[context.edge_mapping[context.node2first_edge[node]]];
+		node_arc_phi1[node]	= edge_phi[context.edge_mapping[context.node2last_edge[node]]];
+		node_arc_mass[node]	= node2total_tip_count[node];
+	}
+	
+										
+	return Rcpp::List::create(	Rcpp::Named("clade_rho") 		= Rcpp::wrap(clade_rho),		// 1D numeric array of length Nclades, specifying the distance of each clade (tip or node) from the center, in the same units as the tree's edge lengths
+								Rcpp::Named("clade_phi") 		= Rcpp::wrap(clade_phi),		// 1D numeric array of length Nclades, specifying the representative angular coordinate of each clade (tip or node) in radians
+								Rcpp::Named("edge_phi")			= Rcpp::wrap(edge_phi),			// 1D numeric array of length Nedges, specifying the angular coordinate of each edge
+								Rcpp::Named("edge_rho0")		= Rcpp::wrap(edge_rho0),		// 1D numeric array of length Nedges, specifying the start (min) distance of each edge from the center.
+								Rcpp::Named("edge_rho1")		= Rcpp::wrap(edge_rho1),		// 1D numeric array of length Nedges, specifying the end (max) distance of each edge from the center.
+								Rcpp::Named("edge_mass")		= Rcpp::wrap(edge_mass),		// 1D integer array of length Nedges, specifying the number of tips descending from each edge. Edges leading to tips have a mass of 1, while more ancestral edges have a greater mass. This information may be used e.g. to modify the thickness of plotted edges.
+								Rcpp::Named("node_arc_phi0")	= Rcpp::wrap(node_arc_phi0),	// 1D numeric array of length Nnodes, specifying the minimum (i.e., start) angle of each node's arc, i.e., connecting all of its descending edges. The arc should be drawn at the same distance from the center as the node itself.
+								Rcpp::Named("node_arc_phi1")	= Rcpp::wrap(node_arc_phi1),	// 1D numeric array of length Nnodes, specifying the maximum (i.e., end) angle of each node's arc, i.e., connecting all of its descending edges
+								Rcpp::Named("node_arc_mass")	= Rcpp::wrap(node_arc_mass),	// 1D integer array of length Nnodes, specifying the number of tips descending from each node. This information may be used e.g. to modify the thickness of plotted node arcs.
+								Rcpp::Named("clade_phi0")		= Rcpp::wrap(clade_min_phi),	// 1D numeric array of length Nclades, specifying for each clade (tips & nodes) the start of the angular interval allocated to it.
+								Rcpp::Named("clade_phi1")		= Rcpp::wrap(clade_max_phi),	// 1D numeric array of length Nclades, specifying for each clade (tips & nodes) the end of the angular interval allocated to it.
+								Rcpp::Named("root")				= context.root,					// integer, the clase index of the root in the tree. Useful e.g. for plotting the root in a special way, or for drawing a root edge
+								Rcpp::Named("max_rho")			= array_max(clade_rho));		// double, the maximum distance of any element from the center
+}
+
+
 
 
 
@@ -21623,21 +21672,18 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 	double edge_length_scale = (edge_length.size()==0 ? 1.0 : array_max(edge_length));
 	if(edge_length_scale==0) edge_length_scale = 1;
 	
-	// determine tree root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-
 	// get tree traversal route (root --> tips), not including tips			
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, false);
 
 	// calculate clade ages	
 	dvector clade_ages;
-	get_clade_ages(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, clade_ages);
+	get_clade_ages(Ntips, Nnodes, Nedges, tree_edge, edge_length, context, clade_ages);
 
 	// determine sub-trees depending on oldest_age
 	lvector subroots;
 	if(oldest_age<0){
 		// set the oldest_age to the root
-		subroots.push_back(root);
+		subroots.push_back(context.root);
 	}else{
 		subroots.reserve(Ntips);
 		for(long edge=0, child, parent; edge<Nedges; ++edge){
@@ -21649,7 +21695,7 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 				subroots.push_back(child);
 			}
 		}
-		if(subroots.empty()) subroots.push_back(root); // oldest_age was placed before the tree's root
+		if(subroots.empty()) subroots.push_back(context.root); // oldest_age was placed before the tree's root
 	}
 	const long Nsubtrees = subroots.size();
 	
@@ -21664,14 +21710,14 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 	//   Since the Mk propagator (exp(t*Q)) is linear, we can propagate posteriors along edges conveniently even using this representation, i.e. with the overall scale factored out
 	dvector logposteriors(Nnodes*Nstates,0.0), posterior_scales(Nnodes,0);
 	dvector Y, logY, expQ;
-	for(long q=traversal.queue.size()-1, clade, node; q>=0; --q){
-		clade = traversal.queue[q];
+	for(long q=context.queue.size()-1, clade, node; q>=0; --q){
+		clade = context.queue[q];
 		if(clade<Ntips) continue; // skip tips
 		if((oldest_age>0) && (clade_ages[clade]>oldest_age)) continue;
 		node = clade - Ntips;
 		// set probability distribution of clade to the element-wise product of its children's probability distributions
-		for(long e=traversal.node2first_edge[node], edge, child; e<=traversal.node2last_edge[node]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[node], edge, child; e<=context.node2last_edge[node]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge+1];
 
 			// calculate exponential of transition matrix along edge
@@ -22610,11 +22656,8 @@ Rcpp::List ASR_binomial_CPP(const long					Ntips,			// (INPUT) number of tips in
 	LL.state0_probs = state0_probs;
 	LL.tip_states	= tip_states;
 		
-	// find root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-
 	// get tree traversal route (root --> tips), including tips			
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 		
 	// traverse tree clades (tips-->root), each time fitting the state-0 probability P0 based on the states of the descending tips
 	std::vector<lvector> clade2tips(Nclades); // keep track of descending tips for each clade
@@ -22625,12 +22668,12 @@ Rcpp::List ASR_binomial_CPP(const long					Ntips,			// (INPUT) number of tips in
 	}
 	dvector clade2P0(Nclades,-1.0);
 	dvector clade2FisherStandardError(Nclades); // standard error estimates based on the Fisher Information Criterion
-	for(long q=traversal.queue.size()-1, clade, node; q>=0; --q){
-		clade = traversal.queue[q];
+	for(long q=context.queue.size()-1, clade, node; q>=0; --q){
+		clade = context.queue[q];
 		if(clade>=Ntips){
 			node = clade-Ntips;
-			for(long e=traversal.node2first_edge[node], edge, child; e<=traversal.node2last_edge[node]; ++e){
-				edge  = traversal.edge_mapping[e];
+			for(long e=context.node2first_edge[node], edge, child; e<=context.node2last_edge[node]; ++e){
+				edge  = context.edge_mapping[e];
 				child = tree_edge[2*edge+1];
 				clade2tips[clade].insert(clade2tips[clade].end(), clade2tips[child].begin(), clade2tips[child].end());
 				clade2reveal_count[clade] += clade2reveal_count[child];
@@ -27206,7 +27249,6 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 	long Nedges 		= 0;
 	long Nbirths		= 0;
 	long Ndeaths 		= 0;
-	long Nevents		= 0;
 	long Niterations	= 0;
 	double time 				= 0;
 	double total_rate			= INFTY_D;
@@ -27249,7 +27291,6 @@ Rcpp::List generate_random_tree_CPP(const long 	 	max_tips,					// (INPUT) max n
 		
 		// determine next event type
 		const bool birth = random_bernoulli(birth_rate/total_rate);
-		++Nevents;
 		time_epsilon = (dt>0 ? min(dt,time_epsilon) : time_epsilon);
 				
 		// randomly pick an existing tip to split or kill
@@ -27421,7 +27462,6 @@ Rcpp::List generate_random_tree_HBDS_CPP(	const long 	 				max_sampled_tips,	// 
 	long Ndeaths 		= 0;
 	long Nsamplings		= 0;
 	long Nretentions	= 0;
-	long Nevents		= 0;
 	long Niterations	= 0;
 	double time			= 0;
 	long grid_point		= find_next_left_grid_point(time_grid, 0.0, -1); // current time-grid point corresponding to time
@@ -27464,7 +27504,6 @@ Rcpp::List generate_random_tree_HBDS_CPP(	const long 	 				max_sampled_tips,	// 
 				if(no_full_extinction && (extant_tips.size()==1) && (retention_prob<0.5)) break; // prevent extinction that would be caused by this sampling
 				if(R::runif(0.0,1.0)<=sampling_prob){
 					// sample this lineage
-					++Nevents;
 					++Nsamplings;
 					clade = extant_tips[tip];
 					clade2end_time[clade] = time;
@@ -27523,8 +27562,7 @@ Rcpp::List generate_random_tree_HBDS_CPP(	const long 	 				max_sampled_tips,	// 
 		clade = extant_tips[tip];
 		clade2end_time[clade] = time;
 		
-		// execute event		
-		++Nevents;
+		// execute event
 		if(birth){
 			// split chosen tip into 2 daughter-tips & create new edges leading into those tips
 			++Nbirths;
@@ -29995,19 +30033,16 @@ bool generate_gene_tree_in_species_tree_MSC(const long					NStips,						// (INPU
 	if((gene_edge_unit!="time") && (gene_edge_unit!="generations") && (gene_edge_unit!="mutations_expected") && (gene_edge_unit!="mutations_random")){ error = "Invalid gene_edge_unit '"+gene_edge_unit+"'"; return false; }
 	const EdgeLengthUnit gene_edge_length_unit = (gene_edge_unit=="time" ? EdgeLengthUnitTime : (gene_edge_unit=="generations" ? EdgeLengthUnitGenerations : (gene_edge_unit=="mutations_expected" ? EdgeLengthUnitMutationsExpected : (gene_edge_unit=="mutations_random" ? EdgeLengthUnitMutationsRandom : EdgeLengthUnitTime))));
 
-	// find root
-	const long root = get_root_clade(NStips, NSnodes, NSedges, tree_edge);
-
 	// get tree traversal route (root --> tips), excluding tips			
-	tree_traversal traversal(NStips, NSnodes, NSedges, root, tree_edge, false, false);
+	tree_context context(NStips, NSnodes, NSedges, -1, tree_edge, false);
 
 	// calculate heights (distance from root) of species clades (traverse tree root-->tips)
 	dvector species_clade2time(NSclades);
-	species_clade2time[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
-		for(long e=traversal.node2first_edge[clade-NStips], edge, child; e<=traversal.node2last_edge[clade-NStips]; ++e){
-			edge  = traversal.edge_mapping[e];
+	species_clade2time[context.root] = 0;
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
+		for(long e=context.node2first_edge[clade-NStips], edge, child; e<=context.node2last_edge[clade-NStips]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge+1];
 			species_clade2time[child] = species_clade2time[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 		}
@@ -30049,12 +30084,12 @@ bool generate_gene_tree_in_species_tree_MSC(const long					NStips,						// (INPU
 	// coalescene alleles, traversing nodes in the species tree (tips-->root)
 	dvector coalescence_times; // temporary storage of gene coalescence heights (distance from root) within a specific species edge
 	long clade, first_child, Nremaining_orphans, edge, child, previous_gene_clade;
-	for(long q=traversal.queue.size()-1; q>=0; --q){
-		clade 		= traversal.queue[q];
-		first_child	= tree_edge[2*traversal.edge_mapping[traversal.node2first_edge[clade-NStips]]+1];
+	for(long q=context.queue.size()-1; q>=0; --q){
+		clade 		= context.queue[q];
+		first_child	= tree_edge[2*context.edge_mapping[context.node2first_edge[clade-NStips]]+1];
 		Nremaining_orphans = 0;
-		for(long e=traversal.node2first_edge[clade-NStips], edge, child; e<=traversal.node2last_edge[clade-NStips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-NStips], edge, child; e<=context.node2last_edge[clade-NStips]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge+1];
 			// coalesce gene lineages along this edge, backward in time
 			get_coalescence_heights_within_population(	(got_population_sizes ? population_sizes[child] : default_population_size),
@@ -30091,8 +30126,8 @@ bool generate_gene_tree_in_species_tree_MSC(const long					NStips,						// (INPU
 
 		// propagate remaining gene orphans to clade
 		gene_orphans[clade].reserve(Nremaining_orphans);
-		for(long e=traversal.node2first_edge[clade-NStips]; e<=traversal.node2last_edge[clade-NStips]; ++e){
-			edge 	= traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-NStips]; e<=context.node2last_edge[clade-NStips]; ++e){
+			edge 	= context.edge_mapping[e];
 			child	= tree_edge[2*edge+1];
 			gene_orphans[clade].insert(gene_orphans[clade].end(), gene_orphans[child].begin(), gene_orphans[child].end());
 			// swap the child's orphans list with an empty vector to free memory
@@ -30100,24 +30135,24 @@ bool generate_gene_tree_in_species_tree_MSC(const long					NStips,						// (INPU
 		}
 	}
 
-	if(gene_orphans[root].size()>1){
+	if(gene_orphans[context.root].size()>1){
 		// more than one gene lineages did not coalesce prior to the root, so coalesce
 		if(force_coalescence_at_root){
 			// coalesce at the root
 			// to avoid multifurcations, we coalesce gene clades into multiple nearby bifurcations if needed
 			double gene_root_time = 0;
-			for(long orphan=0; orphan<gene_orphans[root].size()-1; ++orphan){
-				gene_root_time = min(gene_root_time, gene_clade2time[gene_orphans[root][orphan]]); // make sure gene_root_height is smaller than any orphan time, to avoid negative edges due to potential rounding errors
+			for(long orphan=0; orphan<gene_orphans[context.root].size()-1; ++orphan){
+				gene_root_time = min(gene_root_time, gene_clade2time[gene_orphans[context.root][orphan]]); // make sure gene_root_height is smaller than any orphan time, to avoid negative edges due to potential rounding errors
 			}
-			coalescence_times.assign(gene_orphans[root].size()-1, gene_root_time);
+			coalescence_times.assign(gene_orphans[context.root].size()-1, gene_root_time);
 		}else{
 			// coalesce gene orphans along stem lineage, as far back as it takes
-			get_coalescence_heights_within_population(	(got_population_sizes ? population_sizes[root] : default_population_size),
-														(got_generation_times ? generation_times[root] : default_generation_time),
+			get_coalescence_heights_within_population(	(got_population_sizes ? population_sizes[context.root] : default_population_size),
+														(got_generation_times ? generation_times[context.root] : default_generation_time),
 														1.0,
 														ploidy,
-														gene_orphans[root].size(), // number of incoming gene lineages
-														species_clade2time[root],
+														gene_orphans[context.root].size(), // number of incoming gene lineages
+														species_clade2time[context.root],
 														-INFTY_D,
 														true,
 														coalescence_times);
@@ -30126,10 +30161,10 @@ bool generate_gene_tree_in_species_tree_MSC(const long					NStips,						// (INPU
 		aux_coalesce_genes(	coalescence_times,
 							-INFTY_D,
 							gene_edge_length_unit,								
-							(got_generation_times ? generation_times[root] : default_generation_time),
-							(got_mutation_rates ? min(1.0,mutation_rates[root]) : default_mutation_rate),
+							(got_generation_times ? generation_times[context.root] : default_generation_time),
+							(got_mutation_rates ? min(1.0,mutation_rates[context.root]) : default_mutation_rate),
 							Nsites,
-							gene_orphans[root],
+							gene_orphans[context.root],
 							next_gene_clade,
 							gene_clade2tail_time,
 							gene_clade2tail_length,
@@ -30137,12 +30172,12 @@ bool generate_gene_tree_in_species_tree_MSC(const long					NStips,						// (INPU
 							gene_tree_edge,
 							gene_edge_length);										
 	}
-	if(gene_orphans[root].size()!=1){ error = "Erroneous coalescence at root. Maybe a bug?"; return false; }
+	if(gene_orphans[context.root].size()!=1){ error = "Erroneous coalescence at root. Maybe a bug?"; return false; }
 
 	// make sure gene_root_clade index is equal to NGtips (as per common convention)
 	// we know that the last two gene-tree edges are the ones leaving from the root
 	// and that the first two gene-tree edges are the ones leaving from the clade indexed NGtips
-	long old_gene_root = gene_orphans[root].back();
+	long old_gene_root = gene_orphans[context.root].back();
 	gene_root = NGtips;
 	if(old_gene_root!=gene_root){
 		// update clade indices in gene_tree_edges[]
@@ -30285,20 +30320,20 @@ Rcpp::List generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP(	const long					NSt
 	const long root = get_root_clade(NStips, NSnodes, NSedges, tree_edge);
 
 	// get tree traversal route (root --> tips), including tips			
-	tree_traversal traversal(NStips, NSnodes, NSedges, root, tree_edge, true, false);
+	tree_context context(NStips, NSnodes, NSedges, root, tree_edge, true);
 	lvector clade2traversal_order(NSclades);
-	for(long q=0; q<traversal.queue.size(); ++q){
-		clade2traversal_order[traversal.queue[q]] = q;
+	for(long q=0; q<context.queue.size(); ++q){
+		clade2traversal_order[context.queue[q]] = q;
 	}
 
 	// calculate times (distance from root) of species clades (traverse tree root-->tips)
 	dvector clade2time(NSclades);
 	clade2time[root] = 0;
-	for(long q=0, clade; q<traversal.queue.size(); ++q){
-		clade = traversal.queue[q];
+	for(long q=0, clade; q<context.queue.size(); ++q){
+		clade = context.queue[q];
 		if(clade<NStips) continue;
-		for(long e=traversal.node2first_edge[clade-NStips], edge; e<=traversal.node2last_edge[clade-NStips]; ++e){
-			edge  = traversal.edge_mapping[e];
+		for(long e=context.node2first_edge[clade-NStips], edge; e<=context.node2last_edge[clade-NStips]; ++e){
+			edge  = context.edge_mapping[e];
 			clade2time[tree_edge[2*edge+1]] = clade2time[clade] + (got_edge_lengths ? edge_length[edge] : 1.0);
 			if(got_edge_lengths && (edge_length[edge]<0)) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Tree contains negative edge length (edge "+makeString(edge)+")");
 		}
@@ -30316,7 +30351,7 @@ Rcpp::List generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP(	const long					NSt
 		clade = epoch2clade[epoch];
 		clade2epoch[clade] = epoch;
 		if(clade<NStips) --current_diversity; // a tip marks an extinction event
-		else current_diversity += traversal.node2last_edge[clade-NStips] - traversal.node2first_edge[clade-NStips]; // a node marks a speciation event, generating N-1 new species (where N is the number of children)
+		else current_diversity += context.node2last_edge[clade-NStips] - context.node2first_edge[clade-NStips]; // a node marks a speciation event, generating N-1 new species (where N is the number of children)
 		epoch2Nspecies[epoch] = current_diversity;
 	}
 		
@@ -30386,8 +30421,8 @@ Rcpp::List generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP(	const long					NSt
 		if(mclade>=NStips){
 			// this mclade marks a branching point,
 			// Add the mclade's children to the epoch, and create new current loci for each mchild (branching off the parent locus)
-			for(long e=traversal.node2first_edge[mclade-NStips], edge, mchild; e<=traversal.node2last_edge[mclade-NStips]; ++e){
-				edge  = traversal.edge_mapping[e];
+			for(long e=context.node2first_edge[mclade-NStips], edge, mchild; e<=context.node2last_edge[mclade-NStips]; ++e){
+				edge  = context.edge_mapping[e];
 				mchild = tree_edge[2*edge+1];
 				// add mchild to list of clades in this epoch
 				clade2index_in_current_clades[mchild] = current_clades.size();
@@ -31226,26 +31261,19 @@ void simulate_SBM_on_tree(	const long 					Ntips,			// (INPUT)
 							dvector						&clade_phi){	// (OUTPUT) 1D array of size Nclades, listing the simulated thetas (latitudes in radians)
 	const long Nclades = Ntips + Nnodes;
 	
-	// determine parent clade for each clade
-	std::vector<long> clade2parent;
-	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
-
-	// find root using the mapping clade2parent
-	const long root = get_root_from_clade2parent(Ntips, clade2parent);	
-
 	// get tree traversal (root-->tips), not including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, false, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, false);
 	
 	// simulate spherical Brownian motion, moving from root to tips
 	clade_theta.resize(Nclades);
 	clade_phi.resize(Nclades);
-	clade_theta[root] = root_theta;
-	clade_phi[root] = root_phi;
+	clade_theta[context.root] = root_theta;
+	clade_phi[context.root] = root_phi;
 	double dt, omega;
-	for(long q=0, parent, child, e, edge; q<traversal.queue.size(); ++q){
-		parent = traversal.queue[q];
-		for(e=traversal.node2first_edge[parent-Ntips]; e<=traversal.node2last_edge[parent-Ntips]; ++e){
-			edge  = traversal.edge_mapping[e];
+	for(long q=0, parent, child, e, edge; q<context.queue.size(); ++q){
+		parent = context.queue[q];
+		for(e=context.node2first_edge[parent-Ntips]; e<=context.node2last_edge[parent-Ntips]; ++e){
+			edge  = context.edge_mapping[e];
 			child = tree_edge[2*edge+1];
 			dt	  = (edge_length.empty() ? 1.0 : max(0.0,edge_length[edge]));
 			draw_SBM_transition(dt * diffusivity/SQ(radius),
@@ -31277,27 +31305,24 @@ void simulate_SBM_on_tree(	const long 					Ntips,			// (INPUT)
 							dvector						&clade_phi){	// (OUTPUT) 1D array of size Nclades, listing the simulated thetas (latitudes in radians)
 	const long Nclades = Ntips + Nnodes;
 	
-	// find the root
-	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
-
 	// get tree traversal (root-->tips), including tips
-	tree_traversal traversal(Ntips, Nnodes, Nedges, root, tree_edge, true, false);
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
 	
 	// calculate the time of each clade, i.e. its distance from the root
 	dvector clade_times;
-	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, traversal, clade_times);
+	get_distances_from_root(Ntips, Nnodes, Nedges, tree_edge, edge_length, context, clade_times);
 	
 	// simulate spherical Brownian motion, moving from root to tips
 	clade_theta.resize(Nclades);
 	clade_phi.resize(Nclades);
-	clade_theta[root] = root_theta;
-	clade_phi[root] = root_phi;
+	clade_theta[context.root] = root_theta;
+	clade_phi[context.root] = root_phi;
 	double tD, omega;
-	for(long q=0, parent, child, e, edge; q<traversal.queue.size(); ++q){
-		parent = traversal.queue[q];
+	for(long q=0, parent, child, e, edge; q<context.queue.size(); ++q){
+		parent = context.queue[q];
 		if(parent<Ntips) continue;
-		for(e=traversal.node2first_edge[parent-Ntips]; e<=traversal.node2last_edge[parent-Ntips]; ++e){
-			edge  	= traversal.edge_mapping[e];
+		for(e=context.node2first_edge[parent-Ntips]; e<=context.node2last_edge[parent-Ntips]; ++e){
+			edge  	= context.edge_mapping[e];
 			child 	= tree_edge[2*edge+1];
 			tD		= (diffusivity_integral(clade_times[child])-diffusivity_integral(clade_times[parent]))/SQ(radius);
 			draw_SBM_transition(tD,
@@ -32521,6 +32546,69 @@ Rcpp::List read_fasta_from_file_CPP(const std::string 	&fasta_path,
 
 
 
+// Efficiently load a non-compressed fastq file
+// [[Rcpp::export]]
+Rcpp::List read_fastq_from_file_CPP(const std::string 	&fastq_path,
+									const bool			include_headers,
+									const bool			include_sequences,
+									const bool			include_qualities,
+									const long			max_sequences,
+									const long			max_lines){
+	std::ifstream fin(fastq_path);
+	if(!fin.is_open()){
+		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not open input file");
+	}
+	long Nlines=0;
+	std::string line, header, sequence, quality;
+	long seqlen, qualen, Nsequences=0;
+	std::vector<std::string> headers, sequences, qualities;
+	while(std::getline(fin, line)){
+		if((Nsequences>=max_sequences) || (Nlines>=max_lines)) break;
+		++Nlines;
+		if(line.empty()) continue; // skip empty lines
+		if(line[0]!='@') return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Error on line %d: Expected new sequence",Nlines));
+		if(include_headers) header = line.substr(1);
+		// Read sequence (can span multiple lines until '+' line)
+		sequence = "";
+		seqlen   = 0;
+		while(std::getline(fin, line)){
+			++Nlines;
+			if(line.empty()) continue;
+			if(line[0]=='+') break; // transitioning to quality scores
+			if(include_sequences) sequence += line;
+			seqlen += line.length();
+		}
+       // Read quality (should match length of sequence, but can span multiple lines)
+        quality = "";
+        qualen  = 0;
+        while(std::getline(fin, line)){
+			++Nlines;
+            if(line.empty()) continue;
+            if(include_qualities) quality += line;
+			qualen += line.length();
+            if(qualen>=seqlen) break;
+        }
+        if(Nlines>max_lines) break;
+		if(seqlen!=qualen) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Error on line %d: Sequence length (%d) differs from quality length (%d)",Nlines,seqlen,qualen));
+		// add to record
+		++Nsequences;
+		if(include_headers) headers.push_back(header);
+		if(include_sequences) sequences.push_back(sequence);
+		if(include_qualities) qualities.push_back(quality);
+		if((Nsequences%10)==0) Rcpp::checkUserInterrupt(); // abort if the user has interrupted the calling R program
+	}
+	fin.close();
+	
+	return Rcpp::List::create(	Rcpp::Named("success")		= true,
+								Rcpp::Named("headers") 		= headers,
+								Rcpp::Named("sequences") 	= sequences,
+								Rcpp::Named("qualities") 	= qualities,
+								Rcpp::Named("Nlines") 		= Nlines,
+								Rcpp::Named("Nsequences") 	= Nsequences);
+}
+
+
+
 // Efficiently load a distances list from a text file, with parent and child names listed in the first 2 columns, and distance listed in another column
 // Unfortunately this function cannot directly read gzipped files
 // [[Rcpp::export]]
@@ -32590,6 +32678,157 @@ Rcpp::List read_distances_list_CPP(	const std::string 	&file_path,
 								Rcpp::Named("distances") 	= distances,	// 1D array of size ND, listing the distance of each edge
 								Rcpp::Named("edges") 		= edges); 		// 2D array of size ND x 2 in row-major format, listing the integer indices of the parent & child of each edge
 }
+
+
+#pragma mark -
+#pragma mark Working with raw sequences
+#pragma mark
+
+
+
+char nucleotide_complement(char base){
+    switch (base) {
+        case 'A': return 'T';
+        case 'a': return 't';
+        case 'C': return 'G';
+        case 'c': return 'g';
+        case 'G': return 'C';
+        case 'g': return 'c';
+        case 'T': return 'A';
+        case 't': return 'a';
+        case 'N': return 'N';
+        case 'n': return 'n';
+        default:  return 'N'; // fallback for unexpected characters
+    }
+}
+
+
+// compute the reverse-complement of a nucleotide sequence
+string reverse_complement_sequence(const string &sequence){
+	const long N=sequence.size();
+	string rc(N,' ');
+    for(long i=N-1; i>=0; --i){
+        rc[N-i-1] = nucleotide_complement(sequence[i]);
+    }
+    return rc;
+}
+
+
+// determine if a given character is in a given string
+bool char_in_string(char 				needle, 
+					const std::string	&haystack,
+					const bool			case_sensitive=true){
+	if(haystack.size()==0) return false;
+	if(case_sensitive){
+		for(long i=0; i<haystack.size(); ++i){
+			if(haystack[i]==needle) return true;
+		}
+	}else{
+		needle = std::tolower((unsigned char)needle);
+		for(long i=0; i<haystack.size(); ++i){
+			if(std::tolower((unsigned char)haystack[i])==needle) return true;
+		}
+	}
+	return false;
+}
+					
+
+// calculate the fractional identity of two character sequences (e.g. nucleotide sequences), optionally allowing for a shift between them
+// Note that no reversal or complementation is done here for any of the two sequences, so if desired this should be done by the caller
+// The function returns false upon failure, e.g. if the strings don't overlap or all characters in the overlap region are unknown.
+bool pairwise_sequence_identity(const std::string &seqA,		// (INPUT) first sequence, typically the forward read
+								const std::string &seqB,		// (INPUT) second sequence, typically the reversed-complement of the reverse read
+								const long shift,				// (INPUT) shift of seqB relative to seqA, i.e., compare seqA[k] to seqB[k-shift]
+								const std::string &unknowns,	// (INPUT) optional string, specifying characters representing unknown or not-available. If one or both characters are in unknowns, the position is skipped and not counted toward or againt the identity. For DNA sequences, this will typically be "N".
+								const bool case_sensitive,		// (INPUT) whether all string comparisons should be case sensitive
+								double &identity,				// (OUTPUT) fractional identity between the strings within their overlapping region, excluding any unknown characters
+								long &Nchars){					// (OUTPUT) number of characters counted toward the identity
+	const long NA = seqA.size();
+	const long NB = seqB.size();
+	if((shift>=NA) || (-shift>=NB)) return false;
+	const long firstA = max(0l,shift);
+	const long lastA  = min(shift+NB,NA)-1;
+	long Nmatches = 0;
+	Nchars = 0;
+	for(long a=firstA, b; a<=lastA; ++a){
+		b = a-shift;
+		if(char_in_string(seqA[a],unknowns,case_sensitive) || char_in_string(seqB[b],unknowns,case_sensitive)) continue; // skip this position
+		++Nchars;
+		if(case_sensitive ? (seqA[a]==seqB[b]) : ((unsigned char)seqA[a]==(unsigned char)seqB[b])) ++Nmatches;
+	}
+	identity = (Nchars==0 ? NAN_D : double(Nmatches)/Nchars);
+	return (Nchars>0);
+}
+
+
+// determine the optimal shift between two sequences such that their pairwise fractional identity is maximized
+// In the case of ambiguity (multiple equal optima), the optimum corresponding to the smallest shift (by absolute value) is returned
+// Returns true on sucess, false on failure (e.g., if all considered shifts yielded an identity of 0)
+// Note that no reversal or complementation is done here for any of the two sequences, so if desired this should be done by the caller
+bool optimize_paired_sequence_shift(const std::string &seqA,
+									const std::string &seqB,
+									const std::string &unknowns,// (INPUT) optional string, specifying characters representing unknown or not-available. If one or both characters are in unknowns, the position is skipped and not counted toward or againt the identity. For DNA sequences, this will typically be "N".
+									const bool case_sensitive,	// (INPUT) whether all string comparisons should be case sensitive
+									long min_shift,				// (INPUT) optional minimum considered shift of seqB relative to seqA. Negative values are allowed, corresponding to seqB being placed "leftwards" of seqA. Set this to -INFTY_D to not allow arbitrarily negative shifts.
+									long max_shift,				// (INPUT) optional maximum considered shift of seqB relative to seqA. Set this to INFTY_D to not allow arbitrarily positive shifts.
+									long min_Nchars,			// (OUTPUT) minimum acceptable number of characters counted toward sequence identity in order to accept a specific placement. Set this to 0 to disable this filter.
+									long &best_shift,			// (OUTPUT) optimized shift
+									double &best_identity,		// (OUTPUT) maximized pairwise identity, achieved by best_shift
+									long &best_Nchars){			// (OUTPUT) number of characters counted toward the optimized identity, i.e., excluding unknowns
+	min_shift = max(min_shift,long(-seqB.size()+1));
+	max_shift = min(max_shift,long(seqA.size()-1));
+	best_identity=-1;
+	double identity;
+	long Nchars;
+	for(long shift=min_shift; shift<=max_shift; ++shift){
+		if(pairwise_sequence_identity(seqA, seqB, shift, unknowns, case_sensitive, identity, Nchars)){
+			if((Nchars>=min_Nchars) && ((best_identity<identity) || ((best_identity==identity) && (abs(shift)<abs(best_shift))))){
+				best_identity 	= identity;
+				best_shift 		= shift;
+				best_Nchars		= Nchars;
+			}
+		}
+	}
+	return ((best_identity>0) || (max_shift==min_shift));
+}
+
+
+
+// Determine the optimal relative positioning between paired-end DNA sequencing reads
+// This is a lightweight quick-and-dirty algorithm based on simple string matching, i.e., the overlap is chosen for each read pair such that their fractional identity within the overlapping region is maximized.
+// [[Rcpp::export]]
+Rcpp::List place_paired_end_reads_CPP(const std::vector<std::string> &forward_reads,
+									  const std::vector<std::string> &reverse_reads,
+									  long min_overlap = 1,		// (INPUT) minimum considered overlap between forward & reverse reads
+									  long min_Nchars  = 1){	// (INPUT) minimum required number of characters counted toward the identity within the overlapping region, i.e., excluding unknowns
+	long best_shift, best_Nchars0;
+	double best_identity;
+	lvector best_overlaps(forward_reads.size(),0), best_Nchars(forward_reads.size(),0);
+	dvector best_identities(forward_reads.size(),NAN_D);
+	for(long s=0; s<forward_reads.size(); ++s){
+		if(optimize_paired_sequence_shift(	forward_reads[s],
+											reverse_complement_sequence(reverse_reads[s]),
+											"N",
+											false,
+											0,
+											forward_reads[s].size()-min_overlap,
+											min_Nchars,
+											best_shift,
+											best_identity,
+											best_Nchars0)){
+			best_overlaps[s]   = forward_reads[s].size()-best_shift;
+			best_identities[s] = best_identity;
+			best_Nchars[s]	   = best_Nchars0;
+		}
+		if((s%10)==0) Rcpp::checkUserInterrupt(); // abort if the user has interrupted the calling R program
+	}
+	return Rcpp::List::create(	Rcpp::Named("best_overlaps")	= best_overlaps,
+								Rcpp::Named("best_identities")	= best_identities,
+								Rcpp::Named("best_Nchars")		= best_Nchars);
+}
+
+
+
 
 
 

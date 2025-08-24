@@ -377,6 +377,10 @@ get_phylogram_geometry_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_le
     .Call(`_castor_get_phylogram_geometry_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
+get_radial_tree_geometry_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_edge = 0, symmetric_arcs = TRUE, opening = 0) {
+    .Call(`_castor_get_radial_tree_geometry_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, root_edge, symmetric_arcs, opening)
+}
+
 tree_to_Newick_string_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, edge_labels, edge_numbers, digits, root_edge_length, quoting) {
     .Call(`_castor_tree_to_Newick_string_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, tip_labels, node_labels, edge_labels, edge_numbers, digits, root_edge_length, quoting)
 }
@@ -673,7 +677,15 @@ read_fasta_from_file_CPP <- function(fasta_path, include_headers, include_sequen
     .Call(`_castor_read_fasta_from_file_CPP`, fasta_path, include_headers, include_sequences)
 }
 
+read_fastq_from_file_CPP <- function(fastq_path, include_headers, include_sequences, include_qualities, max_sequences, max_lines) {
+    .Call(`_castor_read_fastq_from_file_CPP`, fastq_path, include_headers, include_sequences, include_qualities, max_sequences, max_lines)
+}
+
 read_distances_list_CPP <- function(file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix) {
     .Call(`_castor_read_distances_list_CPP`, file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix)
+}
+
+place_paired_end_reads_CPP <- function(forward_reads, reverse_reads, min_overlap = 1L, min_Nchars = 1L) {
+    .Call(`_castor_place_paired_end_reads_CPP`, forward_reads, reverse_reads, min_overlap, min_Nchars)
 }
 

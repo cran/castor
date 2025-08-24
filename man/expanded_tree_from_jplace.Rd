@@ -13,7 +13,7 @@ expanded_tree_from_jplace(file_path,
 }
 \arguments{
 \item{file_path}{
-Character, the path to the input \code{jplace} file.
+Character, the path to the input \code{jplace} file. May be gzipped with file extension ".gz".
 }
 \item{only_best_placements}{
 Logical, only keep the best placement of each query, i.e., the placement with maximum likelihood.

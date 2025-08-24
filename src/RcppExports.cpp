@@ -833,7 +833,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // date_tree_via_RED_CPP
-Rcpp::List date_tree_via_RED_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const long anchor_node, const long anchor_age);
+Rcpp::List date_tree_via_RED_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, long anchor_node, double anchor_age);
 RcppExport SEXP _castor_date_tree_via_RED_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP anchor_nodeSEXP, SEXP anchor_ageSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -843,8 +843,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
-    Rcpp::traits::input_parameter< const long >::type anchor_node(anchor_nodeSEXP);
-    Rcpp::traits::input_parameter< const long >::type anchor_age(anchor_ageSEXP);
+    Rcpp::traits::input_parameter< long >::type anchor_node(anchor_nodeSEXP);
+    Rcpp::traits::input_parameter< double >::type anchor_age(anchor_ageSEXP);
     rcpp_result_gen = Rcpp::wrap(date_tree_via_RED_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, anchor_node, anchor_age));
     return rcpp_result_gen;
 END_RCPP
@@ -1514,6 +1514,24 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::vector<long> >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
     rcpp_result_gen = Rcpp::wrap(get_phylogram_geometry_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_radial_tree_geometry_CPP
+Rcpp::List get_radial_tree_geometry_CPP(const long Ntips, const long Nnodes, const long Nedges, std::vector<long> tree_edge, const std::vector<double>& edge_length, const double root_edge, const bool symmetric_arcs, const double opening);
+RcppExport SEXP _castor_get_radial_tree_geometry_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP root_edgeSEXP, SEXP symmetric_arcsSEXP, SEXP openingSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< std::vector<long> >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    Rcpp::traits::input_parameter< const double >::type root_edge(root_edgeSEXP);
+    Rcpp::traits::input_parameter< const bool >::type symmetric_arcs(symmetric_arcsSEXP);
+    Rcpp::traits::input_parameter< const double >::type opening(openingSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_radial_tree_geometry_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length, root_edge, symmetric_arcs, opening));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3017,6 +3035,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// read_fastq_from_file_CPP
+Rcpp::List read_fastq_from_file_CPP(const std::string& fastq_path, const bool include_headers, const bool include_sequences, const bool include_qualities, const long max_sequences, const long max_lines);
+RcppExport SEXP _castor_read_fastq_from_file_CPP(SEXP fastq_pathSEXP, SEXP include_headersSEXP, SEXP include_sequencesSEXP, SEXP include_qualitiesSEXP, SEXP max_sequencesSEXP, SEXP max_linesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::string& >::type fastq_path(fastq_pathSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_headers(include_headersSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_sequences(include_sequencesSEXP);
+    Rcpp::traits::input_parameter< const bool >::type include_qualities(include_qualitiesSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_sequences(max_sequencesSEXP);
+    Rcpp::traits::input_parameter< const long >::type max_lines(max_linesSEXP);
+    rcpp_result_gen = Rcpp::wrap(read_fastq_from_file_CPP(fastq_path, include_headers, include_sequences, include_qualities, max_sequences, max_lines));
+    return rcpp_result_gen;
+END_RCPP
+}
 // read_distances_list_CPP
 Rcpp::List read_distances_list_CPP(const std::string& file_path, const std::string& delimiter, const std::string& comment_prefix, const long distances_column, const double min_distance, const double max_distance, const long max_Nedges, const long verbose_interval, const std::string& verbose_prefix);
 RcppExport SEXP _castor_read_distances_list_CPP(SEXP file_pathSEXP, SEXP delimiterSEXP, SEXP comment_prefixSEXP, SEXP distances_columnSEXP, SEXP min_distanceSEXP, SEXP max_distanceSEXP, SEXP max_NedgesSEXP, SEXP verbose_intervalSEXP, SEXP verbose_prefixSEXP) {
@@ -3033,6 +3067,20 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const long >::type verbose_interval(verbose_intervalSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
     rcpp_result_gen = Rcpp::wrap(read_distances_list_CPP(file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix));
+    return rcpp_result_gen;
+END_RCPP
+}
+// place_paired_end_reads_CPP
+Rcpp::List place_paired_end_reads_CPP(const std::vector<std::string>& forward_reads, const std::vector<std::string>& reverse_reads, long min_overlap, long min_Nchars);
+RcppExport SEXP _castor_place_paired_end_reads_CPP(SEXP forward_readsSEXP, SEXP reverse_readsSEXP, SEXP min_overlapSEXP, SEXP min_NcharsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type forward_reads(forward_readsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type reverse_reads(reverse_readsSEXP);
+    Rcpp::traits::input_parameter< long >::type min_overlap(min_overlapSEXP);
+    Rcpp::traits::input_parameter< long >::type min_Nchars(min_NcharsSEXP);
+    rcpp_result_gen = Rcpp::wrap(place_paired_end_reads_CPP(forward_reads, reverse_reads, min_overlap, min_Nchars));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3132,6 +3180,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_propagate_min_ages_upstream_CPP", (DL_FUNC) &_castor_propagate_min_ages_upstream_CPP, 7},
     {"_castor_propagate_max_ages_downstream_CPP", (DL_FUNC) &_castor_propagate_max_ages_downstream_CPP, 7},
     {"_castor_get_phylogram_geometry_CPP", (DL_FUNC) &_castor_get_phylogram_geometry_CPP, 5},
+    {"_castor_get_radial_tree_geometry_CPP", (DL_FUNC) &_castor_get_radial_tree_geometry_CPP, 8},
     {"_castor_tree_to_Newick_string_CPP", (DL_FUNC) &_castor_tree_to_Newick_string_CPP, 12},
     {"_castor_read_Newick_string_CPP", (DL_FUNC) &_castor_read_Newick_string_CPP, 5},
     {"_castor_get_trait_depth_consenTRAIT_CPP", (DL_FUNC) &_castor_get_trait_depth_consenTRAIT_CPP, 13},
@@ -3206,7 +3255,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_fit_SBM_from_sampled_transitions_CPP", (DL_FUNC) &_castor_fit_SBM_from_sampled_transitions_CPP, 16},
     {"_castor_ACF_spherical_CPP", (DL_FUNC) &_castor_ACF_spherical_CPP, 13},
     {"_castor_read_fasta_from_file_CPP", (DL_FUNC) &_castor_read_fasta_from_file_CPP, 3},
+    {"_castor_read_fastq_from_file_CPP", (DL_FUNC) &_castor_read_fastq_from_file_CPP, 6},
     {"_castor_read_distances_list_CPP", (DL_FUNC) &_castor_read_distances_list_CPP, 9},
+    {"_castor_place_paired_end_reads_CPP", (DL_FUNC) &_castor_place_paired_end_reads_CPP, 4},
     {NULL, NULL, 0}
 };
 

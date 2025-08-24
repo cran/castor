@@ -16,7 +16,7 @@ simulate_mk_model(tree, Q, root_probabilities="stationary",
 A rooted tree of class "phylo". The root is assumed to be the unique node with no incoming edge.
 }
 \item{Q}{
-A numeric matrix of size Nstates x Nstates, storing the transition rates between states. In particular, every row must sum up to zero.
+A numeric matrix of size Nstates x Nstates, storing the transition rates between states. In particular, every row must sum up to zero. The entries of this matrix have units 1/L, where L are the units of the tree's edge lengths.
 }
 \item{root_probabilities}{
 Probabilities of the different states at the root.
@@ -41,6 +41,8 @@ Logical, specifying whether the returned \code{tip_states} and \code{node_states
 For this function, the trait's states must be represented by integers within 1,..,Nstates, where Nstates is the total number of possible states. If the states are originally in some other format (e.g. characters or factors), you should map them to a set of integers 1,..,Nstates. These integers should correspond to row & column indices in the transition matrix \code{Q}. You can easily map any set of discrete states to integers using the function \code{\link{map_to_state_space}}.
 
 If \code{tree$edge.length} is missing, each edge in the tree is assumed to have length 1. The tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child). The time required per simulation decreases with the total number of requested simulations.
+
+Note that Q is a rate matrix, not a probability matrix, that is, it specifies the number of expected transitions per unit edge length (e.g., transitions per Myr, if your tree's edge lengths are in Myr). Some other software may normalize this matrix internally. Such normalization actually creates a distinct evolutionary model, modifies the units of the Q matrix, and is not recommended by the authors of \code{castor}.
 }
 
 

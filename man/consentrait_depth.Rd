@@ -4,7 +4,8 @@
 Calculate phylogenetic depth of a binary trait using the consenTRAIT metric.
 }
 \description{
-Given a rooted phylogenetic tree and presences/absences of a binary trait for each tip, calculate the mean phylogenetic depth at which the trait is conserved across clades, in terms of the consenTRAIT metric introduced by Martiny et al (2013). This is the mean depth of clades that are positive in the trait (i.e. in which a sufficient fraction of tips exhibits the trait).
+Given a rooted phylogenetic tree and presences/absences of a binary trait for each tip, calculate the mean phylogenetic depth at which the trait is conserved across clades, in terms of the consenTRAIT metric introduced by Martiny et al (2013). 
+This is the mean depth of clades that are positive in the trait (i.e. in which a sufficient fraction of tips exhibits the trait).
 }
 \usage{
 consentrait_depth(tree, 
@@ -40,9 +41,14 @@ Number of random permutations for estimating the statistical significance of the
 }
 }
 \details{
-This function calculates the "consenTRAIT" metric (or variants thereof) proposed by Martiny et al. (2013) for measuring the mean phylogenetic depth at which a binary trait (e.g. presence/absence of a particular metabolic function) is conserved across clades. A greater mean depth means that the trait tends to be conserved in deeper-rooting clades. In their original paper, Martiny et al. proposed to consider a trait as conserved in a clade (i.e. marking a clade as "positive" in the trait) if at least 90\% of the clade's tips exhibit the trait (i.e. are "positive" in the trait). This fraction can be controlled using the \code{min_fraction} parameter. The depth of a clade is taken as the average distance of its tips to the clade's root. 
+This function calculates the "consenTRAIT" metric (or variants thereof) proposed by Martiny et al. (2013) for measuring the mean phylogenetic depth at which a binary trait (e.g. presence/absence of a particular metabolic function) is conserved across clades. 
+A greater mean depth means that the trait tends to be conserved in deeper-rooting clades. 
+In their original paper, Martiny et al. proposed to consider a trait as conserved in a clade (i.e. marking a clade as "positive" in the trait) if at least 90\% of the clade's tips exhibit the trait (i.e. are "positive" in the trait). 
+This fraction can be controlled using the \code{min_fraction} parameter. The depth of a clade is taken as the average distance of its tips to the clade's root.
+The units of the consenTRAIT metric are thus the same as the units of the tree's edge lengths (typically nucleotide substitutions per site, or millions of years).
 
-Note that the consenTRAIT metric does not treat "presence" and "absence" equally, i.e., if one were to reverse all presences and absences then the consenTRAIT metric will generally have a different value. This is because the focus is on the presence of the trait (e.g., presence of a metabolic function, or presence of a morphological feature).
+Note that the consenTRAIT metric does not treat "presence" and "absence" equally, i.e., if one were to reverse all presences and absences then the consenTRAIT metric will generally have a different value.
+This is because the focus is on the presence of the trait (e.g., presence of a metabolic function, or presence of a morphological feature).
 
 The default parameters of this function reflect the original choices made by Martiny et al. (2013), however in some cases it may be sensible to adjust them. For example, if you suspect a high risk of false positives in the detection of a trait, it may be worth setting \code{count_singletons} to \code{FALSE} to avoid skewing the distribution of conservation depths towards shallower depths due to false positives.
 

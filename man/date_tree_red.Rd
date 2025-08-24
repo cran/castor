@@ -7,7 +7,7 @@ Date a tree based on relative evolutionary divergences.
 Given a rooted phylogenetic tree and a single node ('anchor') of known age (distance from the present), rescale all edge lengths so that the tree becomes ultrametric and edge lengths correspond to time intervals. The function is based on relative evolutionary divergences (RED), which measure the relative position of each node between the root and its descending tips (Parks et al. 2018). If no anchor node is provided, the root is simply assumed to have age 1. This function provides a heuristic quick-and-dirty way to date a phylogenetic tree.
 }
 \usage{
-date_tree_red(tree, anchor_node = NULL, anchor_age = 1)
+date_tree_red(tree, anchor_node = NULL, anchor_age = NULL)
 }
 \arguments{
 \item{tree}{
@@ -17,7 +17,7 @@ A rooted tree of class "phylo". The root is assumed to be the unique node with n
 Integer, ranging between 1 and Nnodes. Index of the node to be used as dating anchor. If \code{NULL}, the tree's root is used as anchor.
 }
 \item{anchor_age}{
-Positive numeric. Age of the anchor node.
+Positive numeric. Age of the anchor node. If \code{NULL}, then this is set to the average distance of the anchor node to its descending tips.
 }
 }
 

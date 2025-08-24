@@ -15,7 +15,7 @@ read_fasta(file,
 
 \arguments{
 \item{file}{
-A character, path to the input fasta file. This may be gzipped (with extension .gz).
+A character, path to the input fasta file. This file may be gzipped with extension ".gz".
 }
 \item{include_headers}{
 Logical, whether to load the headers. If you don't need the headers you can set this to \code{FALSE} for efficiency.
@@ -35,6 +35,9 @@ This function is a fast and simple fasta loader. Note that all sequences and hea
 
 \value{
 A named list with the following elements:
+\item{success}{
+Logical, indicating whether the file was loaded successfully. If FALSE, then an error message will be specified by the element \code{error}, and all other elements may be undefined.
+}
 \item{headers}{
 Character vector, listing the loaded headers in the order encountered. Only included if \code{include_headers} was \code{TRUE}.
 }
