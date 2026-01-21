@@ -110,6 +110,9 @@ A 2D numeric matrix, listing the probability of each tip and node being in each 
 \item{states}{
 Integer vector of length Ntips+Nnodes, with values in \{1,..,Nstates\}, specifying the maximum-likelihood estimate of the state of each tip & node. Only included if \code{include_likelihoods} was \code{TRUE}.
 }
+\item{mrra_clades}{
+Integer vector of size Nclades, with values in 1,..,Nclades, specifying for each clade the ancestral clade from which the likelihood propagation ultimately started, i.e., the most recent reconstructed ancestor.
+}
 }
 
 

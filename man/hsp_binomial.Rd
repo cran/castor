@@ -47,7 +47,9 @@ Logical, specifying whether to perform some additional time-consuming checks on 
 \details{
 This function currently only supports binary traits, and states must be represented by integers 1 or 2. Any \code{NA} entries in \code{tip_states} are interpreted as hidden (non-revealed) states.
 
-The algorithm proceeds in two phases ("ASR" phase and "HSP" phase). In the ASR phase the state probability P1 is estimated separately for every node and tip satisfying the thresholds \code{min_revealed} and \code{max_STE}, via maximum-likelihood. In the HSP phase, the P1 of nodes and tips not included in the ASR phase is set to the P1 of the nearest ancestral node with estimated P1, as described by Zaneveld and Thurber (2014).
+The algorithm proceeds in two phases ("ASR" phase and "HSP" phase). In the ASR phase the state probability P1 is estimated separately for every node and each tip with uncertain state satisfying the thresholds \code{min_revealed} and \code{max_STE}, via maximum-likelihood. In the HSP phase, the P1 of nodes and tips not included in the ASR phase is set to the P1 of the nearest ancestral node with estimated P1, as described by Zaneveld and Thurber (2014).
+
+In general the maximum-likelihood estimate of P1 is obtained via iterative numerical optimization. In the special case where there are no reveal biases (for example \code{reveal_probs==NULL}) and no state measurement errors (for example \code{state1_probs==NULL}), an analytical solution is used for the maximum-likelihood estimate, which is substantially faster.
 
 This function yields estimates for the state probabilities P1 (note that P2=1-P1). In order to obtain point estimates for tip states one needs to interpret these probabilities in a meaningful way, for example by choosing as point estimate for each tip the state with highest probability P1 or P2; the closest that probability is to 1, the more reliable the point estimate will be.
 

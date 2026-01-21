@@ -80,6 +80,7 @@ typedef std::complex<double> cdouble;
 typedef std::vector<double> dvector;
 typedef std::vector<long> lvector;
 typedef std::vector<std::string> svector;
+typedef std::vector<bool> bvector;
 
 using namespace Rcpp;
 using namespace std;
@@ -1419,6 +1420,25 @@ Rcpp::List find_non_zeros_float_CPP(long NR,					// (INPUT) number of rows in th
 								Rcpp::Named("values")	= non_zero_vals);
 }
 
+
+
+
+void filtered_indices_to_bool(const long N,					// (INPUT) total number of items considered, i.e, the overall item pool regardless of the specified filters
+							  const lvector &only_indices,	// (INPUT) integer vector, specifying items to include. If empty, this filter is ignored.
+							  const lvector &omit_indices,	// (INPUT) integer vector, specifying items to exclude. If empty, this filter is ignored.
+							  bvector		&include){	// (OUTPUT) boolean vector of length N, specifying whether to include or not each item based on the provided filters
+	include.assign(N, only_indices.empty());
+	if(!only_indices.empty()){
+		for(long i=0; i<only_indices.size(); ++i){
+			include[only_indices[i]] = true;
+		}
+	}
+	if(!omit_indices.empty()){
+		for(long i=0; i<omit_indices.size(); ++i){
+			include[omit_indices[i]] = false;
+		}		
+	}
+}
 
 
 
@@ -14369,32 +14389,42 @@ double get_Colless_Imbalance_CPP(	const long					Ntips,
 
 
 
-// Given a set of clades (tips & nodes, "descendants"), find their ancestral nodes, traveling N splits back
+// Given a subset of focal clades (tips & nodes, "descendants"), find their ancestral nodes, traveling N splits back
 // [[Rcpp::export]]
 IntegerVector get_ancestral_nodes_CPP(	const long 				Ntips,
 										const long 				Nnodes,
 										const long 				Nedges,
 										const std::vector<long> &tree_edge,		// 2D array of size Nedges x 2 in row-major format
 										const std::vector<long> &descendants,	// 1D array of size ND, containing values in 0:(Nclades-1)
-										const std::vector<long> &Nsplits){		// 1D integer array of size 1 or ND, specifying the number of splits to travel backward. Values must be >=1. For example, Nsplits=1 will yield the immediate ancestral nodes.
+										const std::vector<long> &Nsplits,		// 1D integer array of size 1 or ND, specifying the number of splits to travel backward from each focal descendant. Values must be >=1. This can either be the same value for all focal descendants, or a separate value for each focal descendant. For example, Nsplits=1 will yield the immediate ancestral nodes.
+										const std::vector<long>	&only_nodes,	// optional 1D array listing node indices (0,..,Nnodes-1) to restrict the backward traversal to. Hence, nodes are only counted toward Nsplits if they are in this subset. If empty, this filter is ignored.
+										const std::vector<long>	&omit_nodes){	// optional 1D array listing node indices (0,..,Nnodes-1) to omit from the backward traversal. Hence, nodes are skipped and not counted toward Nsplits if they are in this subset. If empty, this filter is ignored.
 	const long ND = descendants.size();
-	lvector ancestral_nodes(ND);
+	lvector ancestral_nodes(ND,-1);
 	if(ND==0) return Rcpp::wrap(ancestral_nodes);;
 	
 	// determine parent clade for each clade
 	std::vector<long> clade2parent;
 	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+	
+	// determine allowed nodes if needed
+	bvector allow_node(Nnodes,true);
+	if(!(only_nodes.empty() && omit_nodes.empty())) filtered_indices_to_bool(Nnodes, only_nodes, omit_nodes, allow_node);
 
 	// traverse Nplits splits upwards from each descendant
-	long clade;
+	long clade, last_valid_node;
 	for(long d=0, ns; d<ND; ++d){
 		ns 	  = (Nsplits.size()==1 ? Nsplits[0] : Nsplits[d]);
 		clade = descendants[d];
+		last_valid_node = clade;
 		while((clade2parent[clade]>=0) && (ns>0)){
 			clade = clade2parent[clade];
-			--ns;
+			if(allow_node[clade-Ntips]){
+				--ns;
+				last_valid_node = clade-Ntips;
+			}
 		}
-		ancestral_nodes[d] = clade-Ntips;
+		ancestral_nodes[d] = last_valid_node;
 	}
 	
 	return Rcpp::wrap(ancestral_nodes);
@@ -21967,19 +21997,21 @@ Rcpp::List ASR_with_fixed_rates_Markov_model_CPP(	const long			Ntips,
 
 
 // forward-project marginal likelihoods of a subset of nodes to their descending tips by applying the transposed exponentiated transition rate matrix
+// TO DO: Also return an overview of which known-state node was used to inform which unknown-state clade
 // [[Rcpp::export]]
-NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long					Ntips,
-																	const long 					Nnodes,
-																	const long					Nedges,
-																	const long					Nstates,
-																	const std::vector<long> 	&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
-																	const std::vector<double> 	&edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
-																	const std::vector<double> 	&transition_matrix,		// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c. Sum-per-row should be zero.
-																	const double				exponentiation_accuracy,// (INPUT) maximum allowed error when exponentiating the transition matrix, in terms of the Hilbert-Schmidt L2 norm.
-																	const long					max_polynomials,		// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
-																	LogicalVector				likelihoods_known,		// (INPUT) 1D array of size Nclades, indicating whether the likelihoods for a particular clade are known (1) or unknown/to be determined (0).
-																	std::vector<double>			likelihoods,			// (INPUT) 2D matrix of size Nclades x Nstates, in row-major format. Likelihoods of each state in each clade (tip & node) of the tree.
-																	const bool					unknown_likelihoods_as_priors){	// (INPUT) use unknown likelihoods (i.e. likelihoods[r,:] when likelihoods_known[r]==false) as priors. If false, unknown likelihoods are ignored, and effectively a flat prior is used
+Rcpp::List apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long					Ntips,
+																const long 					Nnodes,
+																const long					Nedges,
+																const long					Nstates,
+																const std::vector<long> 	&tree_edge,				// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
+																const std::vector<double> 	&edge_length, 			// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+																const std::vector<double> 	&transition_matrix,		// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c. Sum-per-row should be zero.
+																const double				exponentiation_accuracy,// (INPUT) maximum allowed error when exponentiating the transition matrix, in terms of the Hilbert-Schmidt L2 norm.
+																const long					max_polynomials,		// (INPUT) maximum possible number of polynomials to use for exponentiating the transition_matrix, regardless of the pursued accuracy epsilon. Used as safety vault, but may break the guaranteed accuracy. A value ~100 is usually enough.
+																LogicalVector				likelihoods_known,		// (INPUT) 1D array of size Nclades, indicating whether the likelihoods for a particular clade are known (1) or unknown/to be determined (0).
+																std::vector<double>			likelihoods,			// (INPUT) 2D matrix of size Nclades x Nstates, in row-major format. Likelihoods of each state in each clade (tip & node) of the tree.
+																const bool					unknown_likelihoods_as_priors){	// (INPUT) use unknown likelihoods (i.e. likelihoods[r,:] when likelihoods_known[r]==false) as priors. If false, unknown likelihoods are ignored, and effectively a flat prior is used
+	const long Nclades = Ntips + Nnodes;
 	// determine root
 	const long root = get_root_clade(Ntips, Nnodes, Nedges, tree_edge);
 
@@ -22009,10 +22041,18 @@ NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long			
 	const long min_polynomials = min_polynomials_for_positive_exponential_of_irreducible_matrix(Nstates, transposed_transition_matrix);
 	transition_exponentiator.initialize(Nstates, transposed_transition_matrix, max_edge_length, exponentiation_accuracy, min_polynomials, max_polynomials, true);
 	
+	// prepare array for tracking knowledge sources
+	// clade2source_node[k] will be the index of the ancestral clade from which the state likelihoods were ultimately inherited
+	lvector clade2source(Nclades,-1);
+	for(long clade=0; clade<Nclades; ++clade){
+		if(likelihoods_known[clade]) clade2source[clade] = clade;
+	}
+	
 	// calculate unknown likelihoods based on parents with known likelihoods (traverse root --> tips)
 	std::vector<double> expQ, Y;
 	for(long q=0, node, clade; q<traversal_queue.size(); ++q){
 		clade = traversal_queue[q];
+		if(!likelihoods_known[clade]) continue; // this clade's likelihoods are not known, this can only ever happen at the root
 		node = clade - Ntips;
 		for(long e=traversal_node2first_edge[node], edge, child; e<=traversal_node2last_edge[node]; ++e){
 			edge  = traversal_edges[e];
@@ -22028,10 +22068,11 @@ NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(	const long			
 				for(long s=0; s<Nstates; ++s) likelihoods[child*Nstates+s] = Y[s];
 			}
 			likelihoods_known[child] = true;
+			clade2source[child] = clade2source[clade];
 		}
 	}
-										
-	return Rcpp::wrap(likelihoods);														
+	return Rcpp::List::create(	Rcpp::Named("likelihoods")	= likelihoods,
+								Rcpp::Named("clade2source")	= clade2source); // 1D integer array of length Nclades, specifying for each clade the original knowledge source clade, i.e., from which the likelihood propagation started
 }
 
 
@@ -22571,8 +22612,8 @@ NumericVector apply_BM_parsimony_to_missing_clades_CPP(	const long				Ntips,
 // This functor can be used to estimate the unknown probability P0 based on the observed (and unobserved) states in a number of tips.
 class BinaryTraitLogLikelihood{
 public:
-	dvector reveal_probs; 	// 2D array of size Ntips x 2 in row-major format, listing the probability of "revealing" the state (potentially erroneously) of each tip conditional upon its true state.
-	dvector state0_probs; 	// 2D array of size Ntips x 2 in row-major format, listing the probability of measuring state 0 (potentially erroneously) at each tip conditional upon its true state and conditional upon revealing (measuring) some state. For example, for an incompletely sequenced genome with completion level C_i and state0=absence and state1=presence of a trait, one has state0_probs[i,0] = 1, state0_probs[i,1]=1 - C_i.
+	dvector reveal_probs; 	// 2D array of size Ntips x 2 in row-major format, listing the probability of "revealing" the state (potentially erroneously) of each tip conditional upon its true state. May also be an empty vector, which means no reveal biases.
+	dvector state0_probs; 	// 2D array of size Ntips x 2 in row-major format, listing the probability of measuring state 0 (potentially erroneously) at each tip conditional upon its true state and conditional upon revealing (measuring) some state. For example, for an incompletely sequenced genome with completion level C_i and state0=absence and state1=presence of a trait, one has state0_probs[i,0] = 1, state0_probs[i,1]=1 - C_i. May also be an empty vector, which means error-free state measurements.
 	lvector tip_states; 	// 1D vector of length Ntips with values in {-1,0,1}, listing the observed state of each tip (-1 if state was not measured).
 	lvector only_tips;		// 1D vector of length <=Ntips, specifying which tips to include
 
@@ -22580,17 +22621,26 @@ public:
 	// evaluate the log-likelihood for some P0
 	double operator()(const double P0) const{
 		double LL = 0;
+		double reveal_prob0=0.5, reveal_prob1=0.5, state0_prob0=1, state0_prob1=0;
 		for(long i=0, tip; i<only_tips.size(); ++i){
 			tip = only_tips[i];
+			if(!reveal_probs.empty()){
+				reveal_prob0 = reveal_probs[tip*2+0];
+				reveal_prob1 = reveal_probs[tip*2+1];
+			}
+			if(!state0_probs.empty()){
+				state0_prob0 = state0_probs[tip*2+0];
+				state0_prob1 = state0_probs[tip*2+1];
+			}
 			if(tip_states[tip]<0){
 				// tip state unknown
-				LL += log(1.0-reveal_probs[tip*2+1]+P0*(reveal_probs[tip*2+1]-reveal_probs[tip*2+0]));
+				LL += log(1.0-reveal_prob1+P0*(reveal_prob1-reveal_prob0));
 			}else if(tip_states[tip]==0){
 				// observed tip state 0
-				LL += log(P0*reveal_probs[tip*2+0]*state0_probs[tip*2+0] + (1-P0)*reveal_probs[tip*2+1]*state0_probs[tip*2+1]);
+				LL += log(P0*reveal_prob0*state0_prob0 + (1-P0)*reveal_prob1*state0_prob1);
 			}else{
 				// observed tip state 1
-				LL += log(P0*reveal_probs[tip*2+0]*(1-state0_probs[tip*2+0]) + (1-P0)*reveal_probs[tip*2+1]*(1-state0_probs[tip*2+1]));
+				LL += log(P0*reveal_prob0*(1-state0_prob0) + (1-P0)*reveal_prob1*(1-state0_prob1));
 			}
 		}
 		return LL;
@@ -22599,17 +22649,26 @@ public:
 	// calculate the gradient of the log-likelihood (dLL/dP0) for any given P0, where P0 is the probability of a random tip being truly in state 0.
 	double gradient(const double P0) const{
 		double dLL = 0;
+		double reveal_prob0=0.5, reveal_prob1=0.5, state0_prob0=1, state0_prob1=0;
 		for(long i=0, tip; i<only_tips.size(); ++i){
 			tip = only_tips[i];
+			if(!reveal_probs.empty()){
+				reveal_prob0 = reveal_probs[tip*2+0];
+				reveal_prob1 = reveal_probs[tip*2+1];
+			}
+			if(!state0_probs.empty()){
+				state0_prob0 = state0_probs[tip*2+0];
+				state0_prob1 = state0_probs[tip*2+1];
+			}
 			if(tip_states[tip]<0){
 				// tip state unknown
-				dLL += ((reveal_probs[tip*2+1]==reveal_probs[tip*2+0]) ? 0.0 : (reveal_probs[tip*2+1]-reveal_probs[tip*2+0])/(1.0-reveal_probs[tip*2+1]+P0*(reveal_probs[tip*2+1]-reveal_probs[tip*2+0])));
+				dLL += ((reveal_prob1==reveal_prob0) ? 0.0 : (reveal_prob1-reveal_prob0)/(1.0-reveal_prob1+P0*(reveal_prob1-reveal_prob0)));
 			}else if(tip_states[tip]==0){
 				// observed tip state 0
-				dLL += (reveal_probs[tip*2+0]*state0_probs[tip*2+0] - reveal_probs[tip*2+1]*state0_probs[tip*2+1])/(P0*reveal_probs[tip*2+0]*state0_probs[tip*2+0] + (1-P0)*reveal_probs[tip*2+1]*state0_probs[tip*2+1]);
+				dLL += (reveal_prob0*state0_prob0 - reveal_prob1*state0_prob1)/(P0*reveal_prob0*state0_prob0 + (1-P0)*reveal_prob1*state0_prob1);
 			}else{
 				// observed tip state 1
-				dLL += (reveal_probs[tip*2+0]*(1-state0_probs[tip*2+0]) - reveal_probs[tip*2+1]*(1-state0_probs[tip*2+1]))/(P0*reveal_probs[tip*2+0]*(1-state0_probs[tip*2+0]) + (1-P0)*reveal_probs[tip*2+1]*(1-state0_probs[tip*2+1]));
+				dLL += (reveal_prob0*(1-state0_prob0) - reveal_prob1*(1-state0_prob1))/(P0*reveal_prob0*(1-state0_prob0) + (1-P0)*reveal_prob1*(1-state0_prob1));
 			}
 		}
 		return dLL;
@@ -22619,17 +22678,26 @@ public:
 	// this can be used e.g. to estimate the Fisher information criterion at the ML estimate
 	double Hessian(const double P0) const{
 		double ddLL = 0;
+		double reveal_prob0=0.5, reveal_prob1=0.5, state0_prob0=1, state0_prob1=0;
 		for(long i=0, tip; i<only_tips.size(); ++i){
 			tip = only_tips[i];
+			if(!reveal_probs.empty()){
+				reveal_prob0 = reveal_probs[tip*2+0];
+				reveal_prob1 = reveal_probs[tip*2+1];
+			}
+			if(!state0_probs.empty()){
+				state0_prob0 = state0_probs[tip*2+0];
+				state0_prob1 = state0_probs[tip*2+1];
+			}
 			if(tip_states[tip]<0){
 				// tip state unknown
-				ddLL += ((reveal_probs[tip*2+1]==reveal_probs[tip*2+0]) ? 0.0 : -SQ(reveal_probs[tip*2+1]-reveal_probs[tip*2+0])/SQ(1.0-reveal_probs[tip*2+1]+P0*(reveal_probs[tip*2+1]-reveal_probs[tip*2+0])));
+				ddLL += ((reveal_prob1==reveal_prob0) ? 0.0 : -SQ(reveal_prob1-reveal_prob0)/SQ(1.0-reveal_prob1+P0*(reveal_prob1-reveal_prob0)));
 			}else if(tip_states[tip]==0){
 				// observed tip state 0
-				ddLL += -SQ(reveal_probs[tip*2+0]*state0_probs[tip*2+0] - reveal_probs[tip*2+1]*state0_probs[tip*2+1])/SQ(P0*reveal_probs[tip*2+0]*state0_probs[tip*2+0] + (1-P0)*reveal_probs[tip*2+1]*state0_probs[tip*2+1]);
+				ddLL += -SQ(reveal_prob0*state0_prob0 - reveal_prob1*state0_prob1)/SQ(P0*reveal_prob0*state0_prob0 + (1-P0)*reveal_prob1*state0_prob1);
 			}else{
 				// observed tip state 1
-				ddLL += -SQ(reveal_probs[tip*2+0]*(1-state0_probs[tip*2+0]) - reveal_probs[tip*2+1]*(1-state0_probs[tip*2+1]))/SQ(P0*reveal_probs[tip*2+0]*(1-state0_probs[tip*2+0]) + (1-P0)*reveal_probs[tip*2+1]*(1-state0_probs[tip*2+1]));
+				ddLL += -SQ(reveal_prob0*(1-state0_prob0) - reveal_prob1*(1-state0_prob1))/SQ(P0*reveal_prob0*(1-state0_prob0) + (1-P0)*reveal_prob1*(1-state0_prob1));
 			}
 		}
 		return ddLL;
@@ -22646,53 +22714,88 @@ Rcpp::List ASR_binomial_CPP(const long					Ntips,			// (INPUT) number of tips in
 							const long					Nedges,			// (INPUT) number of edges in the tree		
 							const std::vector<long>		&tree_edge, 	// (INPUT) 2D array of size Nedges x 2 (in row-major format), in similar format as tree$edge in R "phylo" trees. This array holds the topology of the tree (apart from branch lengths).
 							const std::vector<long>		&tip_states,	// (INPUT) 1D array of size Ntips, with values being in {-1,0,1}, where -1 denotes unknown (non-measured) state and 0,1 are the allowed measured states
-							const std::vector<double>	&reveal_probs,	// (INPUT) 2D array of size Ntips x 2 in row-major format, listing the reveal probabilities at each tip conditional on the tip's true state
-							const std::vector<double>	&state0_probs,	// (INPUT) 2D array of size Ntips x 2 in row-major format, listing the probability of measuring state 0 (potentially erroneously) at each tip conditional upon its true state and conditional upon revealing (measuring) some state. For example, for an incompletely sequenced genome with completion level C_i and state0=absence and state1=presence of a trait, one has state0_probs[i,0] = 1, state0_probs[i,1]=1 - C_i.
-							const long					min_revealed){	// (INPUT) minimum number of descending tips with revealed state for inferring P0 for a clade. For clades with too few descending tips with revealed state, the probability P0 will not be calculated. It is advised to set this greater than zero. The larger this number, the more nodes will not have their P0 calculated.
+							const std::vector<double>	&reveal_probs,	// (INPUT) 2D array of size Ntips x 2 in row-major format, listing the reveal probabilities at each tip conditional on the tip's true state. May also be an empty vector, which means no reveal biases.
+							const std::vector<double>	&state0_probs,	// (INPUT) 2D array of size Ntips x 2 in row-major format, listing the probability of measuring state 0 (potentially erroneously) at each tip conditional upon its true state and conditional upon revealing (measuring) some state. For example, for an incompletely sequenced genome with completion level C_i and state0=absence and state1=presence of a trait, one has state0_probs[i,0] = 1, state0_probs[i,1]=1 - C_i. May also be an empty vector, which means error-free state measurements.
+							const long					min_revealed){	// (INPUT) integer >=1, minimum number of descending tips with revealed state for inferring P0 for a clade. For clades with too few descending tips with revealed state, the probability P0 will not be calculated. It is advised to set this greater than zero. The larger this number, the more nodes will not have their P0 calculated.
 	const long Nclades = Ntips + Nnodes;
-	// prepare functor for evaluating the gradient of the log-likelihood
-	BinaryTraitLogLikelihood LL;
-	LL.reveal_probs = reveal_probs;
-	LL.state0_probs = state0_probs;
-	LL.tip_states	= tip_states;
-		
-	// get tree traversal route (root --> tips), including tips			
-	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
-		
-	// traverse tree clades (tips-->root), each time fitting the state-0 probability P0 based on the states of the descending tips
-	std::vector<lvector> clade2tips(Nclades); // keep track of descending tips for each clade
+	const bool unbiased_and_errorless = (reveal_probs.empty() && state0_probs.empty());
+
+	// prealllocate space for results
 	lvector clade2reveal_count(Nclades,0); // clade2reveal_count[clade] will be the number of tips descending from the clade that have revealed state
-	for(long tip=0; tip<Ntips; ++tip){
-		clade2tips[tip] = std::vector<long>(1,tip);
-		clade2reveal_count[tip] = (tip_states[tip]>=0 ? 1 : 0);
-	}
 	dvector clade2P0(Nclades,-1.0);
 	dvector clade2FisherStandardError(Nclades); // standard error estimates based on the Fisher Information Criterion
-	for(long q=context.queue.size()-1, clade, node; q>=0; --q){
-		clade = context.queue[q];
-		if(clade>=Ntips){
-			node = clade-Ntips;
-			for(long e=context.node2first_edge[node], edge, child; e<=context.node2last_edge[node]; ++e){
-				edge  = context.edge_mapping[e];
-				child = tree_edge[2*edge+1];
-				clade2tips[clade].insert(clade2tips[clade].end(), clade2tips[child].begin(), clade2tips[child].end());
-				clade2reveal_count[clade] += clade2reveal_count[child];
-				// swap child's tip list with an empty vector to free memory
-				lvector().swap(clade2tips[child]);
-			}
+
+	// get tree traversal route (root --> tips), including tips			
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
+
+	if(unbiased_and_errorless){
+		// Special case: no reveal biases and no measurement error, so analytical solution is available for the maximum-likelihood estimates of P0
+		lvector clade2N0(Nclades,0), clade2N1(Nclades,0);
+		for(long tip=0; tip<Ntips; ++tip){
+			clade2N0[tip] += (tip_states[tip]==0);
+			clade2N1[tip] += (tip_states[tip]==1);
+			clade2reveal_count[tip] = (tip_states[tip]>=0 ? 1 : 0);
 		}
-		if(clade2reveal_count[clade]>=min_revealed){
-			// estimate P0 for this clade
-			LL.only_tips = clade2tips[clade];
-			clade2P0[clade] = optimize_via_golden_ratio(LL, 0, 1.0, false, 1e-8, 1e-6, 10000);
-			if(std::isnan(clade2P0[clade])){
-				clade2P0[clade] = -1; // root finding failed. Perhaps not enough information for ML estimate (e.g., too few revealed tips).
-				clade2FisherStandardError[clade] = -1;	
-			}else{
-				clade2FisherStandardError[clade] = sqrt(-(1.0/LL.Hessian(clade2P0[clade])));
+		double P0;
+		for(long q=context.queue.size()-1, clade, node; q>=0; --q){
+			clade = context.queue[q];
+			if(clade>=Ntips){
+				node = clade-Ntips;
+				for(long e=context.node2first_edge[node], edge, child; e<=context.node2last_edge[node]; ++e){
+					edge  = context.edge_mapping[e];
+					child = tree_edge[2*edge+1];
+					clade2N0[clade] += clade2N0[child];
+					clade2N1[clade] += clade2N1[child];
+					clade2reveal_count[clade] += clade2reveal_count[child];
+				}
 			}
+			if(clade2reveal_count[clade]>=min_revealed){
+				// estimate P0 & Fisher standard error bound for this clade
+				P0 = clade2N0[clade]/double(clade2N0[clade]+clade2N1[clade]);
+				clade2P0[clade] = P0;
+				clade2FisherStandardError[clade] = P0*(1-P0)/sqrt(clade2N0[clade]*SQ(1-P0) + clade2N1[clade]*SQ(P0));
+			}
+			if(q%100==0) Rcpp::checkUserInterrupt(); // abort if the user has interrupted the calling R program
 		}
-		if(q%100==0) Rcpp::checkUserInterrupt(); // abort if the user has interrupted the calling R program
+	}else{
+		// prepare functor for evaluating the gradient of the log-likelihood
+		BinaryTraitLogLikelihood LL;
+		LL.reveal_probs = reveal_probs;
+		LL.state0_probs = state0_probs;
+		LL.tip_states	= tip_states;
+			
+		// traverse tree clades (tips-->root), each time fitting the state-0 probability P0 based on the states of the descending tips
+		std::vector<lvector> clade2tips(Nclades); // keep track of descending tips for each clade
+		for(long tip=0; tip<Ntips; ++tip){
+			clade2tips[tip] = std::vector<long>(1,tip);
+			clade2reveal_count[tip] = (tip_states[tip]>=0 ? 1 : 0);
+		}
+		for(long q=context.queue.size()-1, clade, node; q>=0; --q){
+			clade = context.queue[q];
+			if(clade>=Ntips){
+				node = clade-Ntips;
+				for(long e=context.node2first_edge[node], edge, child; e<=context.node2last_edge[node]; ++e){
+					edge  = context.edge_mapping[e];
+					child = tree_edge[2*edge+1];
+					clade2tips[clade].insert(clade2tips[clade].end(), clade2tips[child].begin(), clade2tips[child].end());
+					clade2reveal_count[clade] += clade2reveal_count[child];
+					// swap child's tip list with an empty vector to free memory
+					lvector().swap(clade2tips[child]);
+				}
+			}
+			if(clade2reveal_count[clade]>=min_revealed){
+				// estimate P0 for this clade
+				LL.only_tips = clade2tips[clade];
+				clade2P0[clade] = optimize_via_golden_ratio(LL, 0, 1.0, false, 1e-9, 1e-7, 100000);
+				if(std::isnan(clade2P0[clade])){
+					clade2P0[clade] = -1; // root finding failed. Perhaps not enough information for ML estimate (e.g., too few revealed tips).
+					clade2FisherStandardError[clade] = -1;	
+				}else{
+					clade2FisherStandardError[clade] = sqrt(-(1.0/LL.Hessian(clade2P0[clade])));
+				}
+			}
+			if(q%100==0) Rcpp::checkUserInterrupt(); // abort if the user has interrupted the calling R program
+		}
 	}
 	return Rcpp::List::create(	Rcpp::Named("success") 			= true, 
 								Rcpp::Named("P0s") 				= clade2P0,	// 1D array of size Nclades, listing ML-estimated P0s. Failed or impossible estimates are represented by -1.
@@ -32552,8 +32655,8 @@ Rcpp::List read_fastq_from_file_CPP(const std::string 	&fastq_path,
 									const bool			include_headers,
 									const bool			include_sequences,
 									const bool			include_qualities,
-									const long			max_sequences,
-									const long			max_lines){
+									const double		max_sequences,	// optional maximum number of sequences to load. May also be INFTY_D
+									const double		max_lines){		// optional maximum number of lines to load. May also be INFTY_D
 	std::ifstream fin(fastq_path);
 	if(!fin.is_open()){
 		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not open input file");
@@ -32615,6 +32718,7 @@ Rcpp::List read_fastq_from_file_CPP(const std::string 	&fastq_path,
 Rcpp::List read_distances_list_CPP(	const std::string 	&file_path,
 									const std::string	&delimiter,
 									const std::string	&comment_prefix,
+									const bool			header,				// whether the input file contains a header row with column names, which should be ignored
 									const long			distances_column,	// column index (0-based) where the distances are located
 									const double		min_distance,
 									const double		max_distance,
@@ -32626,6 +32730,7 @@ Rcpp::List read_distances_list_CPP(	const std::string 	&file_path,
 		return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Could not open input file");
 	}
 	long Nlines = 0;
+	long Nrows  = 0;
 	std::string line;
 	std::vector<std::string> parts, member_names;
 	std::map<std::string,long> member_name2index;
@@ -32641,6 +32746,8 @@ Rcpp::List read_distances_list_CPP(	const std::string 	&file_path,
 		split_string(line, "#", 1, parts);
 		line = trim_whitespace(parts[0]);
 		if(line.size()==0) continue; // this line has nothing but comments, so skip
+		++Nrows;
+		if((Nrows==1) && header) continue; // skip the header line
 		split_string(line, delimiter, distances_column+1, parts);
 		if(parts.size()<=distances_column){
 			return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = stringprintf("Error on line %d: Need at least %d columns, but found only %d",Nlines,distances_column+1,parts.size()));

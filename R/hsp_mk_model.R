@@ -44,6 +44,11 @@ hsp_mk_model = function(tree,
 	else if(length(known_tips)==1) return(list(success=FALSE, error="Only one tip has known state, which is insufficient for Mk HSP"))
 	unknown_tips = get_complement(Ntips, known_tips)
 	
+	# default return values
+	likelihoods 	= NULL
+	states 			= NULL
+	mrra_clades 	= NULL
+	
 	if(has_reveal_fractions){
 		# reveal fractions are non-NULL and non-flat, i.e. tip state knowledge is correlated with tip state
 		# reveal fractions (or "reveal bias") can be incorporated into the priors of tips with known & unknown state
@@ -94,7 +99,7 @@ hsp_mk_model = function(tree,
 			likelihoods[(1:Nnodes)+Ntips, ]	= asr_results$ancestral_likelihoods;
 			likelihoods_known				= rep(TRUE, times=(Ntips+Nnodes))
 			likelihoods_known[unknown_tips]	= FALSE;
-			likelihoods = apply_fixed_rate_Markov_model_to_missing_clades_CPP(	Ntips 					= Ntips,
+			propagation = apply_fixed_rate_Markov_model_to_missing_clades_CPP(	Ntips 					= Ntips,
 																				Nnodes					= Nnodes,
 																				Nedges					= Nedges,
 																				Nstates					= Nstates,
@@ -106,10 +111,9 @@ hsp_mk_model = function(tree,
 																				likelihoods_known		= likelihoods_known,
 																				likelihoods				= as.vector(t(likelihoods)), # flatten in row-major format	
 																				unknown_likelihoods_as_priors = TRUE);
-			likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
+			likelihoods = matrix(propagation$likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 			colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods);
-		}else{
-			likelihoods = NULL
+			mrra_clades = propagation$clade2source + 1L
 		}
 
 	}else{
@@ -169,7 +173,7 @@ hsp_mk_model = function(tree,
 			likelihoods_known							= rep(FALSE, times=(Ntips+Nnodes))
 			likelihoods_known[known2all_tips]			= TRUE;
 			likelihoods_known[known2all_nodes+Ntips]  	= TRUE;
-			likelihoods = apply_fixed_rate_Markov_model_to_missing_clades_CPP(	Ntips 					= Ntips,
+			propagation = apply_fixed_rate_Markov_model_to_missing_clades_CPP(	Ntips 					= Ntips,
 																				Nnodes					= Nnodes,
 																				Nedges					= Nedges,
 																				Nstates					= Nstates,
@@ -181,13 +185,15 @@ hsp_mk_model = function(tree,
 																				likelihoods_known		= likelihoods_known,
 																				likelihoods				= as.vector(t(likelihoods)), # flatten in row-major format	
 																				unknown_likelihoods_as_priors = FALSE);
-			likelihoods = matrix(likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
+			likelihoods = matrix(propagation$likelihoods, ncol=Nstates, byrow=TRUE); # unflatten returned table
 			colnames(likelihoods) = colnames(asr_results$ancestral_likelihoods)
-			states = sapply(seq_len(Ntips+Nnodes), FUN=function(n) which.max(likelihoods[n,]))
-		}else{
-			likelihoods = NULL
-			states = NULL
+			mrra_clades = propagation$clade2source + 1L
 		}
+	}
+	
+	# determine max-likelihood states if possible
+	if(!is.null(likelihoods)){
+		states = sapply(seq_len(Ntips+Nnodes), FUN=function(n) which.max(likelihoods[n,]))
 	}
 		
 	return(list(success				= TRUE,
@@ -195,5 +201,6 @@ hsp_mk_model = function(tree,
 				transition_matrix	= transition_matrix, 
 				loglikelihood 		= loglikelihood, 
 				likelihoods			= likelihoods,
-				states				= states)) # maximum-likelihood tip & node states
+				states				= states,	# integer vector of size Nclades, maximum-likelihood tip & node states
+				mrra_clades			= mrra_clades)) # integer vector of size Nclades, with values in 1,..,Nclades, specifying for each clade the ancestral clade from which the likelihood propagation ultimately started, i.e., the most recent reconstructed ancestors
 }

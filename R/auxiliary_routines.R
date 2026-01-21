@@ -6,6 +6,13 @@ unlist_with_nulls = function(L){
 }
 
 
+invert_permutation = function(permutation){
+	inverse = integer(length(permutation))
+	inverse[permutation] = seq_along(permutation)
+	return(inverse)
+}
+
+
 # given a numeric vector, determine the indices of the N smallest non-nan values
 get_smallest_items = function(values, N, check_nan=TRUE){
 	if(check_nan){
@@ -73,20 +80,6 @@ get_paths_root_to_tips = function(tree){
 # The root's parent node does not exist, so 0 is returned in that case
 parent_nodes = function(tree, clades){
 	return(get_ancestral_nodes(tree, descendants=clades, Nsplits=1))
-	# OLD CODE
-# 	Ntips = length(tree$tip.label)
-# 	clades = map_tip_or_node_names_to_indices(tree, A=clades, type="both", list_title="clade", check_input=TRUE)
-# 	if(length(clades)==1){
-# 		# optimized code for the special case of 1 clade
-# 		edge = which(tree$edge[,2]==clades)
-# 		if(length(edge)==0) return(0)
-# 		else return(tree$edge[edge,1]-Ntips)
-# 	}else{
-# 		# general code for multiple clades
-# 		clade2parent = rep(0,Ntips+tree$Nnode)
-# 		clade2parent[tree$edge[,2]] = tree$edge[,1]-Ntips
-# 		return(clade2parent[clades])
-# 	}
 }
 
 
@@ -2953,6 +2946,7 @@ eliminate_bifurcating_root = function(tree){
 read_distances_list = function(	file_path,
 								delimiter			= "\t",
 								comment_prefix		= "#",
+								header				= FALSE, # whether the input file has a header line listing column names, which should be ignored
 								distances_column	= 3,
 								min_distance		= -Inf, # omit edges shorter than this number
 								max_distance		= Inf, # omit edges longer than this number
@@ -2962,6 +2956,7 @@ read_distances_list = function(	file_path,
 	dlist = read_distances_list_CPP(file_path			= file_path,
 									delimiter			= delimiter,
 									comment_prefix		= comment_prefix,
+									header				= header,
 									distances_column	= distances_column-1,
 									min_distance		= min_distance,
 									max_distance		= max_distance,
@@ -3029,6 +3024,7 @@ place_tips_on_edges = function(tree,
 	Ntips  	= length(tree$tip.label)
 	Nnodes 	= tree$Nnode
 	NP 	 	= length(edges)
+	if(NP==0) return(list(tree=tree, placed_tips=integer(0))) # no placements to perform
 	results = tree_from_placements_CPP(	Ntips 			= Ntips,
 										Nnodes 			= Nnodes,
 										Nedges 			= nrow(tree$edge),
@@ -3041,6 +3037,7 @@ place_tips_on_edges = function(tree,
 					tip.label 	= c(tree$tip.label,placed_tip_labels),
 					edge 		= matrix(as.integer(results$tree_edge),ncol=2,byrow=TRUE) + 1L,
 					edge.length = results$edge_length)
+	if(!is.null(tree$root)) new_tree$root = tree$root + NP
 	if((!is.null(placed_node_labels)) || (!is.null(tree$node.label))){
 		new_tree$node.label = character(new_tree$Nnode)
 		if(!is.null(tree$node.label)) new_tree$node.label[1:Nnodes] = tree$node.label
@@ -3050,7 +3047,7 @@ place_tips_on_edges = function(tree,
 	attr(new_tree,"order") = NULL
 	
 	return(list(tree		= new_tree,
-				placed_tips	= c((Ntips+1):(Ntips+NP))))
+				placed_tips	= c((Ntips+1):(Ntips+NP)))) # integer vector specifying the indices of the placed tips. This will be synchronized with the input placements, i.e., with pendant_lengths[], distal_lengths[] etc.
 }
 
 
@@ -3058,7 +3055,9 @@ place_tips_on_edges = function(tree,
 # This function assumes version 3 of the jplace file format, as defined by [Matsen et al. (2012) A Format for Phylogenetic Placements. PLOS One]
 load_jplace = function(	file_path,						# character, path to a jplace file. The file may be gzipped, with extension gz.
 						only_best_placements	= TRUE,	# only keep the best placement of each query, i.e., the placement with maximum likelihood
-						max_names_per_query		= 1){	# maximum number of sequence names to keep from each query. Placements in each query will be multiplied by the number of sequence names in the query, if max_names_per_query>1.
+						max_names_per_query		= 1,	# maximum number of sequence names to keep from each query. Placements in each query will be multiplied by the number of sequence names in the query, if max_names_per_query>1.
+						max_pendant_length		= Inf,	# optional maximum acceptable placement pendant length. Any placements exceeding this pendant length are omitted. If only_best_placements==TRUE, then this filter is applied after selecting the best placement.
+						min_like_weight_ratio	= 0){	# optional minimum acceptable placement likelihood weight ratio. Any placements below this threshold are omitted. If only_best_placements==TRUE, then this filter is applied after selecting the best placement.
 	# load the JPlace file as a JSON object
 	json_data = jsonlite::fromJSON(file_path, simplifyDataFrame=FALSE, simplifyMatrix=FALSE, simplifyVector=TRUE)
 	# parse the contents of the loaded JSON
@@ -3068,19 +3067,24 @@ load_jplace = function(	file_path,						# character, path to a jplace file. The 
 	edge_field				= which(json_data$fields=="edge_num")
 	distal_length_field		= which(json_data$fields=="distal_length")
 	pendant_length_field	= which(json_data$fields=="pendant_length")
+	likelihood_field		= which(json_data$fields=="likelihood") # this field actually lists log-likelihoods, not likelihoods
+	lwr_field				= which(json_data$fields=="like_weight_ratio")
 	if(only_best_placements){
 		# for every query, keep only the "best" placement, i.e. with the highest likelihood
-		likelihood_field	= which(json_data$fields=="likelihood")
 		best_placements 	= sapply(json_data$placements, FUN=function(query) which.max(sapply(query$p, FUN=function(placement) placement[likelihood_field])))
 		edges				= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][edge_field])
 		distal_lengths		= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][distal_length_field])
 		pendant_lengths		= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][pendant_length_field])
+		loglikelihoods		= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][likelihood_field])
+		like_weight_ratios	= sapply(seq_len(Nqueries), FUN=function(pq) json_data$placements[[pq]]$p[[best_placements[pq]]][lwr_field])
 	}else{
 		# keep all placements from each query, replicate sequence names as needed
 		Nplacements_per_query	= sapply(json_data$placements, FUN=function(query) length(query$p))
 		edges					= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[edge_field])))
 		distal_lengths			= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[distal_length_field])))
 		pendant_lengths			= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[pendant_length_field])))
+		loglikelihoods			= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[likelihood_field])))
+		like_weight_ratios		= unlist(lapply(json_data$placements, FUN=function(query) sapply(query$p, FUN=function(placement) placement[lwr_field])))
 		sequence_names			= rep(sequence_names, Nplacements_per_query)
 	}
 	Nplacements 		 = length(edges)
@@ -3092,8 +3096,25 @@ load_jplace = function(	file_path,						# character, path to a jplace file. The 
 		edges 				= edges[replication_indices]
 		distal_lengths 		= distal_lengths[replication_indices]
 		pendant_lengths 	= pendant_lengths[replication_indices]
+		loglikelihoods 		= loglikelihoods[replication_indices]
+		like_weight_ratios	= like_weight_ratios[replication_indices]
 	}
 	sequence_names = unlist(sequence_names)
+	
+	# filter placements if needed
+	Nfiltered = 0
+	if(is.finite(max_pendant_length) || (min_like_weight_ratio>0)){
+		keep_placements = which((pendant_lengths<=max_pendant_length) & (like_weight_ratios>=min_like_weight_ratio))
+		Nfiltered = length(pendant_lengths) - length(keep_placements)
+		if(Nfiltered>0){
+			edges 				= edges[keep_placements]
+			distal_lengths 		= distal_lengths[keep_placements]
+			pendant_lengths 	= pendant_lengths[keep_placements]
+			loglikelihoods 		= loglikelihoods[keep_placements]
+			like_weight_ratios	= like_weight_ratios[keep_placements]
+			sequence_names		= sequence_names[keep_placements]
+		}
+	}
 
 	# match placement edge indices to edge order in the tree, based on the edge numbers provided in the jplace file
 	# Originally, placement edges refer to edge numbers as defined in the jplace file. Here we convert edge numbers to edge indices matching the actual order in which edges are listed in the tree.
@@ -3102,12 +3123,15 @@ load_jplace = function(	file_path,						# character, path to a jplace file. The 
 	edges = old2new_edge[1+edges]
 	tree$edge.number = NULL
 
-	return(list(tree			= tree,
-				Nqueries		= Nqueries,
-				sequence_names	= sequence_names,	# character vector of length NP, listing sequence names for the placements
-				edges			= edges,			# integer vector of length NP, with values in 1,..,Nedges, specifying the indices of the placement edges on the tree
-				distal_lengths	= distal_lengths,	# numeric vector of length NP, specifying the placement distances from the distal (i.e. child) nodes of the edges on which the placements are done
-				pendant_lengths	= pendant_lengths))	# numeric vector of length NP, specifying the lengths of the new edges leading into the placed sequences
+	return(list(tree				= tree,
+				Nqueries			= Nqueries,			# integer, number of queries found in the input jplace file (prior to any filtering)
+				Nfiltered			= Nfiltered,		# integer, number of placements that have been filtered out due to quality criteria such as max_pendant_length and min_like_weight_ratio
+				sequence_names		= sequence_names,	# character vector of length NP, listing sequence names for the placements
+				edges				= edges,			# integer vector of length NP, with values in 1,..,Nedges, specifying the indices of the placement edges on the tree
+				loglikelihoods		= loglikelihoods,	# numeric vector of length NP, specifying the placement log-likelihoods
+				like_weight_ratios	= like_weight_ratios,# numeric vector of length NP, specifying the placement likelihood weight ratios
+				distal_lengths		= distal_lengths,	# numeric vector of length NP, specifying the placement distances from the distal (i.e. child) nodes of the edges on which the placements are done
+				pendant_lengths		= pendant_lengths))	# numeric vector of length NP, specifying the lengths of the new edges leading into the placed sequences
 }
 
 
@@ -3120,10 +3144,10 @@ get_file_extension = function(file_path, skip_gz){
 
 # uncompress a file if needed, and return the path to an uncompressed version of it
 ensure_uncompressed = function(	file_path, 
-								place_next_to_original=FALSE,
-								max_lines=Inf){	# optional maximum number of lines to extract
+								nearby	 = FALSE, 	# whether to create the uncompressed version (if needed) next to the original file. If FALSE, it is created in a temp file
+								max_lines= Inf){	# optional maximum number of lines to extract
 	if(endsWith(tolower(file_path),".gz")){
-		if(place_next_to_original){
+		if(nearby){
 			uncompressed_file_path = substr(file_path,1,nchar(file_path)-3)
 		}else{
 			uncompressed_file_path = tempfile(pattern=basename(file_path), fileext=get_file_extension(file_path, skip_gz=TRUE))
@@ -3199,5 +3223,40 @@ initiate_plot_file = function(file_path,
 	}
 }
 
+
+pick_recycled = function(values, indices){
+	return(values[((indices - 1) %% length(values)) + 1 ])
+}
+
+
+
+# run a given function FUN in parallel, returning the results as a list
+# Each element of the resulting list will contain the return value(s) of a single call of FUN
+run_parallel = function(FUN,		# the function to run multiple times
+						arguments,	# list or vector of arguments over which to iterate. The length of this list/vector defines the number of executions and thus the length of the returned list.
+						Nthreads = 0,
+						randomize = FALSE){
+	if(Nthreads<=0) Nthreads = max(1, parallel::detectCores()+Nthreads)
+	N = length(arguments)
+	runorder = seq_len(N)
+	if(randomize) sample(runorder)
+	if((N>1) && (Nthreads>1) && (.Platform$OS.type!="windows")){
+		# run trials in parallel using multiple forks
+		# Note: Forks (and hence shared memory) are not available on Windows
+		results = parallel::mclapply(arguments[runorder],
+									 FUN = FUN, 
+									 mc.cores = min(Nthreads, N), 
+									 mc.preschedule = TRUE, 
+									 mc.cleanup = TRUE)
+		if(randomize) results = results[invert_permutation(runorder)]
+	}else{
+		# run in serial mode
+		results = vector(mode="list", N)
+		for(r in seq_len(N)){
+			results[[r]] = FUN(arguments[[r]])
+		}
+	}
+	return(results)
+}
 
 

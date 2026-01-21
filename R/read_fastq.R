@@ -22,17 +22,22 @@ read_fastq = function(	file,						# character, path to the input fasta file. Thi
 		results$headers = sapply(seq_len(length(results$headers)), FUN=function(h){ strsplit(results$headers[h],split=truncate_headers_at,fixed=TRUE)[[1]][1] })
 	}
 	if(include_phred_scores || include_error_probs){
-		qualities_int = lapply(results$qualities, FUN=function(qualities0){ as.integer(charToRaw(paste0(strsplit(qualities0, NULL)[[1]], collapse = ""))) }) # convert characters to ASCIIs
-		if(is.null(phred_offset)){
-			# guestimate the proper PHRED offset
-			min_quality_int  = min(sapply(seq_len(min(1000,length(qualities_int))), FUN=function(k){ min(0,qualities_int[[k]]) }))
-			mean_quality_int = mean(sapply(seq_len(min(1000,length(qualities_int))), FUN=function(k){ mean(qualities_int[[k]]) }))
-			if(min_quality_int<64) phred_offset = 33
-			else if(mean_quality_int>83) phred_offset = 64
-			else phred_offset = 33 # ambiguous, so just pick the most common one
+		if(results$Nsequences==0){
+			phred_scores = list()
+			error_probs  = list()
+		}else{
+			qualities_int = lapply(results$qualities, FUN=function(qualities0){ as.integer(charToRaw(paste0(strsplit(qualities0, NULL)[[1]], collapse = ""))) }) # convert characters to ASCIIs
+			if(is.null(phred_offset)){
+				# guestimate the proper PHRED offset
+				min_quality_int  = min(sapply(seq_len(min(1000,length(qualities_int))), FUN=function(k){ min(0,qualities_int[[k]]) }))
+				mean_quality_int = mean(sapply(seq_len(min(1000,length(qualities_int))), FUN=function(k){ mean(qualities_int[[k]]) }))
+				if(min_quality_int<64) phred_offset = 33
+				else if(mean_quality_int>83) phred_offset = 64
+				else phred_offset = 33 # ambiguous, so just pick the most common one
+			}
+			phred_scores = lapply(qualities_int, FUN=function(qualities_int0){ qualities_int0-phred_offset })
+			if(include_error_probs) error_probs = lapply(phred_scores, FUN=function(phred_scores0){ 10^(-phred_scores0/10) })
 		}
-		phred_scores = lapply(qualities_int, FUN=function(qualities_int0){ qualities_int0-phred_offset })
-		if(include_error_probs) error_probs = lapply(phred_scores, FUN=function(phred_scores0){ 10^(-phred_scores0/10) })
 	}
 	return(list(success		= TRUE,
 				headers		= (if(include_headers) results$headers else NULL),

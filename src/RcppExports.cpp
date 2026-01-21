@@ -910,8 +910,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // get_ancestral_nodes_CPP
-IntegerVector get_ancestral_nodes_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& descendants, const std::vector<long>& Nsplits);
-RcppExport SEXP _castor_get_ancestral_nodes_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP descendantsSEXP, SEXP NsplitsSEXP) {
+IntegerVector get_ancestral_nodes_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& descendants, const std::vector<long>& Nsplits, const std::vector<long>& only_nodes, const std::vector<long>& omit_nodes);
+RcppExport SEXP _castor_get_ancestral_nodes_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP descendantsSEXP, SEXP NsplitsSEXP, SEXP only_nodesSEXP, SEXP omit_nodesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -921,7 +921,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<long>& >::type descendants(descendantsSEXP);
     Rcpp::traits::input_parameter< const std::vector<long>& >::type Nsplits(NsplitsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_ancestral_nodes_CPP(Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits));
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type only_nodes(only_nodesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type omit_nodes(omit_nodesSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_ancestral_nodes_CPP(Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits, only_nodes, omit_nodes));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -1893,7 +1895,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // apply_fixed_rate_Markov_model_to_missing_clades_CPP
-NumericVector apply_fixed_rate_Markov_model_to_missing_clades_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& transition_matrix, const double exponentiation_accuracy, const long max_polynomials, LogicalVector likelihoods_known, std::vector<double> likelihoods, const bool unknown_likelihoods_as_priors);
+Rcpp::List apply_fixed_rate_Markov_model_to_missing_clades_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& transition_matrix, const double exponentiation_accuracy, const long max_polynomials, LogicalVector likelihoods_known, std::vector<double> likelihoods, const bool unknown_likelihoods_as_priors);
 RcppExport SEXP _castor_apply_fixed_rate_Markov_model_to_missing_clades_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP transition_matrixSEXP, SEXP exponentiation_accuracySEXP, SEXP max_polynomialsSEXP, SEXP likelihoods_knownSEXP, SEXP likelihoodsSEXP, SEXP unknown_likelihoods_as_priorsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -3036,7 +3038,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // read_fastq_from_file_CPP
-Rcpp::List read_fastq_from_file_CPP(const std::string& fastq_path, const bool include_headers, const bool include_sequences, const bool include_qualities, const long max_sequences, const long max_lines);
+Rcpp::List read_fastq_from_file_CPP(const std::string& fastq_path, const bool include_headers, const bool include_sequences, const bool include_qualities, const double max_sequences, const double max_lines);
 RcppExport SEXP _castor_read_fastq_from_file_CPP(SEXP fastq_pathSEXP, SEXP include_headersSEXP, SEXP include_sequencesSEXP, SEXP include_qualitiesSEXP, SEXP max_sequencesSEXP, SEXP max_linesSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -3045,28 +3047,29 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const bool >::type include_headers(include_headersSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_sequences(include_sequencesSEXP);
     Rcpp::traits::input_parameter< const bool >::type include_qualities(include_qualitiesSEXP);
-    Rcpp::traits::input_parameter< const long >::type max_sequences(max_sequencesSEXP);
-    Rcpp::traits::input_parameter< const long >::type max_lines(max_linesSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_sequences(max_sequencesSEXP);
+    Rcpp::traits::input_parameter< const double >::type max_lines(max_linesSEXP);
     rcpp_result_gen = Rcpp::wrap(read_fastq_from_file_CPP(fastq_path, include_headers, include_sequences, include_qualities, max_sequences, max_lines));
     return rcpp_result_gen;
 END_RCPP
 }
 // read_distances_list_CPP
-Rcpp::List read_distances_list_CPP(const std::string& file_path, const std::string& delimiter, const std::string& comment_prefix, const long distances_column, const double min_distance, const double max_distance, const long max_Nedges, const long verbose_interval, const std::string& verbose_prefix);
-RcppExport SEXP _castor_read_distances_list_CPP(SEXP file_pathSEXP, SEXP delimiterSEXP, SEXP comment_prefixSEXP, SEXP distances_columnSEXP, SEXP min_distanceSEXP, SEXP max_distanceSEXP, SEXP max_NedgesSEXP, SEXP verbose_intervalSEXP, SEXP verbose_prefixSEXP) {
+Rcpp::List read_distances_list_CPP(const std::string& file_path, const std::string& delimiter, const std::string& comment_prefix, const bool header, const long distances_column, const double min_distance, const double max_distance, const long max_Nedges, const long verbose_interval, const std::string& verbose_prefix);
+RcppExport SEXP _castor_read_distances_list_CPP(SEXP file_pathSEXP, SEXP delimiterSEXP, SEXP comment_prefixSEXP, SEXP headerSEXP, SEXP distances_columnSEXP, SEXP min_distanceSEXP, SEXP max_distanceSEXP, SEXP max_NedgesSEXP, SEXP verbose_intervalSEXP, SEXP verbose_prefixSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const std::string& >::type file_path(file_pathSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type comment_prefix(comment_prefixSEXP);
+    Rcpp::traits::input_parameter< const bool >::type header(headerSEXP);
     Rcpp::traits::input_parameter< const long >::type distances_column(distances_columnSEXP);
     Rcpp::traits::input_parameter< const double >::type min_distance(min_distanceSEXP);
     Rcpp::traits::input_parameter< const double >::type max_distance(max_distanceSEXP);
     Rcpp::traits::input_parameter< const long >::type max_Nedges(max_NedgesSEXP);
     Rcpp::traits::input_parameter< const long >::type verbose_interval(verbose_intervalSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
-    rcpp_result_gen = Rcpp::wrap(read_distances_list_CPP(file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix));
+    rcpp_result_gen = Rcpp::wrap(read_distances_list_CPP(file_path, delimiter, comment_prefix, header, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3144,7 +3147,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_extract_fasttree_constraints_CPP", (DL_FUNC) &_castor_extract_fasttree_constraints_CPP, 4},
     {"_castor_get_gamma_statistic_CPP", (DL_FUNC) &_castor_get_gamma_statistic_CPP, 5},
     {"_castor_get_Colless_Imbalance_CPP", (DL_FUNC) &_castor_get_Colless_Imbalance_CPP, 5},
-    {"_castor_get_ancestral_nodes_CPP", (DL_FUNC) &_castor_get_ancestral_nodes_CPP, 6},
+    {"_castor_get_ancestral_nodes_CPP", (DL_FUNC) &_castor_get_ancestral_nodes_CPP, 8},
     {"_castor_extract_tip_neighborhood_CPP", (DL_FUNC) &_castor_extract_tip_neighborhood_CPP, 7},
     {"_castor_extract_deep_frame_CPP", (DL_FUNC) &_castor_extract_deep_frame_CPP, 5},
     {"_castor_get_all_distances_to_tip_CPP", (DL_FUNC) &_castor_get_all_distances_to_tip_CPP, 6},
@@ -3256,7 +3259,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_ACF_spherical_CPP", (DL_FUNC) &_castor_ACF_spherical_CPP, 13},
     {"_castor_read_fasta_from_file_CPP", (DL_FUNC) &_castor_read_fasta_from_file_CPP, 3},
     {"_castor_read_fastq_from_file_CPP", (DL_FUNC) &_castor_read_fastq_from_file_CPP, 6},
-    {"_castor_read_distances_list_CPP", (DL_FUNC) &_castor_read_distances_list_CPP, 9},
+    {"_castor_read_distances_list_CPP", (DL_FUNC) &_castor_read_distances_list_CPP, 10},
     {"_castor_place_paired_end_reads_CPP", (DL_FUNC) &_castor_place_paired_end_reads_CPP, 4},
     {NULL, NULL, 0}
 };

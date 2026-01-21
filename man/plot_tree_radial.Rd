@@ -5,36 +5,48 @@ Plot a tree in radial layout.
 }
 \description{
 Given a rooted phylogenetic tree, visualize the tree in radial form, i.e., with the root placed in the center and descending clades radiating outwards.
-Optionally, discrete tip metadata may be displayed in the form of colored rings around the tree.
+Optionally, categorial tip data may be displayed in the form of colored rings and discrete-quantitative tip data may be displayed in the form of dot-stacks around the tree.
 }
 \usage{
 plot_tree_radial(tree,
-                file_path         = NULL,
-                make_ultrametric  = FALSE,
-                symmetric_arcs    = TRUE,
-                opening           = 0,
-                rotate            = 0,
-                plot_width        = 5,
-                plot_title        = NULL,
-                show_scale_bar    = FALSE,
-                align_tip_labels  = FALSE,
-                tip_cex           = 0,
-                node_cex          = 0,
-                tip_label_cex     = NULL,
-                scale_edge_widths = FALSE,
-                base_edge_width   = 1,
-                tip_color         = "black",
-                node_color        = "black",
-                edge_color        = "#00000080",
-                node_arc_color    = "#00000080",
-                root_edge_color   = "#00000080",
-                tip_label_color   = "black",
-                ring_colors       = NULL,
-                ring_width        = 5,
-                ring_border_width = 1,
-                ring_border_color = "#FFFFFF",
-                legend_colors     = NULL,
-                legend_labels     = NULL)
+                file_path             = NULL,
+                make_ultrametric      = FALSE,
+                symmetric_arcs        = TRUE,
+                opening               = 0,
+                rotate                = 0,
+                plot_width            = 5,
+                plot_title            = NULL,
+                show_scale_bar        = FALSE,
+                align_tip_labels      = FALSE,
+                tip_cex               = 0,
+                node_cex              = 0,
+                tip_label_cex         = NULL,
+                scale_edge_widths     = FALSE,
+                base_edge_width       = 1,
+                tip_color             = "black",
+                node_color            = "black",
+                edge_color            = "#00000080",
+                node_arc_color        = "#00000080",
+                root_edge_color       = "#00000080",
+                tip_label_color       = "black",
+                ring_colors           = NULL,
+                ring_width            = 5,
+                ring_border_width     = 1,
+                ring_border_color     = "#FFFFFF",
+                dotstack_heights      = NULL,
+                dotstack_color        = "black",
+                dotstack_border_width = 1,
+                dotstack_border_color = "black",
+                tip_sectors           = NULL,
+                sector_color          = "black",
+                sector_width          = 2,
+                sector_gap            = 15,
+                min_sector_size       = 2,
+                sector_label_cex      = 1,
+                sector_label_color    = "black",
+                fragmented_sectors    = "error",
+                legend_colors         = NULL,
+                legend_labels         = NULL)
 }
 \arguments{
 \item{tree}{
@@ -105,9 +117,9 @@ Color of the root edge, if applicable.
 Either a single character or a character vector of length \code{Ntips} or an RGB tuple or an RGBA tuple, specifying tip label colors & alpha. This vector must be synchronized with the tree tips.
 }
 \item{ring_colors}{
-Optional specification of discrete data to be visualized as multi-colored rings around the tree. Must be either a data.frame or a matrix of size Ntips x NC, specifying one or more multi-colored rings to show around the tree.
-The entries of \code{ring_colors[]} must be valid HEX color characters, with \code{ring_colors[t,r]} being the color for tip t on ring r. An entry of \code{NULL} or \code{NA} means no color segment is drawn for a tip, effectively keeping the background color.
-If \code{ring_colors[]} has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
+Optional specification of categorial data to be visualized as multi-colored rings around the tree. Must be either a data.frame or a matrix of size Ntips x NC, specifying one or more multi-colored rings to show around the tree.
+The entries of \code{ring_colors} must be valid HEX color characters, with \code{ring_colors[t,r]} being the color for tip t on ring r. An entry of \code{NULL} or \code{NA} means no color segment is drawn for a tip, effectively keeping the background color.
+If \code{ring_colors} has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
 }
 \item{ring_width}{
 Numeric, line width to use for colored rings around the tree. Only relevant if \code{ring_colors} is provided.
@@ -117,6 +129,45 @@ Numeric, line width to use for the ring borders. A value of 0 means zero space b
 }
 \item{ring_border_color}{
 Color to use for the ring borders, i.e., separating the rings from each other and from the tree.
+}
+\item{dotstack_heights}{
+Optional specification of discrete quantitative data to be visualized as stacked dots around the tree. Must be either a data.frame or a matrix of size Ntips x ND, specifying one or more dot stacks to show around the tree.
+The entries of \code{dotstack_heights} must be non-negative integers, with \code{dotstack_heights[t,d]} being the dot-stack height (number of dots) for tip t on dot stack d.
+If \code{dotstack_heights} has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
+An example use case would be to show the number of copies found for a specific gene in each genome on a genome phylogeny.
+}
+\item{dotstack_color}{
+Either a single color or a vector colors, specifying the dot colors to use for the dot-stacks. For example, colors may be specified as HEX codes or color names. Colors are recycled as needed.
+}
+\item{dotstack_border_width}{
+Numeric, line thickness for the dot-stack borders. If \code{NULL}, this is set equal to \code{ring_border_width}.
+}
+\item{dotstack_border_color}{
+Color to use for the dot-stack borders, i.e., separating the dot-stacks from each other. If \code{NULL}, this is set to \code{ring_border_color}.
+}
+\item{tip_sectors}{
+Optional vector of length Ntips, specifying a sector ID for each tip. IDs may be characters, integers, or some other reasonable scalar. Tips will be grouped by sector, and each such group will be visually highlighted using an outer arc and label. This may be used e.g. to highlight major phyla in a tree. \code{tip_sectors} may also contain \code{NA} or \code{NULL}, representing sector-less tips not to be highlighted. It is expected that all or most sectors are monophyletic (but see option \code{fragmented_sectors}). If \code{tip_sectors} has names, these will be matched to the tip labels, otherwise elements in \code{tip_sectors} are assumed to already be synchronized with the tree's tips.
+}
+\item{sector_color}{
+Color to use for sector arcs, if applicable.
+}
+\item{sector_width}{
+Numeric, line thickness for the sector arcs.
+}
+\item{sector_gap}{
+Numeric, gap between the sector arcs and the inner-next element (typically tip labels), measured in the same units as line widths.
+}
+\item{min_sector_size}{
+Integer, minimum number of contiguous tips per displayed sector (after splitting, if \code{fragmented_sectors=="split"}).
+}
+\item{sector_label_cex}{
+Numeric, sector label rescaling if applicable. If 0, sector labels are not shown.
+}
+\item{sector_label_color}{
+Color for the sector labels, if applicable.
+}
+\item{fragmented_sectors}{
+Character, specifying how to handle fragmented (i.e., non-monophyletic) tip sectors. Options include "\code{error}" (throw an error), "\code{omit}" (omit the affected sectors) and "\code{split}" (split the affected sectors into multiple parts where needed).
 }
 \item{legend_colors}{
 Vector specifying colors to be defined in a legend. These can be for example colors in \code{ring_colors[]}, or colors used for the tips & nodes & edges.

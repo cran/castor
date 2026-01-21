@@ -233,8 +233,8 @@ get_Colless_Imbalance_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, normaliz
     .Call(`_castor_get_Colless_Imbalance_CPP`, Ntips, Nnodes, Nedges, tree_edge, normalized)
 }
 
-get_ancestral_nodes_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits) {
-    .Call(`_castor_get_ancestral_nodes_CPP`, Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits)
+get_ancestral_nodes_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits, only_nodes, omit_nodes) {
+    .Call(`_castor_get_ancestral_nodes_CPP`, Ntips, Nnodes, Nedges, tree_edge, descendants, Nsplits, only_nodes, omit_nodes)
 }
 
 extract_tip_neighborhood_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, focal_tip, Nbackward, Nforward) {
@@ -681,8 +681,8 @@ read_fastq_from_file_CPP <- function(fastq_path, include_headers, include_sequen
     .Call(`_castor_read_fastq_from_file_CPP`, fastq_path, include_headers, include_sequences, include_qualities, max_sequences, max_lines)
 }
 
-read_distances_list_CPP <- function(file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix) {
-    .Call(`_castor_read_distances_list_CPP`, file_path, delimiter, comment_prefix, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix)
+read_distances_list_CPP <- function(file_path, delimiter, comment_prefix, header, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix) {
+    .Call(`_castor_read_distances_list_CPP`, file_path, delimiter, comment_prefix, header, distances_column, min_distance, max_distance, max_Nedges, verbose_interval, verbose_prefix)
 }
 
 place_paired_end_reads_CPP <- function(forward_reads, reverse_reads, min_overlap = 1L, min_Nchars = 1L) {

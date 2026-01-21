@@ -4,11 +4,13 @@
 Hidden state prediction via empirical probabilities.
 }
 \description{
-Reconstruct ancestral discrete states of nodes and predict unknown (hidden) states of tips on a tree based on empirical state probabilities across tips. This is a very crude HSP method, and other more sophisticated methods should be preferred (e.g. \code{\link{hsp_mk_model}}).
+Reconstruct ancestral discrete states of nodes and predict unknown (hidden) states of tips on a tree based on local empirical state probabilities across tips. This is a crude HSP method, and other more sophisticated methods should be preferred (e.g. \code{\link{hsp_mk_model}}).
 }
 \usage{
-hsp_empirical_probabilities(tree, tip_states, 
-                            Nstates=NULL, check_input=TRUE)
+hsp_empirical_probabilities(tree, 
+                            tip_states, 
+                            Nstates     = NULL,
+                            check_input = TRUE)
 }
 \arguments{
 \item{tree}{
@@ -46,7 +48,7 @@ A list with the following elements:
 Logical, indicating whether HSP was successful. If \code{FALSE}, some return values may be \code{NULL}.
 }
 \item{likelihoods}{
-A 2D numeric matrix, listing the probability of each tip and node being in each state. This matrix will have (Ntips+Nnodes) rows and Nstates columns, where Nstates was either explicitly provided as an argument or inferred based on the number of unique values in \code{tip_states} (if \code{Nstates} was passed as NULL). In the latter case, the column names of this matrix will be the unique values found in \code{tip_states}. The rows in this matrix will be in the order in which tips and nodes are indexed in the tree, i.e. the rows 1,..,Ntips store the probabilities for tips, while rows (Ntips+1),..,(Ntips+Nnodes) store the probabilities for nodes. Each row in this matrix will sum up to 1. Note that the return value is named this way for compatibility with other HSP functions.
+A 2D numeric matrix, listing the probability of each tip and node being in each state. This matrix will have (Ntips+Nnodes) rows and Nstates columns, where Nstates was either explicitly provided as an argument or set to the maximum value encountered in \code{tip_states} (if \code{Nstates} was passed as NULL). The rows in this matrix will be in the order in which tips and nodes are indexed in the tree, i.e. the rows 1,..,Ntips store the probabilities for tips, while rows (Ntips+1),..,(Ntips+Nnodes) store the probabilities for nodes. Each row in this matrix will sum up to 1. Note that the return value is named this way for compatibility with other HSP functions.
 }
 \item{states}{
 Integer vector of length Ntips+Nnodes, with values in \{1,..,Nstates\}, specifying the maximum-likelihood estimate of the state of each tip & node.
@@ -82,7 +84,7 @@ print(tip_states[1:20])
 # set half of the tips to unknown state
 tip_states[sample.int(Ntips,size=as.integer(Ntips/2),replace=FALSE)] = NA
 
-# reconstruct all tip states via MPR
+# reconstruct all tip states
 likelihoods = hsp_empirical_probabilities(tree, tip_states, Nstates)$likelihoods
 estimated_tip_states = max.col(likelihoods[1:Ntips,])
 

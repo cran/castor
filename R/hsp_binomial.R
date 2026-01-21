@@ -6,7 +6,7 @@
 # This function is similar to hsp_empirical_probabilities, but it accounts for potential state-measurement errors and reveal biases.
 hsp_binomial = function(tree, 
 						tip_states, 	# integer vector of size Ntips, listing measured tip states (potentially erroneously). May include NAs for hidden states, or 1 or 2 for measured states.
-						reveal_probs	= NULL,	# 2D matrix of size Ntips x 2, listing the reveal probabilities at each tip conditional on the tip's true state. May also be a vector of length 2 (same reveal_probs for all tips) or NULL (unbiased reveal probs)
+						reveal_probs	= NULL,	# 2D matrix of size Ntips x 2, listing the reveal probabilities at each tip conditional on the tip's true state. May also be a vector of length 2 (same reveal_probs for all tips) or NULL. If NULL, this means no reveal biases, which is the same as specifying the same reveal probabilities for both states.
 						state1_probs	= NULL,	# 2D matrix of size Ntips x 2, listing the probability of measuring state 1 (potentially erroneously) at each tip conditional upon its true state and conditional upon revealing (measuring) some state. For example, for an incompletely sequenced genome with completion level C_i and state1=absence and state2=presence of a gene, one has state1_probs[i,1] = 1, state1_probs[i,2]=1 - C_i. May also be a vector of length 2 (same probabilities for all tips) or NULL. If NULL, state measurements are assumed error-free, and hence this is the same as c(1,0).
 						min_revealed 	= 1,	# minimum number of descending tips with revealed state for inferring P1 for a clade during the ASR-phase. For clades with too few descending tips with revealed state, the probability P1 will not be estimated in the ASR-phase. It is advised to set this greater than zero. The larger this number, the more nodes will not have their P1 calculated.
 						max_STE			= Inf,	# maximum acceptable standard error for the estimated probability P1 for a clade. If the STE for a clade exceeds this threshold, the P1 for that clade is set to the P1 of the nearest ancestor with STE below that threshold. Setting this to Inf disables this functionality.
@@ -22,7 +22,7 @@ hsp_binomial = function(tree,
 		if(any(!(is.na(tip_states) | (tip_states==1) | (tip_states==2)))) return(list(success=FALSE, error="All tip states must be either 1, 2 or NA"))
 	}
 
-	if(is.null(reveal_probs)) reveal_probs = c(1,1)*sum(!(is.na(tip_states)))/Ntips; # no reveal biases, i.e. reveal_probs[1]==reveal_probs[1]. In that case the scaling of reveal_probs does not matter, so we can w.l.o.g. set them both to the empirical reveal fraction (fraction of non-hidden tips)
+	unbiased_reveals = is.null(reveal_probs) || (is.vector(reveal_probs) && (reveal_probs[1]==reveal_probs[2])) || (is.matrix(reveal_probs) && all(reveal_probs[,1]==reveal_probs[,2]))
 	if(is.vector(reveal_probs)){
 		if(length(reveal_probs)==2){
 			reveal_probs = matrix(rep(reveal_probs,times=Ntips),ncol=2,byrow=TRUE)
@@ -37,11 +37,11 @@ hsp_binomial = function(tree,
 		}else if(nrow(reveal_probs)!=Ntips){
 			return(list(success=FALSE, error=sprintf("reveal_probs was provided as a matrix, which case it must have %d rows (=Ntips); instead, found %d rows",Ntips,nrow(reveal_probs))))
 		}
-	}else{
+	}else if(!is.null(reveal_probs)){
 		return(list(success=FALSE, error=sprintf("Unknown data type for reveal_probs: Expected either a vector of length 2 or a matrix with 2 columns and %d rows",Ntips)))
 	}
 	
-	if(is.null(state1_probs)) state1_probs = c(1,0); # error-free state measurements
+	error_free_states = is.null(state1_probs) || (is.vector(state1_probs) && all(state1_probs==c(1,0))) || (is.matrix(state1_probs) && (state1_probs[,1]==1) && (state1_probs[,2]==0))
 	if(is.vector(state1_probs)){
 		if(length(state1_probs)==2){
 			state1_probs = matrix(rep(state1_probs,times=Ntips),ncol=2,byrow=TRUE)
@@ -56,7 +56,7 @@ hsp_binomial = function(tree,
 		}else if(nrow(state1_probs)!=Ntips){
 			return(list(success=FALSE, error=sprintf("state1_probs was provided as a matrix, which case it must have %d rows (=Ntips); instead, found %d rows",Ntips,nrow(state1_probs))))
 		}
-	}else{
+	}else if(!is.null(state1_probs)){
 		return(list(success=FALSE, error=sprintf("Unknown data type for state1_probs: Expected either a vector of length 2 or a matrix with 2 columns and %d rows",Ntips)))
 	}
 	
@@ -69,17 +69,21 @@ hsp_binomial = function(tree,
 									Nedges			= nrow(tree$edge),
 									tree_edge		= as.vector(t(tree$edge))-1, # flatten in row-major format
 									tip_states		= input_tip_states,
-									reveal_probs	= as.vector(t(reveal_probs)), # flatten in row-major format
-									state0_probs	= as.vector(t(state1_probs)), # flatten in row-major format
+									reveal_probs	= (if(unbiased_reveals) numeric(0) else as.vector(t(reveal_probs))), # flatten in row-major format
+									state0_probs	= (if(error_free_states) numeric(0) else as.vector(t(state1_probs))), # flatten in row-major format
 									min_revealed	= min_revealed);
 	if(!asr_results$success) return(list(success=FALSE, error=sprintf("ASR failed: %s",asr_results$error)))
 	P1s 			= asr_results$P0s
-	STEs			= asr_results$STEs # standard error estimates
+	STEs			= asr_results$STEs # standard error estimates of the P1s
 	P1_known 		= rep(TRUE, times=Nclades)
 	P1_known[P1s<0]	= FALSE
 	P1_known[STEs>max_STE] = FALSE
 	# for tips with definitely known true state, don't use the ML estimates and just fix P1 based on their state
-	definites = which(sapply(1:Ntips, FUN=function(tip) return((!is.na(tip_states[tip])) && ((tip_states[tip]==1 && state1_probs[tip,2]==0) || (tip_states[tip]==2 && state1_probs[tip,1]==1)))))
+	if(error_free_states){
+		definites = which(!is.na(tip_states))
+	}else{
+		definites = which(sapply(1:Ntips, FUN=function(tip) return((!is.na(tip_states[tip])) && ((tip_states[tip]==1 && state1_probs[tip,2]==0) || (tip_states[tip]==2 && state1_probs[tip,1]==1)))))
+	}
 	if(length(definites)>0){
 		P1s[definites] 		= (tip_states[definites]==1);
 		STEs[definites] 	= 0

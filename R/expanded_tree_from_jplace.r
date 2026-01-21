@@ -3,13 +3,25 @@
 # If multiple placements are listed for a query, this function can either add the best (maximum-likelihood) placement or all listed placements.
 expanded_tree_from_jplace = function(file_path,						# path to the jplace file. May be gzipped, with file extension .gz.
 									only_best_placements	= TRUE,	# only keep the best placement of each query, i.e., the placement with maximum likelihood
-									max_names_per_query		= 1){	# maximum number of sequence names to keep from each query
-	J = load_jplace(file_path, only_best_placements=only_best_placements, max_names_per_query=max_names_per_query)
+									max_names_per_query		= 1,	# maximum number of sequence names to keep from each query
+									max_pendant_length		= Inf,	# optional maximum acceptable placement pendant length. Any placements exceeding this pendant length are omitted. If only_best_placements==TRUE, then this filter is applied after selecting the best placement.
+									min_like_weight_ratio	= 0){	# optional minimum acceptable placement likelihood weight ratio. Any placements below this threshold are omitted. If only_best_placements==TRUE, then this filter is applied after selecting the best placement.
+	J = load_jplace(file_path,
+					only_best_placements = only_best_placements, 
+					max_names_per_query  = max_names_per_query,
+					max_pendant_length 	 = max_pendant_length,
+					min_like_weight_ratio= min_like_weight_ratio)
 	results = place_tips_on_edges(tree				= J$tree,
 								edges				= J$edges,
 								distal_lengths		= J$distal_lengths,
 								pendant_lengths		= J$pendant_lengths,
 								placed_tip_labels	= J$sequence_names)
-	results$reference_tree = J$tree
+	results$reference_tree  = J$tree
+	results$reference_edges = J$edges # integer vector specifying for each placement the edge in the reference tree
+	# also include some information about the placements, loaded from the jplace file
+	results$pendant_lengths 	= J$pendant_lengths 	# numeric vector, edge lengths leading into the placed tips. This will be synchronized with results$placed_tips[].
+	results$loglikelihoods 		= J$loglikelihoods 		# numeric vector, placement log-likelihoods, loaded from the jplace file. This will be synchronized with results$placed_tips[].
+	results$like_weight_ratios 	= J$like_weight_ratios 	# numeric vector, placement likelihood weight ratios, loaded from the jplace file. This will be synchronized with results$placed_tips[].
+	results$NPfiltered			= J$Nfiltered			# integer, number of placements that have been filtered out due to quality criteria such as max_pendant_length & min_like_weight_ratio
 	return(results)
 }
