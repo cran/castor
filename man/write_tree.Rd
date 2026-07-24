@@ -11,7 +11,7 @@ write_tree (tree,
             file                 = "",
             append               = FALSE,
             digits               = 10,
-            quoting              = 0,
+            quoting              = -1,
             include_edge_labels  = FALSE,
             include_edge_numbers = FALSE)
 }

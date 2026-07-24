@@ -3,7 +3,7 @@
 # Each query is placed at the deepest possible node (furthest from the root in terms of splits) for which it is certain that the query is a descendant of.
 # If include_expanded_tree, each placed query's distance from its placement node will be equal to that node's average distance to all descending tips (i.e., mean node depth).
 # Examples: 
-#	If a parental node has taxonomy N1="A;B;C;D" and its two children have taxonomies N2="A;B;C;D;E1" & N2="A;B;C;D;E2", then the query taxonomy "A;B;C;D;F" will be placed on the parental node N1, while the taxonomy "A;B;C;D;E1;F" would be placed at or below the node N2.
+#	If a parental node has taxonomy N1="A;B;C;D" and its two children have taxonomies N2="A;B;C;D;E1" & N3="A;B;C;D;E2", then the query taxonomy "A;B;C;D;F" will be placed on the parental node N1, while the taxonomy "A;B;C;D;E1;F" would be placed at or below the node N2.
 place_tips_taxonomically = function(tree,					# rooted tree of class phylo, 
 									query_labels,						# character vector of length Nqueries, listing labels for the newly placed tips 
 									query_taxonomies		= NULL,		# optional character vector of length Nqueries, listing query taxonomies to be placed on the tree. If NULL, it is assumed that query_labels are taxonomies.
@@ -11,7 +11,8 @@ place_tips_taxonomically = function(tree,					# rooted tree of class phylo,
 									node_taxonomies 		= NULL,		# optional character vector of length Nnodes, listing taxonomic paths for the nodes. If NULL, then node labels are assumed to be node taxonomies.
 									tree_taxon_delimiter	= ";",		# character, the delimiter between taxonomic levels in the tip & node taxonomies (e.g., ";" for SILVA taxonomies)
 									query_taxon_delimiter	= ";",		# character, the delimiter between taxonomic levels in query taxonomies
-									include_expanded_tree	= TRUE){	# if TRUE, the expanded tree (i.e., including the placements) is returned as well, at some computational cost. If FALSE, only the placement info is returned, but no tree expansion is done. 
+									include_expanded_tree	= TRUE,		# if TRUE, the expanded tree (i.e., including the placements) is returned as well, at some computational cost. If FALSE, only the placement info is returned, but no tree expansion is done. 
+									placement_length		= "mean_depth"){	# how to determine the edge length leading into each placed query. Options are "mean_depth", "max_depth", "min_depth" or any non-negative numeric value. Only relevant if the tree has edge lengths and if include_expanded_tree==TRUE.
 	Ntips  	 = length(tree$tip.label)
 	Nnodes 	 = tree$Nnode
 	Nqueries = length(query_labels)
@@ -37,17 +38,35 @@ place_tips_taxonomically = function(tree,					# rooted tree of class phylo,
 	
 	if(include_expanded_tree){
 		placed_queries = which(placement_nodes>0)
-		if(!is.null(tree$edge.length)){
+		if(is.null(tree$edge.length)){
+			lengths = NULL
+		}else if(placement_length=="mean_depth"){
 			mean_node_depths =  get_mean_depth_per_node_CPP(Ntips		= Ntips,
 															Nnodes		= Nnodes,
 															Nedges		= nrow(tree$edge),
 															tree_edge	= as.vector(t(tree$edge))-1,
 															edge_length	= tree$edge.length)
+			lengths = mean_node_depths[placement_nodes[placed_queries]]
+		}else if(placement_length %in% c("min_depth","max_depth")){
+			min_max_node_depths = get_min_max_depth_per_node_CPP(Ntips		= Ntips,
+																Nnodes		= Nnodes,
+																Nedges		= nrow(tree$edge),
+																tree_edge	= as.vector(t(tree$edge))-1,
+																edge_length	= tree$edge.length)
+			if(placement_length=="min_depth"){
+				lengths = min_max_node_depths$min_depths[placement_nodes[placed_queries]]
+			}else if(placement_length=="max_depth"){
+				lengths = min_max_node_depths$max_depths[placement_nodes[placed_queries]]
+			}
+		}else if(is.numeric(placement_length)){
+			lengths = rep(placement_length, length(placed_queries))
+		}else{
+			stop(sprintf("Invalid choice '%s' for placement_length",placement_length))
 		}
 		expansion = place_tips_on_nodes(tree			  = tree,
 										placement_nodes	  = placement_nodes[placed_queries],
 										placed_tip_labels = query_labels[placed_queries],
-										placement_lengths = (if(is.null(tree$edge.length)) NULL else mean_node_depths[placement_nodes[placed_queries]]))
+										placement_lengths = lengths)
 		results$tree = expansion$tree
 		# construct mapping placed_tips[], as an integer vector of length Nqueries, specifying the newly placed tips corresponding to the input queries. For unplaced queries, a value 0 is used.
 		results$placed_tips = integer(Nqueries)

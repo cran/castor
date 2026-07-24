@@ -7,7 +7,10 @@ Compute consensus taxonomies across a tree.
 Given a rooted phylogenetic tree and taxonomies for all tips, compute corresponding consensus taxonomies for all nodes in the tree based on their descending tips. The consensus taxonomy of a given node is the longest possible taxonomic path (i.e., to the lowest possible level) such that the taxonomies of all descending tips are nested within that taxonomic path. Some tip taxonomies may be incomplete, i.e., truncated at higher taxonomic levels. In that case, consensus taxonomy building will be conservative, i.e., no assumptions will be made about the missing taxonomic levels.
 }
 \usage{
-consensus_taxonomies(tree, tip_taxonomies = NULL, delimiter = ";")
+consensus_taxonomies(tree, 
+                     tip_taxonomies = NULL,
+                     delimiter      = ";",
+                     duplicates     = "keep_all")
 }
 %- maybe also 'usage' for other objects documented here.
 \arguments{
@@ -19,6 +22,9 @@ Optional, character vector of length Ntips, listing taxonomic paths for the tips
 }
 \item{delimiter}{
 Character, the delimiter between taxonomic levels (e.g., ";" for SILVA and Greengenes taxonomies).
+}
+\item{duplicates}{
+Character, specifying how to handle duplicate consensus taxonomies, i.e., when multiple nodes have the same consensus taxonomy. Options are "keep_all", "keep_oldest" (only the node closest to the root keeps its consensus taxonomy, all others are set to ""), "keep_none" (don't keep any consensus taxonomies that appear more than once).
 }
 }
 

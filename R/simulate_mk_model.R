@@ -45,6 +45,6 @@ simulate_mk_model = function(	tree,
 		node_states = 1L + (if(drop_dims && (Nsimulations==1)) results$node_states else matrix(results$node_states, ncol=Nnodes, byrow=TRUE))
 		mode(node_states) = "integer"
 	}
-	return(list(tip_states=tip_states, node_states=node_states));
+	return(list(tip_states=tip_states, node_states=node_states))
 }
 

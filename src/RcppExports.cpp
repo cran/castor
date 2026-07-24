@@ -566,6 +566,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// get_min_max_depth_per_node_CPP
+Rcpp::List get_min_max_depth_per_node_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<double>& edge_length);
+RcppExport SEXP _castor_get_min_max_depth_per_node_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_min_max_depth_per_node_CPP(Ntips, Nnodes, Nedges, tree_edge, edge_length));
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_child_count_per_node_CPP
 NumericVector get_child_count_per_node_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge);
 RcppExport SEXP _castor_get_child_count_per_node_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP) {
@@ -975,6 +990,43 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// consensus_taxonomies_CPP
+Rcpp::List consensus_taxonomies_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<std::string>& tip_taxonomies, const std::string& delimiter);
+RcppExport SEXP _castor_consensus_taxonomies_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP tip_taxonomiesSEXP, SEXP delimiterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type tip_taxonomies(tip_taxonomiesSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
+    rcpp_result_gen = Rcpp::wrap(consensus_taxonomies_CPP(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter));
+    return rcpp_result_gen;
+END_RCPP
+}
+// inherit_taxonomies_CPP
+Rcpp::List inherit_taxonomies_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<std::string>& node_taxa, const std::vector<std::string>& tip_taxa, const std::vector<long>& focal_clades, const bool only_proper, const std::string& halt, const bool strict_proper, const std::string& delimiter);
+RcppExport SEXP _castor_inherit_taxonomies_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP node_taxaSEXP, SEXP tip_taxaSEXP, SEXP focal_cladesSEXP, SEXP only_properSEXP, SEXP haltSEXP, SEXP strict_properSEXP, SEXP delimiterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type node_taxa(node_taxaSEXP);
+    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type tip_taxa(tip_taxaSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type focal_clades(focal_cladesSEXP);
+    Rcpp::traits::input_parameter< const bool >::type only_proper(only_properSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type halt(haltSEXP);
+    Rcpp::traits::input_parameter< const bool >::type strict_proper(strict_properSEXP);
+    Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
+    rcpp_result_gen = Rcpp::wrap(inherit_taxonomies_CPP(Ntips, Nnodes, Nedges, tree_edge, node_taxa, tip_taxa, focal_clades, only_proper, halt, strict_proper, delimiter));
+    return rcpp_result_gen;
+END_RCPP
+}
 // sort_tree_edges_root_to_tips_CPP
 IntegerVector sort_tree_edges_root_to_tips_CPP(const long Ntips, const long Nnodes, const long Nedges, const bool depth_first_search, const bool root_to_tips, const std::vector<long>& tree_edge);
 RcppExport SEXP _castor_sort_tree_edges_root_to_tips_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP depth_first_searchSEXP, SEXP root_to_tipsSEXP, SEXP tree_edgeSEXP) {
@@ -1343,22 +1395,6 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const double >::type target_edge_length1(target_edge_length1SEXP);
     Rcpp::traits::input_parameter< const double >::type root_edge_length2(root_edge_length2SEXP);
     rcpp_result_gen = Rcpp::wrap(join_rooted_trees_CPP(Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2));
-    return rcpp_result_gen;
-END_RCPP
-}
-// consensus_taxonomies_CPP
-Rcpp::List consensus_taxonomies_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<std::string>& tip_taxonomies, const std::string& delimiter);
-RcppExport SEXP _castor_consensus_taxonomies_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP tip_taxonomiesSEXP, SEXP delimiterSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
-    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
-    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
-    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
-    Rcpp::traits::input_parameter< const std::vector<std::string>& >::type tip_taxonomies(tip_taxonomiesSEXP);
-    Rcpp::traits::input_parameter< const std::string& >::type delimiter(delimiterSEXP);
-    rcpp_result_gen = Rcpp::wrap(consensus_taxonomies_CPP(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3126,6 +3162,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_sum_of_edge_lengths_per_clade_CPP", (DL_FUNC) &_castor_get_sum_of_edge_lengths_per_clade_CPP, 5},
     {"_castor_get_total_tip_count_per_node_CPP", (DL_FUNC) &_castor_get_total_tip_count_per_node_CPP, 4},
     {"_castor_get_mean_depth_per_node_CPP", (DL_FUNC) &_castor_get_mean_depth_per_node_CPP, 5},
+    {"_castor_get_min_max_depth_per_node_CPP", (DL_FUNC) &_castor_get_min_max_depth_per_node_CPP, 5},
     {"_castor_get_child_count_per_node_CPP", (DL_FUNC) &_castor_get_child_count_per_node_CPP, 4},
     {"_castor_get_min_max_tip_distance_from_root_CPP", (DL_FUNC) &_castor_get_min_max_tip_distance_from_root_CPP, 5},
     {"_castor_get_distances_from_root_CPP", (DL_FUNC) &_castor_get_distances_from_root_CPP, 5},
@@ -3151,6 +3188,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_extract_tip_neighborhood_CPP", (DL_FUNC) &_castor_extract_tip_neighborhood_CPP, 7},
     {"_castor_extract_deep_frame_CPP", (DL_FUNC) &_castor_extract_deep_frame_CPP, 5},
     {"_castor_get_all_distances_to_tip_CPP", (DL_FUNC) &_castor_get_all_distances_to_tip_CPP, 6},
+    {"_castor_consensus_taxonomies_CPP", (DL_FUNC) &_castor_consensus_taxonomies_CPP, 6},
+    {"_castor_inherit_taxonomies_CPP", (DL_FUNC) &_castor_inherit_taxonomies_CPP, 11},
     {"_castor_sort_tree_edges_root_to_tips_CPP", (DL_FUNC) &_castor_sort_tree_edges_root_to_tips_CPP, 6},
     {"_castor_root_tree_at_node_CPP", (DL_FUNC) &_castor_root_tree_at_node_CPP, 5},
     {"_castor_get_tree_with_collapsed_monofurcations_CPP", (DL_FUNC) &_castor_get_tree_with_collapsed_monofurcations_CPP, 7},
@@ -3173,7 +3212,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_assign_clades_to_taxa_CPP", (DL_FUNC) &_castor_assign_clades_to_taxa_CPP, 5},
     {"_castor_get_independent_sister_tips_CPP", (DL_FUNC) &_castor_get_independent_sister_tips_CPP, 4},
     {"_castor_join_rooted_trees_CPP", (DL_FUNC) &_castor_join_rooted_trees_CPP, 13},
-    {"_castor_consensus_taxonomies_CPP", (DL_FUNC) &_castor_consensus_taxonomies_CPP, 6},
     {"_castor_place_tips_taxonomically_CPP", (DL_FUNC) &_castor_place_tips_taxonomically_CPP, 9},
     {"_castor_tree_from_placements_CPP", (DL_FUNC) &_castor_tree_from_placements_CPP, 8},
     {"_castor_congruify_trees_CPP", (DL_FUNC) &_castor_congruify_trees_CPP, 9},

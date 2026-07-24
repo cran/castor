@@ -1,11 +1,11 @@
 # Plot a rooted phylogenetic tree in radial layout
-plot_tree_radial = function(tree,							# rooted phylogenetic tree of class "phylo"
+plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "phylo"
 							file_path 		  		= NULL,		# optional path to save the plot to. Any existing file is silently replaced.
 							make_ultrametric  		= FALSE,	# whether to make the tree ultrametric first, using a quick-and-dirty algorithm, so that all tips appear at the same distance from the center.
 							symmetric_arcs			= TRUE,		# If TRUE, then nodes appear in the middle of their arc. If FALSE, nodes are radially placed in the middle of their descending tips, which could result in nodes not being in the center of their arc.
 							opening					= 0,		# optional opening angle (in degrees), i.e., separating the two flanks of the tree. If 0, the tips will uniformly cover the whole circle. Must be between 0 and 360.
 							rotate					= 0,		# optional angle (degrees) by which to rotate the whole plot, counter-clockwise
-							plot_width		  		= 5,		# plot width & height in inches. Only relevant if file_path is specified.
+							plot_width		  		= 5,		# plot width & height in inches, for the tree portion. Only relevant if file_path is specified.
 							plot_title				= NULL,		# optional plot title
 							show_scale_bar			= FALSE,
 							align_tip_labels		= FALSE,	# whether to align all tip labels on a single circle, rather than placing each tip label immediately adjacent to each tip. Only relevant for non-ultrametric trees and only if tip_label_cex!=0. If colored rings are shown, then tip labels are always aligned.
@@ -154,7 +154,7 @@ plot_tree_radial = function(tree,							# rooted phylogenetic tree of class "phy
 					   + (if(NDS==0) 0 else sum(apply(dotstack_heights,2,max)+2)*(1.1*plot_width/2)*(2*pi-opening)/Ntips)
 					   + (if(Nsectors==0) 0 else (sector_gap+sector_width)/72))
 	margins_chars	= margins_inches/graphics_params$csi # update margin sizes in char units
-	if(!is.null(file_path)) initiate_plot_file(file_path=file_path, width=plot_width+margins_inches[2]+margins_inches[4], height=plot_width+margins_inches[1]+margins_inches[3], dpi=200)
+	initiate_plot(file_path=file_path, width=plot_width+margins_inches[2]+margins_inches[4], height=plot_width+margins_inches[1]+margins_inches[3], dpi=200)
 	graphics::par(mar = margins_chars, xpd = NA)
 
 	# establish basic plot region
@@ -395,9 +395,9 @@ plot_arc = function(phi0, 	# start angle in radians
 					rho,	# radius, in plot coordinates
 					col="black", # color
 					lwd=1,	# line width
-					lend="round", # line ending. Either "round", "butt", "square" or "cap" (perpendicular caps). 
+					lend="round", # line ending. Either "round", "butt" (flat end, cut exactly at the ends), "square" or "cap" (perpendicular caps). 
 					cap_len = NULL){ # length of the caps in plot coordinates in each direction. If NULL, this is chosen heuristically
-	phis = seq(phi0, phi1, length.out = max(10, as.integer((phi1-phi0)/0.02)))
+	phis = seq(phi0, phi1, length.out = max(2, as.integer((phi1-phi0)/0.01)))
 	if(lend=="cap"){
 		# draw perpendicular caps on each side
 		if(is.null(cap_len)) cap_len = 0.01*rho
@@ -410,11 +410,24 @@ plot_arc = function(phi0, 	# start angle in radians
 							lend= "butt")
 		lend = "square"
 	}
-	graphics::lines(x	= rho * cos(phis),
-					y	= rho * sin(phis), 
-					col = col, 
-					lwd	= lwd,
-					lend= lend)
+	lw2coordinates = (graphics::grconvertX(1, "inches", "user") - graphics::grconvertX(0, "inches", "user"))/96 # conversion factor between line widths (e.g., used for lwd) and user coordinates
+	if((lend=="butt") && (lwd*lw2coordinates>0.5*rho*(phi1-phi0))){
+		# use graphics::polygon instead of graphics::lines, since otherwise for fat arcs there are various artefacts.
+		half_width = lwd*lw2coordinates*0.5
+		graphics::polygon(x		 = c((rho+half_width) * cos(phis),(rho-half_width) * cos(rev(phis))),
+						  y		 = c((rho+half_width) * sin(phis),(rho-half_width) * sin(rev(phis))),
+						  col 	 = col,
+						  density= NA,
+						  lty	 = 1,
+						  lwd	 = min(0.5*lwd,0.5),
+						  border = col)
+	}else{
+		graphics::lines(x	= rho * cos(phis),
+						y	= rho * sin(phis), 
+						col = col, 
+						lwd	= lwd,
+						lend= lend)
+	}
 }
 
 

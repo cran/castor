@@ -4,11 +4,11 @@ read_tree = function(	string					= "", # optional character, encoding a single t
 						edge_order				= "cladewise", # how to order edges. Options are "cladewise" (i.e. depth-first-search) or "pruningwise" (i.e. iterating through edge[] leads a post-order traversal) or "none" (unspecified, i.e. depending on how the tree was written in the file)
 						include_edge_lengths 	= TRUE, 
 						look_for_edge_labels 	= FALSE, 
-						look_for_edge_numbers 	= FALSE, 
+						look_for_edge_numbers 	= FALSE, 	# look for an edge number inside curly braces. If false, curly braces are interpreted verbatim like any other character.
 						include_node_labels 	= TRUE, 
 						underscores_as_blanks 	= FALSE, 
 						check_label_uniqueness 	= FALSE,
-						interpret_quotes		= FALSE, 	# whether to interpret quotes as delimiters of tip/node names, rather than reading quotes just like any other character
+						interpret_quotes		= TRUE, 	# whether to interpret quotes as delimiters of tip/node names, rather than reading quotes just like any other character
 						trim_white				= TRUE){	# whether to trim flanking whitespace from tip, node and edge labels
 	if(file!=""){
 		if(string!="") stop("ERROR: Either string or file must be specified, but not both")

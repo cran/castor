@@ -16,7 +16,7 @@ read_tree(  string  = "",
             include_node_labels     = TRUE, 
             underscores_as_blanks   = FALSE, 
             check_label_uniqueness  = FALSE,
-            interpret_quotes        = FALSE,
+            interpret_quotes        = TRUE,
             trim_white              = TRUE)
 }
 

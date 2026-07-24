@@ -13,5 +13,5 @@ get_stationary_distribution = function(Q){
         fit = stats::optimize(temp_objective_function, interval=c(0,1))
         p 	= c(fit$minimum,1-sum(fit$minimum))	# add one more element to optimum, to turn it into a probability vector of size Nstates
     }
-	return(p);
+	return(p)
 }

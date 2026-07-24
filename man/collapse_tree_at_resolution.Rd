@@ -19,7 +19,7 @@ collapse_tree_at_resolution(tree,
 A rooted tree of class "phylo". The root is assumed to be the unique node with no incoming edge.
 }
 \item{resolution}{
-Numeric, specifying the phylogenetic resolution at which to collapse the tree. This is the maximum distance a descending tip can have from a node, such that the node is collapsed into a new tip. If set to 0 (default), then only nodes whose descending tips are identical to the node will be collapsed.
+Numeric, specifying the phylogenetic resolution at which to collapse the tree. This is the maximum distance a descending tip can have from a node, such that the node is collapsed into a new tip. If set to 0 (default), then only nodes whose descending tips are identical to (i.e., have zero distance from) the node will be collapsed.
 }
 \item{by_edge_count}{
 Logical. Instead of considering edge lengths, consider edge counts as phylogenetic distance between nodes and tips. This is the same as if all edges had length equal to 1.
@@ -40,7 +40,9 @@ Character, specifying the criterion to use for collapsing (i.e. how to interpret
 The tree is traversed from root to tips and nodes are collapsed into tips as soon as the criterion equals or falls below the resolution threshold.
 
 The input tree may include multi-furcations (i.e. nodes with more than 2 children) as well as mono-furcations (i.e. nodes with only one child).
-Tip labels and uncollapsed node labels of the collapsed tree are inheritted from the original tree. If \code{rename_collapsed_nodes==FALSE}, then labels of collapsed nodes will be the node labels from the original tree (in this case the original tree should include node labels). If \code{rename_collapsed_nodes==TRUE}, each collapsed node is given the label of its farthest descending tip. If \code{shorten==TRUE}, then edge lengths are the same as in the original tree. If \code{shorten==FALSE}, then edges leading into collapsed nodes may be longer than before.
+Tip labels and uncollapsed node labels of the collapsed tree are inheritted from the original tree. If \code{rename_collapsed_nodes==FALSE}, then labels of collapsed nodes will be the node labels from the original tree (in this case the original tree should include node labels). If \code{rename_collapsed_nodes==TRUE}, each collapsed node is given the label of its farthest descending tip. 
+
+If \code{shorten==TRUE}, then the lengths of any remaining edges are the same as in the original tree. If \code{shorten==FALSE}, then edges leading into collapsed nodes may be longer than before, accounting for the additional distance to the farthest descending tip.
 }
 
 

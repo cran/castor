@@ -149,6 +149,10 @@ get_mean_depth_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_l
     .Call(`_castor_get_mean_depth_per_node_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
 }
 
+get_min_max_depth_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_length) {
+    .Call(`_castor_get_min_max_depth_per_node_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length)
+}
+
 get_child_count_per_node_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
     .Call(`_castor_get_child_count_per_node_CPP`, Ntips, Nnodes, Nedges, tree_edge)
 }
@@ -249,6 +253,14 @@ get_all_distances_to_tip_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, edge_
     .Call(`_castor_get_all_distances_to_tip_CPP`, Ntips, Nnodes, Nedges, tree_edge, edge_length, focal_tip)
 }
 
+consensus_taxonomies_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter) {
+    .Call(`_castor_consensus_taxonomies_CPP`, Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter)
+}
+
+inherit_taxonomies_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, node_taxa, tip_taxa, focal_clades, only_proper, halt, strict_proper, delimiter) {
+    .Call(`_castor_inherit_taxonomies_CPP`, Ntips, Nnodes, Nedges, tree_edge, node_taxa, tip_taxa, focal_clades, only_proper, halt, strict_proper, delimiter)
+}
+
 sort_tree_edges_root_to_tips_CPP <- function(Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge) {
     .Call(`_castor_sort_tree_edges_root_to_tips_CPP`, Ntips, Nnodes, Nedges, depth_first_search, root_to_tips, tree_edge)
 }
@@ -335,10 +347,6 @@ get_independent_sister_tips_CPP <- function(Ntips, Nnodes, Nedges, tree_edge) {
 
 join_rooted_trees_CPP <- function(Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2) {
     .Call(`_castor_join_rooted_trees_CPP`, Ntips1, Nnodes1, Nedges1, tree_edge1, edge_length1, Ntips2, Nnodes2, Nedges2, tree_edge2, edge_length2, target_edge1, target_edge_length1, root_edge_length2)
-}
-
-consensus_taxonomies_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter) {
-    .Call(`_castor_consensus_taxonomies_CPP`, Ntips, Nnodes, Nedges, tree_edge, tip_taxonomies, delimiter)
 }
 
 place_tips_taxonomically_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, clade_taxonomies, query_taxonomies, tree_taxon_delimiter, query_taxon_delimiter, allow_placement_at_tips) {

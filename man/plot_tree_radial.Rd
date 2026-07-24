@@ -53,7 +53,7 @@ plot_tree_radial(tree,
 A rooted tree of class "phylo". The root is assumed to be the unique node with no incoming edge.
 }
 \item{file_path}{
-Optional character, file path to save the plot to. Any existing file is silently replaced.
+Optional character, file path to save the plot to. Any existing file is silently replaced. The image type is determined based on the file name extension (pdf, jpg/jpeg, png, tif/tiff, bmp).
 }
 \item{make_ultrametric}{
 Logical, whether to make the tree ultrametric first, so that all tips appear at the same distance from the center.
@@ -71,7 +71,7 @@ If 0, the tips will uniformly cover the whole circle. Must be between 0 and 360.
 Optional numeric, angle (degrees) by which to rotate the whole plot, counter-clockwise. By default the tree is oriented such that the outer-most tip is placed on the right-most point of the circle, i.e., at "3'o clock".
 }
 \item{plot_width}{
-Plot width & height in inches, excluding margins. Only relevant if \code{file_path} is specified.
+Plot width & height in inches. Only refers to the tree portion, i.e., excluding rings, dot-stacks, sector arcs/labels and margins, which are allocated space automatically. Only relevant if \code{file_path} is specified.
 }
 \item{plot_title}{
 Optional character, plot title.

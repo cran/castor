@@ -86,14 +86,20 @@ parent_nodes = function(tree, clades){
 
 # convert a name list (A) to a list of tip or node indices, or retain the original index list if already in integer form
 # type can be 'tip', 'node' or 'both'
-map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_input=TRUE){
+map_tip_or_node_names_to_indices = function(tree, 		# phylogenetic tree of class "phylo"
+											A,			# character vector listing names or integer vector listing indices. If NULL, the entire pool of tips or nodes is returned.
+											type, 		# either 'tip', 'node' or 'both'
+											list_title, # character, the title of the requested list, for example 'focal_tips'
+											check_input=TRUE){
 	Ntips = length(tree$tip.label)
 	if(type=='tip'){
+		if(is.null(A)) return(seq_len(Ntips))
 		item_title 	= 'tip'
 		Nmax_title 	= 'Ntips'
 		Nmax 		= Ntips
 		if(is.character(A)) name_pool = tree$tip.label;
 	}else if(type=='node'){
+		if(is.null(A)) return(seq_len(tree$Nnode))
 		item_title 	= 'node';
 		Nmax_title 	= 'Nnodes'
 		Nmax 		= tree$Nnode;
@@ -102,6 +108,7 @@ map_tip_or_node_names_to_indices = function(tree, A, type, list_title, check_inp
 			name_pool = tree$node.label
 		}
 	}else{
+		if(is.null(A)) return(seq_len(Ntips + tree$Nnode))
 		item_title 	= 'tip or node'
 		Nmax_title 	= 'Ntips+Nnodes'
 		Nmax 		= Ntips+tree$Nnode;
@@ -348,6 +355,69 @@ extract_independent_rates_from_transition_matrix = function(transition_matrix, i
 	independent_rates[flattened_index_matrix[independents]] = flattened_transition_matrix[independents]
 	return(independent_rates)
 }
+
+
+# Given two Markov chain rate model specifications (either rate model strings or transition index matrixes) for two discrete traits, combine them into a rate specification for a single larger Markov model
+# In the combined Markov model, the transition rates of one trait may depend on the state of the other trait, but when fixing the state of one trait the transition rates of the other trait will be consistent with that latter trait's individual rate model
+# Simultaneous (i.e., joint) transitions across both traits are not allowed, i.e., they will have rates 0.
+# The returned Mk model's states will be all possible combinations of the two trait state spaces, i.e., (s1,s2) where sk enumerates the states of trait k.
+# By convention, state combos (s1,s2) are enumerated in column-major format, i.e., with trait 1 being the faster-changing index.
+combine_Mk_rate_models = function(Nstates1,		# integer, number of discrete states for trait 1
+								  Nstates2,		# integer, number of discrete states for trait 2
+								  rate_model1,	# either a rate model string or 2D transition index matrix for trait 1, as required by get_transition_index_matrix()
+								  rate_model2,	# similar to rate_model1, but for trait 2
+								  transition_matrix1 = NULL, # optional 2D numeric matrix of size Nstates1 x Nstates1, specifying transition rates for trait 1 in a single-trait Mk model. If both transition_matrix1 & transition_matrix2 are provided, them this function will also construct a guestimate for the combined transition matrix that can be used as a starting point for model fitting.
+								  transition_matrix2 = NULL, # similar to transition_matrix1, but for trait 2.
+								  dependent_trait	 = 0){	 # integer, specifying which trait to consider as the "dependent variable" during full model fitting. Options are 0 (both traits influence each other's rates), 1 (trait 2 influences the rates of trait 1, but not vise versa) and 2 (trait 1 influences the rates of trait 2, but not vise versa). Only relevant if include_lrt=TRUE. This is analogous to the dev.var argument in phytools::fitPagel.
+		dependent1	  = (dependent_trait %in% c(0,1))
+		dependent2	  = (dependent_trait %in% c(0,2))
+		NCstates 	  = Nstates1 * Nstates2 # number of states in the combined model.
+		digest1  	  = get_transition_index_matrix(Nstates=Nstates1,rate_model=rate_model1)
+		digest2   	  = get_transition_index_matrix(Nstates=Nstates2,rate_model=rate_model2)
+		index_matrix1 = digest1$index_matrix
+		index_matrix2 = digest2$index_matrix
+		Nrates1		  = digest1$Nrates
+		Nrates2		  = digest2$Nrates
+		NCrates		  = ((if(dependent2) Nstates1 else 1)*Nrates2+(if(dependent1) Nstates2 else 1)*Nrates1) # number of free rate parameters in the combined model
+		combined_index_matrix = array(0L, dim=c(Nstates1,Nstates2,Nstates1,Nstates2)) # start with a 4D array for tractability, then flatten some axes to make it 2D
+		index_offset = 0
+		for(i2 in seq_len(Nstates2)){
+			# define new independent rate parameters for trait 1 conditioned on trait 2 being and staying in state i2
+			for(i1 in seq_len(Nstates1)){
+				for(j1 in seq_len(Nstates1)){
+					if(index_matrix1[i1,j1]==0) next
+					combined_index_matrix[i1,i2,j1,i2] = index_offset + index_matrix1[i1,j1]
+				}
+			}
+			if(dependent1) index_offset = index_offset + Nrates1
+		}
+		for(i1 in seq_len(Nstates1)){
+			# define new independent rate parameters for trait 2 conditioned on trait 1 being and staying in state i1
+			for(i2 in seq_len(Nstates2)){
+				for(j2 in seq_len(Nstates2)){
+					if(index_matrix2[i2,j2]==0) next
+					combined_index_matrix[i1,i2,i1,j2] = index_offset + index_matrix2[i2,j2]
+				}
+			}
+			if(dependent2) index_offset = index_offset + Nrates2
+		}
+		dim(combined_index_matrix) = c(NCstates,NCstates) # flatten the first two axes into one, and the last two axes into one. Each axis pair (1&2 or 3&4) enumerates the state combos and is flattened in column-major order.
+		results = list(index_matrix=combined_index_matrix, Nrates=NCrates, Nstates=NCstates)
+		if(!(is.null(transition_matrix1) || is.null(transition_matrix2))){
+			# also construct a guestimated transition matrix for the combined model
+			combined_transition_matrix = array(0.0, dim=c(Nstates1,Nstates2,Nstates1,Nstates2)) # start with a 4D array for tractability, then flatten some axes to make it 2D
+			for(s2 in seq_len(Nstates2)){
+				combined_transition_matrix[,s2,,s2] = transition_matrix1
+			}
+			for(s1 in seq_len(Nstates1)){
+				combined_transition_matrix[s1,,s1,] = transition_matrix2
+			}
+			dim(combined_transition_matrix) = c(NCstates,NCstates)
+			results$transition_matrix = combined_transition_matrix
+		}
+		return(results)
+}
+
 
 
 
@@ -3201,25 +3271,28 @@ place_paired_end_reads = function(forward_reads,	# character vector of length NS
 
 
 # wrapper around R's various plot saving routines (e.g. pdf, jpeg, png, ...), automatically choosing the correct one based on file extension
-initiate_plot_file = function(file_path, 
-							  width,	# width in inches
-							  height,	# height in inches
-							  dpi		= 200, # dots per inch. Only relevant for rasterized image formats, e.g. for converting width & height to pixel counts
-							  dummy		= FALSE, # if TRUE, then no actual plot file is opened, i.e., NULL is passed to the graphics handler
-							  ...){
-	extension = tolower(sub(".*\\.", "", file_path))
-	if(extension == "pdf") {
-		grDevices::pdf(file = file_path, width = width, height = height, ...)
-	}else if(extension == "png") {
-		grDevices::png(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
-	}else if(extension %in% c("jpg", "jpeg")) {
-		grDevices::jpeg(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
-	}else if(extension %in% c("tif", "tiff")) {
-		grDevices::tiff(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
-	}else if(extension == "bmp") {
-		grDevices::bmp(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
+initiate_plot = function(file_path, # character, file path. If NULL, a new plotting window is initiated with the requested size using dev.new()
+						 width,		# width in inches
+						 height,	# height in inches
+						 dpi = 200, # dots per inch. Only relevant for rasterized image files, e.g. for converting width & height to pixel counts
+						 ...){
+	if(is.null(file_path)){
+		grDevices::dev.new(width=width, height=height)
 	}else{
-		stop("Unsupported file extension: ", extension)
+		extension = tolower(sub(".*\\.", "", file_path))
+		if(extension == "pdf") {
+			grDevices::pdf(file = file_path, width = width, height = height, ...)
+		}else if(extension == "png") {
+			grDevices::png(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
+		}else if(extension %in% c("jpg", "jpeg")) {
+			grDevices::jpeg(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
+		}else if(extension %in% c("tif", "tiff")) {
+			grDevices::tiff(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
+		}else if(extension == "bmp") {
+			grDevices::bmp(file = file_path, width=width*dpi, height=height*dpi, res=dpi, ...)  
+		}else{
+			stop("Unsupported file extension: ", extension)
+		}
 	}
 }
 
@@ -3258,5 +3331,49 @@ run_parallel = function(FUN,		# the function to run multiple times
 	}
 	return(results)
 }
+
+
+
+# generate a sequence from, from+1,..,to, which returns an empty vector if to<from (consistent with modern programming languages)
+upward_seq = function(from, to){
+	if(to<from) return(if(is.integer(from)) integer(0) else numeric(0))
+	return(seq(from=from, to=to, by=1))
+}
+
+
+# compute the mutual information between two discrete variables
+# The input X & Y must be synchronized vectors of the same length NS, listing the discrete X & Y values across NS samples
+get_mutual_information = function(X, Y,  # synchronized vectors of length NS, each with discrete values from a finite pool. Typically these will be integer vectors, but might also be character vectors from a finite vocabulary, etc.
+							 	 normalize	= FALSE, # whether to normalize the MI to always be within [0,1] via geometric mean entropy, with 0 implying independence and 1 implying deterministic mapping between X & Y
+								 na.rm 		= FALSE){
+	if(na.rm){
+		# remove NAs
+		valids = (!is.na(X)) & (!is.na(Y))
+		X = X[valids]
+		Y = Y[valids]
+	}
+	PXY  = table(X, Y)/length(X) # joint probabilities p(x, y), aka. contingency table
+	PX   = rowSums(PXY)		# marginal probabilities p(x)
+	PY   = colSums(PXY)		# marginal probabilities p(y)
+	PPXY = outer(PX, PY)	# pairwise products of probabilities p(x)*p(y). If X & Y were independent, then PPXY will be equal to PXY
+
+	mask = (PXY > 0)
+	MI = sum(PXY[mask] * log(PXY[mask]/PPXY[mask]))
+	
+	if(normalize){
+		 HX = -sum(table(X)/length(X) * log(table(X)/length(X))) # entropy of X
+		 HY = -sum(table(Y)/length(Y) * log(table(Y)/length(Y))) # entropy of Y
+		 MI = MI/sqrt(HX*HY)
+	}
+	return(MI)
+}
+
+
+sprint_shape = function(A){
+	if(is.null(dim(A))) return(sprintf("%d",length(A)))
+	else return(paste(sprintf("%d",dim(A)),collapse=" x "))
+}
+
+
 
 

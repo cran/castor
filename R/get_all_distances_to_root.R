@@ -2,7 +2,7 @@
 # distance from root = cumulative branch length from root to the clade
 get_all_distances_to_root = function(tree, as_edge_count=FALSE){
 	Ntips  = length(tree$tip.label)
-	Nnodes = tree$Nnode;
+	Nnodes = tree$Nnode
 	distances = get_distances_from_root_CPP(Ntips			= Ntips,
 											Nnodes			= Nnodes,
 											Nedges			= nrow(tree$edge),

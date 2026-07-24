@@ -1441,6 +1441,29 @@ void filtered_indices_to_bool(const long N,					// (INPUT) total number of items
 }
 
 
+string lowecase(const string &s){
+	string lower = s;
+	for(long i = 0; i<lower.size(); ++i){
+        lower[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(lower[i])));
+    }
+    return lower;
+}
+
+
+// determine if a string is a proper taxon name, i.e., not containing "-", numeric digits or "candidatus"
+bool is_proper_taxon_name(const string &taxon){
+	if(taxon=="") return false;
+	if((taxon.size()<=3) && (taxon[taxon.size()-1]=='_')) return false;
+	if(taxon.find('-')!= std::string::npos) return false;
+	// check if it contains "candidatus" (case insensitive)
+    if(lowecase(taxon).find("candidatus") != std::string::npos) return false;
+    // check for numeric digits
+	for(long i=0; i<taxon.size(); ++i){
+		if(std::isdigit(taxon[i])) return false;
+    }
+    return true;
+}
+
 
 #pragma mark -
 #pragma mark Graphs
@@ -3583,6 +3606,13 @@ inline vector<TYPE> abs(vector<TYPE> x){
 }
 
 
+// in-place boolean vector AND, for example x &= y is element-wise &&
+inline std::vector<bool>& operator&=(std::vector<bool>& x, const std::vector<bool>& y){
+    for(long i=0; i<x.size(); ++i){
+        x[i] = x[i] && y[i];
+    }
+    return x;
+}
 
 #pragma mark -
 #pragma mark Random numbers
@@ -12620,6 +12650,35 @@ NumericVector get_mean_depth_per_node_CPP(	const long					Ntips,
 
 
 
+// For each node, calculate the minimum & maximum phylogenetic distance from that node to any descending tip
+// [[Rcpp::export]]
+Rcpp::List get_min_max_depth_per_node_CPP(const long 				Ntips,
+										const long 					Nnodes,
+										const long 					Nedges,
+										const std::vector<long> 	&tree_edge, 	// (INPUT) 2D array (in row-major format) of size Nedges x 2
+										const std::vector<double> 	&edge_length){ 	// (INPUT) 1D array of size Nedges, or an empty std::vector (all branches have length 1)
+	// get incoming edge for each clade
+	lvector incoming_edge_per_clade;
+	get_incoming_edge_per_clade(Ntips, Nnodes, Nedges, tree_edge, incoming_edge_per_clade);
+
+	// get tree traversal route (tips --> root)
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
+
+	// traversing tips-->root (excluding the root)
+	dvector node2min_depth(Nnodes,INFTY_D),  node2max_depth(Nnodes,-INFTY_D);
+	for(long q=context.queue.size()-1, clade, parent, cnode, pnode; q>=1; --q){
+		clade	= context.queue[q];
+		parent 	= context.clade2parent[clade];
+		cnode	= clade-Ntips;
+		pnode	= parent-Ntips;
+		node2min_depth[pnode] = min(node2min_depth[pnode], (clade<Ntips ? 0 : node2min_depth[cnode]) + (edge_length.size()==0 ? 1 : edge_length[incoming_edge_per_clade[clade]]));
+		node2max_depth[pnode] = max(node2max_depth[pnode], (clade<Ntips ? 0 : node2max_depth[cnode]) + (edge_length.size()==0 ? 1 : edge_length[incoming_edge_per_clade[clade]]));
+	}
+	return Rcpp::List::create(	Rcpp::Named("min_depths") = Rcpp::wrap(node2min_depth),
+								Rcpp::Named("max_depths") = Rcpp::wrap(node2max_depth));
+}
+
+
 // For each node, calculate the number of immediate children
 // Requirements:
 //   The tree can include multifurcations as well as monofurcations
@@ -14597,6 +14656,192 @@ NumericVector get_all_distances_to_tip_CPP(	const long 					Ntips,
 	}
 
 	return Rcpp::wrap(distances);
+}
+
+
+// Given a rooted tree and taxonomies for all tips, figure out consensus taxonomies for each node in the tree
+// The consensus taxonomy of a given node is the longest possible taxonomic path (i.e., to the lowest possible level) such that the taxonomies of all descending tips are nested within that taxonomic path.
+// Some tip taxonomies may be incomplete, i.e., truncated at higher taxonomic levels. In that case, consensus taxonomy building will be conservative, i.e., no assumptions will be made about the missing taxonomic levels.
+// Examples: 
+//	If the descending tips of a node have taxonomies "A;B;C" and "A;B;C;D" and "A;B;C;E", then their consensus taxonomy is "A;B;C".
+//	If the descending tips of a node have taxonomies "A;B" and "A;B;C;D" and "A;B;C;E", then their consensus taxonomy is "A;B".
+// [[Rcpp::export]]
+Rcpp::List consensus_taxonomies_CPP(const long						Ntips,
+									const long 						Nnodes,
+									const long						Nedges,			// (INPUT) number of edges in the tree
+									const std::vector<long> 		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+									const std::vector<std::string>	&tip_taxonomies,// (INPUT) 1D array of size Ntips, each element of which is the taxonomic path of a tip
+									const std::string				&delimiter){	// (INPUT) character used to separate taxonomic levels (e.g., ";" for SILVA taxonomies)
+	// split taxonomies
+	std::vector<std::vector<std::string> > tip_taxonomies_split(Ntips);
+	for(long tip=0; tip<Ntips; ++tip){
+		split_string(tip_taxonomies[tip], delimiter, -1, tip_taxonomies_split[tip]);
+	}
+	
+	// get tree traversal route (root --> tips), including tips
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
+
+	// Step 1: calculate node consensus taxonomies while moving from tips to root, storing them as parts
+	long clade, pnode, taxref, taxlen, ptaxref, ptaxlen, new_ptaxlen;
+	lvector node2taxref(Nnodes,-1), node2taxlen(Nnodes);
+	for(long q=context.queue.size()-1; q>=0; --q){
+		clade = context.queue[q];
+		if(clade==context.root) continue;
+		pnode  = context.clade2parent[clade] - Ntips;
+		taxref = ((clade<Ntips) ? clade : node2taxref[clade-Ntips]);
+		taxlen = ((clade<Ntips) ? tip_taxonomies_split[clade].size() : node2taxlen[clade-Ntips]);
+		if(node2taxref[pnode]<0){
+			// the parent node has not yet been assigned a reference taxonomy, i.e., we are visiting this parent node for the first time, so just inherit the taxonomy of clade
+			node2taxref[pnode] = taxref;
+			node2taxlen[pnode] = taxlen;
+		}else{
+			// we have visited this parent node before, so we need to consolidate its current taxonomy with the taxonomy of clade
+			ptaxref = node2taxref[pnode];
+			ptaxlen = node2taxlen[pnode];
+			new_ptaxlen = 0;
+			while(new_ptaxlen<min(ptaxlen,taxlen)){
+				if(tip_taxonomies_split[taxref][new_ptaxlen]==tip_taxonomies_split[ptaxref][new_ptaxlen]){
+					++new_ptaxlen;
+				}else{
+					break;
+				}
+			}
+			node2taxlen[pnode] = new_ptaxlen;
+		}
+	}
+	
+	// convert split node taxonomies to strings
+	std::vector<std::string> node_taxonomies(Nnodes);
+	for(long node=0; node<Nnodes; ++node){
+		node_taxonomies[node] = join_strings(tip_taxonomies_split[node2taxref[node]], 0, node2taxlen[node]-1, delimiter);
+	}
+	
+	return Rcpp::List::create(Rcpp::Named("node_taxonomies") = node_taxonomies);
+}
+
+
+// Given a rooted tree and taxon names associated with some nodes, infer the inherited taxonomic paths for all tips and/or nodes.
+// [[Rcpp::export]]
+Rcpp::List inherit_taxonomies_CPP(const long						Ntips,
+								  const long 						Nnodes,
+								  const long						Nedges,			// (INPUT) number of edges in the tree
+								  const std::vector<long> 			&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
+								  const std::vector<std::string>	&node_taxa,		// (INPUT) 1D array of size Nnodes, each element of which is a taxon name at a specific node. Some nodes may lack a taxon name, in which case "" should be used.
+								  const std::vector<std::string>	&tip_taxa,		// (INPUT) optional 1D array of size Ntips, each element of which is a taxon name at a specific tip. Some tips may lack a taxon name, in which case "" should be used. If empty, tips are assumed to not have any taxon names of their own.
+								  const std::vector<long>			&focal_clades,	// (INPUT) integer array with values in 0,..,Nclades-1, specifying the indices of clades to focus on.
+								  const bool						only_proper,	// (INPUT) whether to only include proper taxon names in the inferred taxonomies
+								  const std::string					&halt,			// (INPUT) when to halt accumulating taxon levels, moving from root to tips. Options are "last" (halt after the last non-empty taxon, i.e., don't skip any levels), "last_proper" (halt after the last properly name taxon), "first_improper" (halt before the first improperly named non-empty taxon) or "first_empty" (halt before the first empty taxon)
+								  const bool						strict_proper,	// (INPUT) whether to define taxa as proper in the strict sense, i.e., only if the taxon name is a proper taxon name. If FALSE, then a taxon name is considered proper as long as any of the descendants are proper in the strict sense; for example, the taxon "WOR-3" would be considered proper if one of its descending clades has taxon name "Hydrothermia".
+								  const std::string					&delimiter){	// (INPUT) character to use for separating taxonomic levels (e.g., ";")
+	const long Nclades = Ntips + Nnodes;
+	long clade, node, edge, parent;
+	string taxon;
+	
+	// get tree traversal route (root --> tips), including tips
+	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
+
+	// determine relevant clades, i.e., focal clades as well as any nodes that are ancestors of focal tips/nodes
+	bvector clade_is_relevant(Nclades,false);
+	for(long i=0; i<focal_clades.size(); ++i) clade_is_relevant[focal_clades[i]]  = true;
+	for(long q=context.queue.size()-1; q>=0; --q){
+		clade = context.queue[q];
+		if((clade!=context.root) && clade_is_relevant[clade]) clade_is_relevant[context.clade2parent[clade]] = true;
+	}
+	
+	// determine for each clade if it has non-empty taxon name
+	bvector clade_has_name(Nclades,false);
+	for(long clade=0; clade<Nclades; ++clade){
+		if((clade<Ntips) && tip_taxa.empty()) continue;
+		taxon = (clade<Ntips ? tip_taxa[clade] : node_taxa[clade-Ntips]);
+		if((taxon=="") || ((taxon.size()<=3) && (taxon[taxon.size()-1]=='_'))) continue;
+		clade_has_name[clade] = true;
+	}
+	
+	// determine for each taxon if it is properly named
+	bvector clade_is_proper;
+	if(only_proper || (halt=="last_proper") || (halt=="first_improper")){
+		clade_is_proper.assign(Nclades,false);
+		for(long clade=0; clade<Nclades; ++clade){
+			if(!clade_has_name[clade]) continue;
+			taxon = (clade<Ntips ? tip_taxa[clade] : node_taxa[clade-Ntips]);
+			clade_is_proper[clade] = is_proper_taxon_name(taxon);
+		}
+		if(!strict_proper){
+			// loosen the definition of "proper", by also considering taxon names as proper if they have a descendant that's proper in the strict sense
+			// move tips --> root
+			for(long q=context.queue.size()-1; q>=1; --q){
+				clade = context.queue[q];
+				if(clade_is_proper[clade]) clade_is_proper[context.clade2parent[clade]] = true;
+			}
+		}
+	}
+	
+	// apply halting criteria, i.e., determine for each clade if it should contribute its taxon name to the taxonomies
+	bvector include_taxon = clade_has_name;
+	if(only_proper) include_taxon &= clade_is_proper;
+	if(halt=="last_proper"){
+		// include a clade's taxon name only if it has a properly named descendant or is itself a properly named clade (traverse tips to root)
+		bvector clade_has_proper_descendant = clade_is_proper;
+		for(long q=context.queue.size()-1; q>=0; --q){
+			clade  = context.queue[q];
+			if(clade_has_proper_descendant[clade]){
+				if(clade!=context.root) clade_has_proper_descendant[context.clade2parent[clade]] = true;
+			}else{
+				include_taxon[clade] = false;
+			}
+		}
+	}else if(halt=="first_improper"){
+		// include a clade's taxon name only if it inherits (or is) a non-empty non-proper taxon (traverse root to tips)
+		bvector clade_descends_from_improper(Nclades);
+		for(long clade=0; clade<Nclades; ++clade){
+			clade_descends_from_improper[clade] = clade_has_name[clade] && (!clade_is_proper[clade]);
+		}
+		for(long q=0; q<context.queue.size(); ++q){
+			clade  = context.queue[q];
+			if((clade!=context.root) && clade_descends_from_improper[context.clade2parent[clade]]) clade_descends_from_improper[clade] = true;
+			if(clade_descends_from_improper[clade]) include_taxon[clade] = false;
+		}
+	}else if(halt=="first_empty"){
+		// determine for each clade if it inherits (or is) an empty taxon (traverse root to tips)
+		bvector clade_descends_from_empty(Nclades);
+		for(long clade=0; clade<Nclades; ++clade){
+			clade_descends_from_empty[clade] = (!clade_has_name[clade]);
+		}
+		for(long q=0; q<context.queue.size(); ++q){
+			clade  = context.queue[q];
+			if((clade!=context.root) && clade_descends_from_empty[context.clade2parent[clade]]) clade_descends_from_empty[clade] = true;
+			if(clade_descends_from_empty[clade]) include_taxon[clade] = false;
+		}
+	}
+	
+	
+	// calculate taxonomic paths of clades while moving from root to tips, skipping (i.e., keeping empty) any non-relevant clades for efficiency
+	svector clade_taxonomies(Nclades,"");
+	lvector clade_levels(Nclades,0);
+	for(long q=0; q<context.queue.size(); ++q){
+		clade = context.queue[q];
+		if(!clade_is_relevant[clade]) continue; // this clade and its descendants are not relevant, so skip for efficiency
+		if(clade!=context.root){
+			parent 					= context.clade2parent[clade];
+			clade_taxonomies[clade] = clade_taxonomies[parent];
+			clade_levels[clade]		= clade_levels[parent];		
+		}
+		if(include_taxon[clade]){
+			clade_taxonomies[clade] += ((clade==context.root) || (clade_levels[parent]==0) ? "" : delimiter) + (clade<Ntips ? tip_taxa[clade] : node_taxa[clade-Ntips]);
+			clade_levels[clade]		+= 1;
+		}
+	}
+	
+	// extract taxonomies of focal clades
+	svector focal_taxonomies(focal_clades.size());
+	lvector focal_levels(focal_clades.size());
+	for(long i=0; i<focal_clades.size(); ++i){
+		focal_taxonomies[i] = clade_taxonomies[focal_clades[i]];
+		focal_levels[i]		= clade_levels[focal_clades[i]];
+	}
+	
+	return Rcpp::List::create(Rcpp::Named("taxonomies") = focal_taxonomies,
+							  Rcpp::Named("levels") 	= focal_levels);
 }
 
 
@@ -17782,69 +18027,6 @@ Rcpp::List join_rooted_trees_CPP(	const long					Ntips1,
 
 
 
-// Given a rooted tree and taxonomies for all tips, figure out consensus taxonomies for each node in the tree
-// The consensus taxonomy of a given node is the longest possible taxonomic path (i.e., to the lowest possible level) such that the taxonomies of all descending tips are nested within that taxonomic path.
-// Some tip taxonomies may be incomplete, i.e., truncated at higher taxonomic levels. In that case, consensus taxonomy building will be conservative, i.e., no assumptions will be made about the missing taxonomic levels.
-// Examples: 
-//	If the descending tips of a node have taxonomies "A;B;C" and "A;B;C;D" and "A;B;C;E", then their consensus taxonomy is "A;B;C".
-//	If the descending tips of a node have taxonomies "A;B" and "A;B;C;D" and "A;B;C;E", then their consensus taxonomy is "A;B".
-// [[Rcpp::export]]
-Rcpp::List consensus_taxonomies_CPP(const long						Ntips,
-									const long 						Nnodes,
-									const long						Nedges,			// (INPUT) number of edges in the tree
-									const std::vector<long> 		&tree_edge,		// (INPUT) 2D array (in row-major format) of size Nedges x 2
-									const std::vector<std::string>	&tip_taxonomies,// (INPUT) 1D array of size Ntips, each element of which is the taxonomic path of a tip
-									const std::string				&delimiter){	// (INPUT) character used to separate taxonomic levels (e.g., ";" for SILVA taxonomies)
-	// split taxonomies
-	std::vector<std::vector<std::string> > tip_taxonomies_split(Ntips);
-	for(long tip=0; tip<Ntips; ++tip){
-		split_string(tip_taxonomies[tip], delimiter, -1, tip_taxonomies_split[tip]);
-	}
-	
-	// get tree traversal route (root --> tips), including tips
-	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, true);
-
-	// Step 1: calculate node consensus taxonomies while moving from tips to root, storing them as parts
-	long clade, pnode, taxref, taxlen, ptaxref, ptaxlen, new_ptaxlen;
-	lvector node2taxref(Nnodes,-1), node2taxlen(Nnodes);
-	for(long q=context.queue.size()-1; q>=0; --q){
-		clade = context.queue[q];
-		if(clade==context.root) continue;
-		pnode  = context.clade2parent[clade] - Ntips;
-		taxref = ((clade<Ntips) ? clade : node2taxref[clade-Ntips]);
-		taxlen = ((clade<Ntips) ? tip_taxonomies_split[clade].size() : node2taxlen[clade-Ntips]);
-		if(node2taxref[pnode]<0){
-			// the parent node has not yet been assigned a reference taxonomy, i.e., we are visiting this parent node for the first time, so just inherit the taxonomy of clade
-			node2taxref[pnode] = taxref;
-			node2taxlen[pnode] = taxlen;
-		}else{
-			// we have visited this parent node before, so we need to consolidate its current taxonomy with the taxonomy of clade
-			ptaxref = node2taxref[pnode];
-			ptaxlen = node2taxlen[pnode];
-			new_ptaxlen = 0;
-			while(new_ptaxlen<min(ptaxlen,taxlen)){
-				if(tip_taxonomies_split[taxref][new_ptaxlen]==tip_taxonomies_split[ptaxref][new_ptaxlen]){
-					++new_ptaxlen;
-				}else{
-					break;
-				}
-			}
-			node2taxlen[pnode] = new_ptaxlen;
-		}
-	}
-	
-	// convert split node taxonomies to strings
-	std::vector<std::string> node_taxonomies(Nnodes);
-	for(long node=0; node<Nnodes; ++node){
-		node_taxonomies[node] = join_strings(tip_taxonomies_split[node2taxref[node]], 0, node2taxlen[node]-1, delimiter);
-	}
-	
-	return Rcpp::List::create(Rcpp::Named("node_taxonomies") = node_taxonomies);
-}
-
-
-
-
 // Given a rooted tree and taxonomies for all or some tips & nodes (typically these will be consensus taxonomies), as well as a list of additional query taxonomies (e.g., of new strains), place the queries onto the tree based on taxonomic identity.
 // Each placement defines a new tip, descending directly from some node in the input tree.
 // Each query is placed at the deepest possible node (furthest from the root in terms of splits) for which it is certain that the query is a descendant of.
@@ -17907,6 +18089,7 @@ Rcpp::List place_tips_taxonomically_CPP(const long						Ntips,
 		for(long f=0; f<fits.size(); ++f){
 			if(clade_taxonomies_split[fits[f]].size()==max_precision) precise_fits.push_back(fits[f]);
 		}
+		// keep a single placement clade, defined as the MRCA of all precise fits
 		placement_clades[query] = most_recent_common_ancestor(Ntips, Nnodes, Nedges, context.root, context.clade2parent, tree_edge, precise_fits);
 	}
 	
@@ -18837,10 +19020,10 @@ std::string tree_to_Newick_string_CPP(	const long					Ntips,
 		if(name!=""){
 			if(quoting==-1){
 				// quote only if needed, and prefer single quotes if possible
-				quote = ((name.find_first_of('\'')!=string::npos) ? "\"" : ((name.find_first_of("():,\"")!=string::npos) ? "'" : ""));
+				quote = ((name.find_first_of('\'')!=string::npos) ? "\"" : ((name.find_first_of("();:, \"")!=string::npos) ? "'" : ""));
 			}else if(quoting==-2){
 				// quote only if needed, and prefer double quotes if possible
-				quote = ((name.find_first_of('"')!=string::npos) ? "'" : ((name.find_first_of("():,'")!=string::npos) ? "\"" : ""));			
+				quote = ((name.find_first_of('"')!=string::npos) ? "'" : ((name.find_first_of("();:, '")!=string::npos) ? "\"" : ""));			
 			}
 			output << quote << name << quote;
 		}
@@ -18850,10 +19033,10 @@ std::string tree_to_Newick_string_CPP(	const long					Ntips,
 			name = edge_labels[incoming_edge_per_clade[clade]];
 			if(quoting==-1){
 				// quote only if needed, and prefer single quotes if possible
-				quote = ((name.find_first_of('\'')!=string::npos) ? "\"" : ((name.find_first_of("():,\"")!=string::npos) ? "'" : ""));
+				quote = ((name.find_first_of('\'')!=string::npos) ? "\"" : ((name.find_first_of("();:,\"")!=string::npos) ? "'" : ""));
 			}else if(quoting==-2){
 				// quote only if needed, and prefer double quotes if possible
-				quote = ((name.find_first_of('"')!=string::npos) ? "'" : ((name.find_first_of("():,'")!=string::npos) ? "\"" : ""));			
+				quote = ((name.find_first_of('"')!=string::npos) ? "'" : ((name.find_first_of("();:,'")!=string::npos) ? "\"" : ""));			
 			}
 			output << "[" << quote << name << quote << "]";
 		}
@@ -19165,7 +19348,7 @@ Rcpp::List read_Newick_string_CPP(	std::string	input,
 	}
 	
 	// nothing left to parse, so check if we came back to level 0
-	if(!clade_stack.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Unbalanced parentheses, missing "+makeString(clade_stack.size())+" closing parentheses '(' on the left end");
+	if(!clade_stack.empty()) return Rcpp::List::create(Rcpp::Named("success") = false, Rcpp::Named("error") = "Unbalanced parentheses, missing "+makeString(clade_stack.size())+" parentheses '(' on the left end");
 		
 	// re-index clades (tips & nodes) consistent with the phylo format
 	const long Nclades = clade_names.size();
@@ -30831,7 +31014,7 @@ Rcpp::List generate_gene_tree_in_species_tree_MSC_HGT_DL_CPP(	const long					NSt
 		new_locus_type[lclade]  = locus_type[new2old_locus[lclade]];
 	}
 	
-	// population sizes and generation times and mutaton rates of the species tree are inheritted by the locus tree
+	// population sizes and generation times and mutaton rates of the species tree are inherited by the locus tree
 	dvector locus_population_sizes(got_population_sizes ? NLclades : 1l), locus_generation_times(got_generation_times ? NLclades : 1l), locus_mutation_rates(got_mutation_rates ? NLclades : 1l);
 	if(!got_population_sizes) 	locus_population_sizes[0] = default_population_size;
 	if(!got_generation_times) 	locus_generation_times[0] = default_generation_time;

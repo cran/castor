@@ -4,7 +4,7 @@
 Fit a Markov (Mk) model for discrete trait evolution.
 }
 \description{
-Estimate the transition rate matrix of a continuous-time Markov model for discrete trait evolution ("Mk model") via maximum-likelihood, based on one or more phylogenetic trees and its tips' states.
+Estimate the transition rate matrix of a continuous-time Markov model for discrete trait evolution ("Mk model") via maximum-likelihood, based on one or more phylogenetic trees and its tips' states. The function can account for missing, uncertain and erroneous tip states, provided that the probabilities of such occurrences are a priori known.
 }
 \usage{
 fit_mk( trees,
@@ -39,13 +39,19 @@ Either a single phylogenetic tree of class "phylo", or a list of phylogenetic tr
 Integer, specifying the number of possible discrete states that the trait can have.
 }
 \item{tip_states}{
-Either an integer vector of size Ntips (only permitted if trees[] is a single tree) or a list containing Ntrees such integer vectors (if trees[] is a list of trees), listing the state of each tip in each tree. Note that tip_states cannot include NAs or NaNs; if the states of some tips are uncertain, you should use the option \code{tip_priors} instead. Can also be \code{NULL}, in which case \code{tip_priors} must be provided.
+Either an integer vector of size Ntips (only permitted if trees[] is a single tree) or a list containing Ntrees such integer vectors (if trees[] is a list of trees), listing the known state of each tip in each tree. Note that tip_states cannot include NAs or NaNs, and are assumed to be fully reliably known. If the states of some tips are uncertain, or you want to account for observation errors, you should use the option \code{tip_priors} instead. Can also be \code{NULL}, in which case \code{tip_priors} must be provided.
 }
 \item{tip_priors}{
-Either a numeric matrix of size Ntips x Nstates (only permitted if trees[] is a single tree), or a list containing Ntrees such matrixes (if trees[] is a list of trees), listing the likelihood of each state at each tip in each tree. Can also be \code{NULL}, in which case \code{tip_states} must be provided. Hence, \code{tip_priors[t][i,s]} is the likelihood of the observed state of tip i in tree t, if the tip's true state was in state s. For example, if you know for certain that a tip is in state k, then set \code{tip_priors[t][i,s]=1} for s=k and \code{tip_priors[t][i,s]=0} for all other s.
+Either a numeric matrix of size Ntips x Nstates (only permitted if trees[] is a single tree), or a list containing Ntrees such matrixes (if trees[] is a list of trees), listing the likelihood of each state at each tip in each tree. Can also be \code{NULL}, in which case \code{tip_states} must be provided. Hence, \code{tip_priors[t][i,s]} is the likelihood of the observed state of tip i in tree t, if the tip's true state was in state s. Note that the observed states (whether they are true or erroneous or even missing) are not explicitly required here, only the probabilities of the observations as a function of the true tip states are needed.
+
+For example, if you know for certain that a tip is in state k (e.g., because you observed it and fully trust your observation), then set \code{tip_priors[t][i,s]=1} for s=k and \code{tip_priors[t][i,s]=0} for all other s. 
+
+As another example, if the state of a tip is unknown (undetected), and there are no detection biases (i.e., the probability of being undetected does not depend on the state), then set \code{tip_priors[t][i,s]} to the same positive value for all s; a reasonable choice would be to set it to the fraction of tips in the tree with unknown state, however the value used does not actually impact the fitting outcomes.
+
+As another example, if the state of a tip is unknown (undetected) and there are detection biases, with tips in state 1 being twice as likely to have unknown state than tips in state 2, then set \code{tip_priors[t][i,1]} to be twice the value of \code{tip_priors[t][i,2]}. The precise value does not matter for fitting, only the ratio of \code{tip_priors[t][i,1]} to \code{tip_priors[t][i,2]} matters. This example illustrates how a missing observation itself can carry information about the underlying tip state in the case of detection biases, and \code{tip_priors} allows users to supply that information for fitting.
 }
 \item{rate_model}{
-Rate model to be used for the transition rate matrix. Can be "ER" (all rates equal), "SYM" (transition rate i-->j is equal to transition rate j-->i), "ARD" (all rates can be different), "SUEDE" (only stepwise transitions i-->i+1 and i-->i-1 allowed, all 'up' transitions are equal, all 'down' transitions are equal) or "SRD" (only stepwise transitions i-->i+1 and i-->i-1 allowed, and each rate can be different). Can also be an index matrix that maps entries of the transition matrix to the corresponding independent rate parameter to be fitted. Diagonal entries should map to 0, since diagonal entries are not treated as independent rate parameters but are calculated from the remaining entries in the transition rate matrix. All other entries that map to 0 represent a transition rate of zero. The format of this index matrix is similar to the format used by the \code{ace} function in the \code{ape} package. \code{rate_model} is only relevant if \code{transition_matrix==NULL}.
+Rate model to be used for the transition rate matrix. Can be "ER" (all rates equal), "SYM" (transition rate i-->j is equal to transition rate j-->i), "ARD" (all rates can be different), "SUEDE" (only stepwise transitions i-->i+1 and i-->i-1 allowed, all 'up' transitions are equal, all 'down' transitions are equal) or "SRD" (only stepwise transitions i-->i+1 and i-->i-1 allowed, and each rate can be different). Can also be an index matrix, i.e., an integer matrix of shape Nstates x Nstates that maps entries of the transition matrix to the corresponding independent rate parameter to be fitted. Diagonal entries should map to 0, since diagonal entries are not treated as independent rate parameters but are calculated from the remaining entries in the transition rate matrix. All other entries that map to 0 represent a transition rate of zero. The format of this index matrix is similar to the format used by the \code{ace} function in the \code{ape} package. \code{rate_model} is only relevant if \code{transition_matrix==NULL}.
 }
 \item{root_prior}{
 Prior probability distribution of the root's states, used to calculate the model's overall likelihood from the root's marginal ancestral state likelihoods. Can be "\code{flat}" (all states equal), "\code{empirical}" (empirical probability distribution of states across the tree's tips), "\code{stationary}" (stationary probability distribution of the transition matrix), "\code{likelihoods}" (use the root's state likelihoods as prior), "\code{max_likelihood}" (put all weight onto the state with maximum likelihood) or ``\code{auto}'' (will be chosen automatically based on some internal logic). If "\code{stationary}" and \code{transition_matrix==NULL}, then a transition matrix is first fitted using a flat root prior, and then used to calculate the stationary distribution. \code{root_prior} can also be a non-negative numeric vector of size Nstates and with total sum equal to 1.
@@ -101,7 +107,7 @@ Character, specifying the line prefix for printing progress reports to the scree
 \details{
 The trait's states must be represented by integers within 1,..,Nstates, where Nstates is the total number of possible states. If the states are originally in some other format (e.g. characters or factors), you should map them to a set of integers 1,..,Nstates. The order of states (if relevant) should be reflected in their integer representation. For example, if your original states are "small", "medium" and "large" and \code{rate_model=="SUEDE"}, it is advised to represent these states as integers 1,2,3. You can easily map any set of discrete states to integers using the function \code{\link{map_to_state_space}}.
 
-This function allows the specification of the precise tip states (if these are known) using the vector \code{tip_states}. Alternatively, if some tip states are not fully known, you can pass the state likelihoods using the matrix \code{tip_priors}. Note that exactly one of the two arguments, \code{tip_states} or \code{tip_priors}, must be non-\code{NULL}. 
+This function allows the specification of the precise tip states (if these are known) using the vector \code{tip_states}. Alternatively, if some tip states are not fully known, you can pass the state likelihoods using the matrix \code{tip_priors}; this matrix even allows you to account for detection biases, e.g., when the probability of observing a state depends on the state itself. For examples see the argument descriptions above. Note that exactly one of the two arguments, \code{tip_states} or \code{tip_priors}, must be non-\code{NULL}.
 
 Tips must be represented in \code{tip_states} or \code{tip_priors} in the same order as in \code{tree$tip.label}. None of the input vectors or matrixes need include row or column names; if they do, however, they are checked for consistency (if \code{check_input==TRUE}).
 
@@ -138,6 +144,9 @@ Logical, indicating whether the fitting algorithm converged. Note that \code{fit
 }
 \item{guess_rate}{
 Numeric, the initial guess used for the average transition rate, prior to fitting.
+}
+\item{Nrates}{
+Integer, the number of independent rate parameters fitted. For example, if the rate model was "ER" then \code{Nrates} will be 1.
 }
 \item{AIC}{
 Numeric, the Akaike Information Criterion for the fitted model, defined as \eqn{2k-2\log(L)}, where \eqn{k} is the number of independent fitted parameters and \eqn{L} is the maximized likelihood.
