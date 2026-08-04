@@ -366,9 +366,9 @@ combine_Mk_rate_models = function(Nstates1,		# integer, number of discrete state
 								  Nstates2,		# integer, number of discrete states for trait 2
 								  rate_model1,	# either a rate model string or 2D transition index matrix for trait 1, as required by get_transition_index_matrix()
 								  rate_model2,	# similar to rate_model1, but for trait 2
-								  transition_matrix1 = NULL, # optional 2D numeric matrix of size Nstates1 x Nstates1, specifying transition rates for trait 1 in a single-trait Mk model. If both transition_matrix1 & transition_matrix2 are provided, them this function will also construct a guestimate for the combined transition matrix that can be used as a starting point for model fitting.
+								  transition_matrix1 = NULL, # optional 2D numeric matrix of size Nstates1 x Nstates1, specifying transition rates for trait 1 in a single-trait Mk model. If both transition_matrix1 & transition_matrix2 are provided, then this function will also construct a guestimate for the combined transition matrix that can be used as a starting point for model fitting.
 								  transition_matrix2 = NULL, # similar to transition_matrix1, but for trait 2.
-								  dependent_trait	 = 0){	 # integer, specifying which trait to consider as the "dependent variable" during full model fitting. Options are 0 (both traits influence each other's rates), 1 (trait 2 influences the rates of trait 1, but not vise versa) and 2 (trait 1 influences the rates of trait 2, but not vise versa). Only relevant if include_lrt=TRUE. This is analogous to the dev.var argument in phytools::fitPagel.
+								  dependent_trait	 = 0){	 # integer, specifying which trait to consider as the "dependent variable" during full model fitting. Options are -1 (the traits do not influence each other's rates), 0 (both traits influence each other's rates), 1 (trait 2 influences the rates of trait 1, but not vise versa) and 2 (trait 1 influences the rates of trait 2, but not vise versa).
 		dependent1	  = (dependent_trait %in% c(0,1))
 		dependent2	  = (dependent_trait %in% c(0,2))
 		NCstates 	  = Nstates1 * Nstates2 # number of states in the combined model.
@@ -382,7 +382,7 @@ combine_Mk_rate_models = function(Nstates1,		# integer, number of discrete state
 		combined_index_matrix = array(0L, dim=c(Nstates1,Nstates2,Nstates1,Nstates2)) # start with a 4D array for tractability, then flatten some axes to make it 2D
 		index_offset = 0
 		for(i2 in seq_len(Nstates2)){
-			# define new independent rate parameters for trait 1 conditioned on trait 2 being and staying in state i2
+			# define new independent or repeated rate parameters for trait 1 conditioned on trait 2 being and staying in state i2
 			for(i1 in seq_len(Nstates1)){
 				for(j1 in seq_len(Nstates1)){
 					if(index_matrix1[i1,j1]==0) next
@@ -391,8 +391,9 @@ combine_Mk_rate_models = function(Nstates1,		# integer, number of discrete state
 			}
 			if(dependent1) index_offset = index_offset + Nrates1
 		}
+		if(!dependent1) index_offset = index_offset + Nrates1
 		for(i1 in seq_len(Nstates1)){
-			# define new independent rate parameters for trait 2 conditioned on trait 1 being and staying in state i1
+			# define new independent or repeated rate parameters for trait 2 conditioned on trait 1 being and staying in state i1
 			for(i2 in seq_len(Nstates2)){
 				for(j2 in seq_len(Nstates2)){
 					if(index_matrix2[i2,j2]==0) next
@@ -402,9 +403,11 @@ combine_Mk_rate_models = function(Nstates1,		# integer, number of discrete state
 			if(dependent2) index_offset = index_offset + Nrates2
 		}
 		dim(combined_index_matrix) = c(NCstates,NCstates) # flatten the first two axes into one, and the last two axes into one. Each axis pair (1&2 or 3&4) enumerates the state combos and is flattened in column-major order.
-		results = list(index_matrix=combined_index_matrix, Nrates=NCrates, Nstates=NCstates)
+		results = list(	index_matrix	= combined_index_matrix,
+						Nrates			= NCrates,
+						Nstates			= NCstates)
 		if(!(is.null(transition_matrix1) || is.null(transition_matrix2))){
-			# also construct a guestimated transition matrix for the combined model
+			# also construct a guesstimated transition matrix for the combined model
 			combined_transition_matrix = array(0.0, dim=c(Nstates1,Nstates2,Nstates1,Nstates2)) # start with a 4D array for tractability, then flatten some axes to make it 2D
 			for(s2 in seq_len(Nstates2)){
 				combined_transition_matrix[,s2,,s2] = transition_matrix1
@@ -413,12 +416,36 @@ combine_Mk_rate_models = function(Nstates1,		# integer, number of discrete state
 				combined_transition_matrix[s1,,s1,] = transition_matrix2
 			}
 			dim(combined_transition_matrix) = c(NCstates,NCstates)
+			diag(combined_transition_matrix) = 0; diag(combined_transition_matrix) = -rowSums(combined_transition_matrix) # ensure rowSums are 0
 			results$transition_matrix = combined_transition_matrix
 		}
 		return(results)
 }
 
 
+
+# given an Mk model structure, define a new model with twice as many states, corresponding to the duplicated state space with a new binary hidden trait that modulates the original rates
+# Simultaneous (i.e., joint) transitions across both the visible and hidden trait are not allowed, i.e., such dual-transitions they will have rates 0.
+# The returned Mk model's states will be all possible combinations of the two trait state spaces, i.e., (sv,sh) where sv enumerates the states of visible trait and sh enumerates the hidden binary states.
+# By convention, state combos (sv,sh) are enumerated in column-major format, i.e., with the visible trait being the faster-changing index.
+duplicate_Mk_model_for_rate_switching = function(rate_modelV, 				 # the rate model for the visible states, either a string (e.g. "ARD") or a matrix of size NstatesV x NstatesV
+												 NstatesV			= NULL,  # optional number of visible states, i.e. whose transition rates will depend on the hidden binary trait. If NULL, this is automatically inferred from the provided rate_modelV, which must be a matrix (not a string).
+												 rate_modelH		= "ARD", # the rate model structure to assume for the hidden binary trait, e.g. "ARD" or "SYM"
+												 transition_matrixV = NULL, # optional 2D numeric matrix of size Nstates x Nstates, specifying guessed transition rates between visible states. If both transition_matrixV & transition_matrixH are provided, then this function will also construct a guestimate for the duplicated transition matrix that can be used as a starting point for model fitting.
+												 transition_matrixH = NULL){ # optional 2D numeric matrix of size 2 x 2, specifying guessed transition rates between the hidden states. If both transition_matrixV & transition_matrixH are provided, then this function will also construct a guestimate for the duplicated transition matrix that can be used as a starting point for model fitting.
+	if(is.null(NstatesV)){
+		if(is.character(rate_modelV)) stop("NstatesV must be specified when rate_modelV is a string")
+		NstatesV = nrow(rate_modelV)
+	}
+	dual = combine_Mk_rate_models(Nstates1			 = NstatesV,
+								  Nstates2			 = 2,
+								  rate_model1		 = rate_modelV,
+								  rate_model2		 = rate_modelH,
+								  transition_matrix1 = transition_matrixV,
+								  transition_matrix2 = transition_matrixH,
+								  dependent_trait	 = 1)
+	return(dual)
+}
 
 
 # get a 1D lookup matrix of size Nstates, mapping birth-rates to indices of a subset of independent birth-rates
@@ -3375,5 +3402,63 @@ sprint_shape = function(A){
 }
 
 
+
+# sum over a subset of axes of an array
+# This function is similar to numpy.sum, and internally uses colSums for efficiency
+# if axes=NULL, all array elements are summed/collapsed into a single number.
+sum_across = function(A,				# numerical N-dimensional array or 2D matrix or vector
+					  axes		= NULL, # optional integer vector, axes to sum across (i.e., collapse). May include negative indices, i.e. counting from the end.
+					  keepdims	= FALSE){
+	Adim  = if(is.null(dim(A))) length(A) else dim(A)
+	Ndims = length(Adim)
+
+	if(is.null(axes)){
+		total_sum = sum(A)
+		return(if (keepdims) array(total_sum, dim = rep(1L, Ndims)) else total_sum)
+	}
+
+	# sanitize axes
+	axes = as.integer(axes)
+	axes[axes<0L] = Ndims + 1L + axes[axes < 0L] # numpy-style negative indexing
+	if(anyNA(axes) || any(axes < 1L | axes > Ndims)) stop("Axes out of range")
+	axes      = sort(unique(axes))
+	keep_axes = which(!(seq_len(Ndims) %in% axes)) # ascending -> original relative order
+	if(length(keep_axes) == 0L){
+		# all axes are summed across
+		total_sum = sum(A)
+		return(if (keepdims) array(total_sum, dim = rep(1L, Ndims)) else total_sum)
+	}
+
+	# summed axes first, kept axes last; flatten to (sum_block A keep_block) and colSums
+	permutation = c(axes, keep_axes)
+	permuted    = if (identical(permutation, seq_len(Ndims))) A else aperm(A, permutation)
+	dim(permuted) = c(prod(Adim[axes]), prod(Adim[keep_axes]))
+	result = colSums(permuted)
+
+	if(keepdims){
+		result_dim = Adim
+		result_dim[axes] = 1L
+		dim(result) = result_dim
+	}else if(length(keep_axes)>1L){
+		dim(result) = Adim[keep_axes] # >1 kept axis -> restore shape
+	}
+	return(result)
+}
+
+
+
+# construct an N-dimensional array using a set of nested lists, nested down to N levels, following numpy-like convention
+# For example, list(list(c(1,2,3), c(4,5,6)),   list(c(10,20,30), c(40,50,60))) will yield an array of size 2 x 2 x 3
+asarray = function(data){
+	shape = c()
+	probe = data
+	while (is.list(probe)) {
+		shape = c(shape, length(probe))
+		probe = probe[[1]]
+	}
+	if(length(probe) > 1) shape = c(shape, length(probe))
+	flat_data = as.numeric(unlist(data))
+	aperm(array(flat_data, dim = rev(shape)), length(shape):1)
+}
 
 

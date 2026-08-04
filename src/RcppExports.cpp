@@ -1890,7 +1890,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // Mk_loglikelihood_CPP
-Rcpp::List Mk_loglikelihood_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& transition_matrix, const std::vector<double>& prior_probabilities_per_tip, const std::string& root_prior_type, const std::vector<double>& root_prior, const double oldest_age, const double runtime_out_seconds, const double exponentiation_accuracy, const long max_polynomials);
+Rcpp::List Mk_loglikelihood_CPP(const long Ntips, const long Nnodes, const long Nedges, const long Nstates, const std::vector<long>& tree_edge, const std::vector<double>& edge_length, const std::vector<double>& transition_matrix, std::vector<double>& prior_probabilities_per_tip, const std::string& root_prior_type, const std::vector<double>& root_prior, const double oldest_age, const double runtime_out_seconds, const double exponentiation_accuracy, const long max_polynomials);
 RcppExport SEXP _castor_Mk_loglikelihood_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP NstatesSEXP, SEXP tree_edgeSEXP, SEXP edge_lengthSEXP, SEXP transition_matrixSEXP, SEXP prior_probabilities_per_tipSEXP, SEXP root_prior_typeSEXP, SEXP root_priorSEXP, SEXP oldest_ageSEXP, SEXP runtime_out_secondsSEXP, SEXP exponentiation_accuracySEXP, SEXP max_polynomialsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -1902,7 +1902,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type edge_length(edge_lengthSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type transition_matrix(transition_matrixSEXP);
-    Rcpp::traits::input_parameter< const std::vector<double>& >::type prior_probabilities_per_tip(prior_probabilities_per_tipSEXP);
+    Rcpp::traits::input_parameter< std::vector<double>& >::type prior_probabilities_per_tip(prior_probabilities_per_tipSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type root_prior_type(root_prior_typeSEXP);
     Rcpp::traits::input_parameter< const std::vector<double>& >::type root_prior(root_priorSEXP);
     Rcpp::traits::input_parameter< const double >::type oldest_age(oldest_ageSEXP);

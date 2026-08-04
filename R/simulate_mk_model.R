@@ -9,9 +9,9 @@ simulate_mk_model = function(	tree,
 								Nsimulations		= 1,
 								drop_dims			= TRUE){
 	if(ncol(Q)!=nrow(Q)) stop(sprintf("ERROR: Transition matrix is not quadratic (has %d rows and %d columns)",nrow(Q),ncol(Q)))
-	Ntips  = length(tree$tip.label);
-	Nnodes = tree$Nnode;
-	Nstates = ncol(Q);
+	Ntips  = length(tree$tip.label)
+	Nnodes = tree$Nnode
+	Nstates = ncol(Q)
 	if(is.character(root_probabilities)){
 		if(root_probabilities=="stationary"){
 			root_probabilities = get_stationary_distribution(Q);
@@ -22,6 +22,8 @@ simulate_mk_model = function(	tree,
 		}
 	}else{
 		if(length(root_probabilities)!=Nstates) stop(sprintf("ERROR: root_probabilities has length (%d) different from the number states (%d)",length(root_probabilities),Nstates))
+		if(any(root_probabilities<0)) stop(sprintf("ERROR: root_probabilities must not contain negative values, found %g",min(root_probabilities)))
+		if(any(root_probabilities>1)) stop(sprintf("ERROR: root_probabilities must not contain values greater than 1, found %g",max(root_probabilities)))
 	}
 	results = simulate_fixed_rates_Markov_model_CPP(Ntips				= Ntips,
 													Nnodes				= Nnodes,

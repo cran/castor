@@ -7,7 +7,7 @@ Create a random transition matrix for an Mk model.
 Create a random transition matrix for a fixed-rates continuous-time Markov model of discrete trait evolution ("Mk model"). This may be useful for testing purposes.
 }
 \usage{
-get_random_mk_transition_matrix(Nstates, rate_model, min_rate=0, max_rate=1)
+get_random_mk_transition_matrix(Nstates, rate_model="ARD", min_rate=0, max_rate=1)
 }
 \arguments{
 \item{Nstates}{

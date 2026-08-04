@@ -12,7 +12,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 					Ntrials 				= 1,			# (int) number of trials (starting points) for fitting the transition matrix. Only relevant if transition_matrix=NULL.
 					Nscouts					= NULL,			# integer, number of randomly chosen parameter values to consider as possible fitting starts (only Ntrials-1 of those will be kept). Each scout costs only one evaluation of the loglikelihood function, which is much cheaper than a whole fitting trial. If NULL, this is automatically chosen based on the number of fitted parameters and Ntrials. Only relevant if Ntrials>1, since the first trial uses the default first guess (i.e., without scouting).
 					max_model_runtime		= NULL,			# maximum time (in seconds) to allocate for each likelihood evaluation per tree. Use this to escape from badly parameterized models during fitting (this will likely cause the affected fitting trial to fail). If NULL or <=0, this option is ignored.
-					optim_algorithm		 	= "nlminb",		# either "optim" or "nlminb". What algorithm to use for fitting.
+					optim_algorithm		 	= "nlminb",		# either "optim" or "nlminb" or "sbplx". What algorithm to use for fitting.
 					optim_max_iterations	= 200,			# maximum number of iterations of the optimization algorithm (per trial)
 					optim_rel_tol			= 1e-8,			# relative tolerance when optimizing the objective function
 					check_input 			= TRUE,			# (bool) perform some basic sanity checks on the input data. Set this to FALSE if you're certain your input data is valid.
@@ -87,7 +87,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 				min_tip_state = min(focal_tip_states)
 				max_tip_state = max(focal_tip_states)
 				if((min_tip_state<1) || (max_tip_state>Nstates)) return(list(success=FALSE, error=sprintf("tip_states must be integers between 1 and %d, but found values between %d and %d for tree %d",Nstates,min_tip_state,max_tip_state,tr)))
-				if((!is.null(names(focal_tip_states))) && any(names(focal_tip_states)!=focal_tree$tip.label)) return(list(success=FALSE, error="Names in tip_states and tip labels in tree %d don't match (must be in the same order)",tr))
+				if((!is.null(names(focal_tip_states))) && any(names(focal_tip_states)!=focal_tree$tip.label)) return(list(success=FALSE, error=sprintf("Names in tip_states and tip labels in tree %d don't match (must be in the same order)",tr)))
 			}
 			focal_tip_priors = matrix(1e-8/(Nstates-1), nrow=Ntips, ncol=Nstates);
 			focal_tip_priors[cbind(1:Ntips, focal_tip_states)] = 1.0-1e-8;
@@ -103,11 +103,19 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 			}
 			if(check_input){
 				if(any(focal_tip_priors>1.0)) return(list(success=FALSE, error=sprintf("ERROR: Some tip_priors are larger than 1.0 (max was %g), for tree %d",max(focal_tip_priors),tr)))
-				if((!is.null(rownames(focal_tip_priors))) && (!is.null(focal_tree$tip.label)) && (rownames(focal_tip_priors)!=focal_tree$tip.label)) return(list(success=FALSE, error=sprintf("ERROR: Row names in tip_priors and tip labels in tree %d don't match",tr)))
+				if((!is.null(rownames(focal_tip_priors))) && (!is.null(focal_tree$tip.label)) && any(rownames(focal_tip_priors)!=focal_tree$tip.label)) return(list(success=FALSE, error=sprintf("ERROR: Row names in tip_priors and tip labels in tree %d don't match",tr)))
 			}
 		}
 	}
 	NtotalTips = sum(sapply(1:Ntrees, FUN=function(tr) length(trees[[tr]]$tip.label)))
+	
+	# normalize tip_priors at each tip, to avoid numerical sensitivities during optimization
+	# mathematically this should not change the outcome, since a uniform rescaling of tip_priors at each tip by some factor just shifts the loglikelihood by the constant log(factor)
+# 	for(tr in seq_len(Ntrees)){
+# 		row_scales = rowSums(tip_priors[[tr]])
+# 		row_scales[row_scales == 0] = 1 # guard all-zero rows
+# 		tip_priors[[tr]] = tip_priors[[tr]] / row_scales
+# 	}
 	
     
     # figure out prior distribution for root if needed
@@ -154,7 +162,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 	NICs = 0
 	for(tr in 1:Ntrees){
 		if(is.null(tip_states) || is.null(tip_states[[tr]])){
-			focal_tip_states = max.col(tip_priors[[tr]])
+			focal_tip_states = max.col(tip_priors[[tr]], ties.method="first")
 		}else{
 			focal_tip_states = tip_states[[tr]]
 		}
@@ -185,13 +193,12 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 	# make sure first-guess transition matrix is a valid transition matrix
 	diag(guess_transition_matrix) = 0
 	diag(guess_transition_matrix) = -rowSums(guess_transition_matrix)
-	
-	
+		
 	# define objective function to be minimized (negated log-likelihood)
-	objective_function = function(dense_rates, trial){
+	objective_function = function(dense_rates, trial=NULL){
 		if(any(is.nan(dense_rates)) || any(is.infinite(dense_rates))){
 			if(diagnostics) cat(sprintf("%s  Trial %d: Objective requested for invalid rates: %s\n",verbose_prefix,trial,paste(sprintf("%.4g", dense_rates), collapse=", ")))
-			return(if(optim_algorithm == "optim") 1e100 else Inf)
+			return(if(optim_algorithm == "nlminb") Inf else 1e50)
 		}
 		Q = get_transition_matrix_from_rate_vector(dense_rates, index_matrix, Nstates)
 		if(root_prior[1]=="stationary"){
@@ -213,7 +220,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 											root_prior					= root_prior_probabilities,
 											oldest_age					= (if(is.null(oldest_ages)) -1 else (if(is.finite(oldest_ages[tr])) oldest_ages[tr] else -1)),
 											runtime_out_seconds			= max_model_runtime,
-											exponentiation_accuracy		= 1e-3,
+											exponentiation_accuracy		= 1e-4,
 											max_polynomials				= 1000)
 			if((!results$success) || is.na(results$loglikelihood) || is.nan(results$loglikelihood)){
 				if(diagnostics) cat(sprintf("%s  Trial %d, tree %d (%d tips): Model evaluation failed: %s\n",verbose_prefix,trial,tr,length(focal_tree$tip.label),results$error))
@@ -228,32 +235,46 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 	
 	# fit starting with various starting_rates, keep track of best fit
 	fit_single_trial = function(start_dense_rates, trial){
-		rate_scale = mean(abs(start_dense_rates))
+		rate_scales = abs(start_dense_rates)
+		rate_scales[rate_scales==0] = 1
 		if(optim_algorithm == "optim"){
-			fit = stats::optim(	start_dense_rates/rate_scale, 
-								function(x) objective_function(x*rate_scale, trial), 
+			fit = stats::optim(	start_dense_rates/rate_scales, 
+								function(x) objective_function(x*rate_scales, trial), 
 								method 	= "L-BFGS-B", 
-								lower 	= rep(first_guess_rate/(10**power_range), Nrates)/rate_scale,
-								upper	= rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
+								lower 	= rep(0.1**power_range,Nrates),
+								upper	= rep(10**power_range,Nrates),
 								control = list(maxit=optim_max_iterations))
-			LL 				= -fit$value;
+			LL 				= -fit$value
 			Nevaluations 	= fit$counts
 			Niterations		= NA
+			params			= fit$par
 			converged 		= (fit$convergence==0)
+		}else if(optim_algorithm == "sbplx"){
+			fit = nloptr::nloptr(x0		= start_dense_rates/rate_scales, 
+								eval_f	= function(x) objective_function(x*rate_scales, trial), 
+								lb 		= rep(0.1**power_range,Nrates),
+								ub		= rep(10**power_range,Nrates),
+								opts 	= list(algorithm="NLOPT_LN_SBPLX", xtol_rel=optim_rel_tol, ftol_rel=optim_rel_tol, maxeval=optim_max_iterations*Nrates*100))
+			LL 				= -fit$objective
+			Nevaluations 	= NA
+			Niterations		= fit$iterations
+			params			= fit$solution
+			converged 		= (fit$status==0)
 		}else{
-			fit = stats::nlminb(start_dense_rates/rate_scale, 
-								function(x) objective_function(x*rate_scale, trial), 
-								lower=rep(0, Nrates)/rate_scale, 
-								upper=rep((10**power_range)*first_guess_rate, Nrates)/rate_scale,
-								control = list(iter.max=optim_max_iterations, eval.max=optim_max_iterations*Nrates*10, rel.tol=optim_rel_tol, step.min=1e-5))
-			LL 				= -fit$objective;
+			fit = stats::nlminb(start_dense_rates/rate_scales, 
+								function(x) objective_function(x*rate_scales, trial), 
+								lower=rep(0, Nrates), 
+								upper=rep(10**power_range, Nrates),
+								control = list(iter.max=optim_max_iterations, eval.max=optim_max_iterations*Nrates*100, rel.tol=optim_rel_tol, step.min=1e-5))
+			LL 				= -fit$objective
 			Nevaluations 	= fit$evaluations[1]
 			Niterations		= fit$iterations
+			params			= fit$par
 			converged		= (fit$convergence==0)
 		}
-		fit$par = fit$par * rate_scale
+		params = params * rate_scales
 		if(diagnostics) cat(sprintf("%s  Trial %d: Final loglikelihood %.10g, converged = %d\n",verbose_prefix,trial,LL,converged))
-		return(list(LL=LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, fit=fit))
+		return(list(LL=LL, Nevaluations=Nevaluations, Niterations=Niterations, converged=converged, params=params))
 	}
 
 	power_range = 6
@@ -262,7 +283,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 		# randomly choose multiple parameter starting points and keep the Ntrials-1 most promising ones (i.e., with smallest objective values) plus the defaut_start
 		Nscouts = (if(is.null(Nscouts)) min(10000,10*Nrates*Ntrials) else max(Ntrials-1,Nscouts))
 		if(verbose) cat(sprintf("%sGenerating %d random parameter starts ('scouts') and selecting the most promising ones..\n",verbose_prefix,Nscouts))
-		starts_pool = lapply(seq_len(Nscouts), FUN=function(k) first_guess_rate * 10**runif(n=Nrates, min=-((k/Nscouts)^2)*power_range/2, max=((k/Nscouts)^2)*power_range/2))
+		starts_pool = lapply(seq_len(Nscouts), FUN=function(k) first_guess_rate * 10**runif(n=Nrates, min=-(k/Nscouts)*power_range/2, max=(k/Nscouts)*power_range/2))
 		# compute the objective values for each start in the pool
 		if((Nthreads>1)  && (.Platform$OS.type!="windows")){
 			start_objectives = unlist(parallel::mclapply(starts_pool, FUN = function(dense_rates) objective_function(dense_rates, trial=-1), mc.cores = min(Nthreads, length(starts_pool)), mc.preschedule = TRUE, mc.cleanup = TRUE))
@@ -300,11 +321,11 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 
 	# extract information from best fit (note that some fits may have LL=NaN or NA)
 	LLs		= unlist_with_nulls(sapply(1:Ntrials, function(trial) fits[[trial]]$LL))
-	valids 	= which((!is.na(LLs)) & (!is.nan(LLs)) & (!is.null(LLs)) & (!is.infinite(LLs)) & sapply(1:Ntrials, function(trial) (!any(is.null(fits[[trial]]$fit$par))) && all(is.finite(fits[[trial]]$fit$par))))
+	valids 	= which((!is.na(LLs)) & (!is.nan(LLs)) & (!is.null(LLs)) & (!is.infinite(LLs)) & sapply(1:Ntrials, function(trial) (!any(is.null(fits[[trial]]$params))) && all(is.finite(fits[[trial]]$params))))
 	if(length(valids)==0) return(list(success=FALSE, error="Fitting failed for all trials"));
 	best 				= valids[which.max(LLs[valids])]
 	loglikelihood		= fits[[best]]$LL
-	fitted_rates 		= fits[[best]]$fit$par
+	fitted_rates 		= fits[[best]]$params
 	transition_matrix 	= get_transition_matrix_from_rate_vector(fitted_rates, index_matrix, Nstates)
 	
 	if(Nbootstraps>0){
@@ -349,12 +370,11 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 		}
 		# calculate standard errors and confidence intervals from distribution of bootstrapped parameters
 		standard_errors = matrix(sqrt(pmax(0, colMeans(bootstrap_params_flat^2, na.rm=TRUE) - colMeans(bootstrap_params_flat, na.rm=TRUE)^2)), nrow=Nstates, byrow=FALSE)
-		quantiles_flat 	= sapply(1:ncol(bootstrap_params_flat), FUN=function(p) quantile(bootstrap_params_flat[,p], probs=c(0.25, 0.75, 0.025, 0.975, 0.5), na.rm=TRUE, type=8))
+		quantiles_flat 	= sapply(1:ncol(bootstrap_params_flat), FUN=function(p) quantile(bootstrap_params_flat[,p], probs=c(0.25, 0.75, 0.025, 0.975), na.rm=TRUE, type=8))
 		CI50lower 		= matrix(quantiles_flat[1,], nrow=Nstates, byrow=FALSE)
 		CI50upper 		= matrix(quantiles_flat[2,], nrow=Nstates, byrow=FALSE)
 		CI95lower 		= matrix(quantiles_flat[3,], nrow=Nstates, byrow=FALSE)
 		CI95upper 		= matrix(quantiles_flat[4,], nrow=Nstates, byrow=FALSE)
-		medians 		= matrix(quantiles_flat[5,], nrow=Nstates, byrow=FALSE)
 	}
 
 	# return results
@@ -369,6 +389,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 					Nrates				= Nrates,
 					AIC					= 2*Nrates - 2*loglikelihood)
 	if(Nbootstraps>0){
+		results$standard_errors = standard_errors
 		results$CI50lower = CI50lower
 		results$CI50upper = CI50upper
 		results$CI95lower = CI95lower

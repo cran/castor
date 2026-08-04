@@ -781,6 +781,13 @@ inline TYPE vector_max(const std::vector<TYPE> &values){
 	return A;
 }
 
+template<class TYPE>
+inline TYPE vector_max(const std::vector<TYPE> &values, const long first, const long last){
+	TYPE A = values[first];
+	for(long i=first; i<=last; ++i) A = (A<values[i] ? values[i] : A);
+	return A;
+}
+
 inline double vector_max_abs(const std::vector<double> &values){
 	double A = 0;
 	for(long i=0; i<values.size(); ++i) A = max(A, abs(values[i]));
@@ -21874,7 +21881,7 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 								const std::vector<long> 	&tree_edge,						// (INPUT) 2D array of size Nedges x 2, in row-major format, with elements in 0,..,(Nclades-1)				
 								const std::vector<double> 	&edge_length, 					// (INPUT) 1D array of size Nedges, or an empty std::vector (all edges have length 1)
 								const std::vector<double> 	&transition_matrix,				// (INPUT) 2D array of size Nstates x Nstates, in row-major format. Transition-rate matrix Q in row-major format, i.e. Q[r*Nstates + c] is (r,c)-th-element of Q and equal to the transition rate r-->c.
-								const std::vector<double>	&prior_probabilities_per_tip, 	// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
+								std::vector<double>			&prior_probabilities_per_tip, 	// (INPUT) 2D array of size Ntips x Nstates, in row-major format, listing prior probability distributions for each tip
 								const std::string			&root_prior_type,				// (INPUT) either "custom" (in which case root_prior[] must be provided) or "likelihoods" (the computed state-likelihoods at the root (D[s]) are used as prior probability distribution) or "max_likelihood" (the root state with greatest computed likelihood is assumed as state of the root). 
 								const std::vector<double>	&root_prior,					// (INPUT) 1D array of size Nstates, listing prior probability distribution for root. Used to combine the root's clade likelihoods (D) into an overall log-likelihood of the model. Only relevant if root_prior_type=="custom", otherwise this can be an empty vector.
 								const double				oldest_age,						// (INPUT) oldest age to consider. Typically this will be <=root_age. If negative, this is set to the root age.
@@ -21884,6 +21891,19 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 	const double start_runtime   = (runtime_out_seconds>0 ? get_thread_monotonic_walltime_seconds() : 0.0);
 	double edge_length_scale = (edge_length.size()==0 ? 1.0 : array_max(edge_length));
 	if(edge_length_scale==0) edge_length_scale = 1;
+	
+	// mathematically the loglikelihood should scale by log(A) if the prior of any given tip are uniformly rescaled by a factor A, however numerically this is not always the case, which can impact outcomes during numerical optimization.
+	// we here thus factor out the tip prior scale at each tip and collect the cumulative effect in LLshift, for numerical stability
+	double LLshift=0, prior_scale;
+	for(long tip=0; tip<Ntips; ++tip){
+		prior_scale = vector_max(prior_probabilities_per_tip, tip*Nstates, tip*Nstates+Nstates-1);
+		if(prior_scale>0){
+			LLshift += log(prior_scale);
+			for(long state=0; state<Nstates; ++state){
+				prior_probabilities_per_tip[tip*Nstates+state] /= prior_scale;
+			}
+		}
+	}
 	
 	// get tree traversal route (root --> tips), not including tips			
 	tree_context context(Ntips, Nnodes, Nedges, -1, tree_edge, false);
@@ -21997,6 +22017,9 @@ Rcpp::List Mk_loglikelihood_CPP(const long					Ntips,
 			loglikelihood += log(L/S) + subroot_posterior_scale;
 		}
 	}
+	
+	// add any correction due to initially factoring out tip prior scales
+	loglikelihood += LLshift;
 
 	return Rcpp::List::create(	Rcpp::Named("success") 			= true, 
 								Rcpp::Named("loglikelihood")	= loglikelihood, 
@@ -28477,15 +28500,14 @@ Rcpp::List generate_tree_from_PSR_CPP(	const std::vector<double>	&age_grid,		// 
 	// generate trees according to the branching ages (=node ages)
 	// all trees will have the same number of edges, tips and nodes
 	const long Nnodes = Ntips-1;
-	long Nedges;
-	lvector root(Ntrees);
+	lvector root(Ntrees), Nedges(Ntrees);
 	std::string error;
 	std::vector<lvector> tree_edge(Ntrees);
 	std::vector<dvector> edge_length(Ntrees);
 	long dummyL;
 	bool OK;
 	for(long tree=0; tree<Ntrees; ++tree){
-		OK = get_tree_from_branching_ages(branching_ages[tree], dummyL, root[tree], Nedges, tree_edge[tree], edge_length[tree], error);
+		OK = get_tree_from_branching_ages(branching_ages[tree], dummyL, root[tree], Nedges[tree], tree_edge[tree], edge_length[tree], error);
 		if(!OK) return Rcpp::List::create( Rcpp::Named("success") = false, Rcpp::Named("error") = "Failed generating tree #"+makeString(tree+1)+": "+error);
 	}
 	return Rcpp::List::create(	Rcpp::Named("success") 		= true,

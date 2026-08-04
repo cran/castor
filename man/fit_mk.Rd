@@ -72,7 +72,7 @@ Optional positive integer, number of randomly chosen starting points to consider
 Optional positive numeric, specifying the maximum time (in seconds) allowed for a single evaluation of the likelihood function. If a specific Mk model takes longer than this threshold to evaluate, then its likelihood is set to -Inf. This option can be used to avoid badly parameterized models during fitting and can thus reduce fitting time. If NULL or <=0, this option is ignored.
 }
 \item{optim_algorithm}{
-Either "optim" or "nlminb", specifying which optimization algorithm to use for maximum-likelihood estimation of the transition matrix.
+Either "optim", "nlminb" or "sbplx" (via \code{nloptr}), specifying which optimization algorithm to use for maximum-likelihood estimation of the transition matrix.
 }
 \item{optim_max_iterations}{
 Maximum number of iterations (per fitting trial) allowed for optimizing the likelihood function.
