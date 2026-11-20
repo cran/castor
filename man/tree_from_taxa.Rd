@@ -43,7 +43,8 @@ A rooted tree of class "phylo".
 
 \seealso{
 \code{\link{consensus_taxonomies}},
-\code{\link{place_tips_taxonomically}}
+\code{\link{place_tips_taxonomically}},
+\code{\link{tree_from_taxonomies}}
 }
 
 

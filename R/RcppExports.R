@@ -433,12 +433,16 @@ get_pairwise_ancestries_CPP <- function(Ntips, Nnodes, Nedges, root, tree_edge, 
     .Call(`_castor_get_pairwise_ancestries_CPP`, Ntips, Nnodes, Nedges, root, tree_edge, focal_clades)
 }
 
-get_most_recent_common_ancestors_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, cladesA, cladesB, verbose, verbose_prefix) {
-    .Call(`_castor_get_most_recent_common_ancestors_CPP`, Ntips, Nnodes, Nedges, tree_edge, cladesA, cladesB, verbose, verbose_prefix)
+get_pairwise_MRCAs_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, cladesA, cladesB, verbose, verbose_prefix) {
+    .Call(`_castor_get_pairwise_MRCAs_CPP`, Ntips, Nnodes, Nedges, tree_edge, cladesA, cladesB, verbose, verbose_prefix)
 }
 
-get_most_recent_common_ancestor_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, descendants) {
-    .Call(`_castor_get_most_recent_common_ancestor_CPP`, Ntips, Nnodes, Nedges, tree_edge, descendants)
+get_MRCA_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, descendants) {
+    .Call(`_castor_get_MRCA_CPP`, Ntips, Nnodes, Nedges, tree_edge, descendants)
+}
+
+get_multiple_MRCAs_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, descendants, set_starts) {
+    .Call(`_castor_get_multiple_MRCAs_CPP`, Ntips, Nnodes, Nedges, tree_edge, descendants, set_starts)
 }
 
 is_monophyletic_tip_set_CPP <- function(Ntips, Nnodes, Nedges, tree_edge, focal_tips) {

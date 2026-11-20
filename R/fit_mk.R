@@ -259,7 +259,7 @@ fit_mk = function(	trees, 									# either a single tree in phylo format, or a 
 			Nevaluations 	= NA
 			Niterations		= fit$iterations
 			params			= fit$solution
-			converged 		= (fit$status==0)
+			converged 		= (fit$status %in% c(1,2,3,4))
 		}else{
 			fit = stats::nlminb(start_dense_rates/rate_scales, 
 								function(x) objective_function(x*rate_scales, trial), 

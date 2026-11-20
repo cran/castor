@@ -13,6 +13,16 @@ invert_permutation = function(permutation){
 }
 
 
+# given a list of sublists, or a list of vectors, flatten it into a single vector and also return the start indices of the original sublists in the returned flat vector
+flatten_list_of_lists = function(LV){
+	# Flatten the list into a single vector
+	flattened 	= unlist(LV, use.names=FALSE)
+	sublengths 	= lengths(LV)	
+	starts 		= cumsum(sublengths) - sublengths + 1L
+	return(list(flattened = flattened, starts = starts))
+}
+
+
 # given a numeric vector, determine the indices of the N smallest non-nan values
 get_smallest_items = function(values, N, check_nan=TRUE){
 	if(check_nan){
@@ -1046,7 +1056,7 @@ get_connected_subgraphs = function(Nnodes, edges){
 
 
 # Sarting from a mapping pool-->group, calculate the reverse mapping group-->member_list
-# this function returns a list of length Ngroups, where each element is a 1D vector listing member indices
+# this function returns a list of length Ngroups, where each element is a 1D integer vector listing member indices
 # values in pool2group[] must be between 1 and Ngroups, or NA or <=0 (in which case the item is not affiliated with any group)
 get_member_lists_from_group_assignments = function(Ngroups, pool2group){
 	if(Ngroups==0) return(list())
@@ -3462,3 +3472,148 @@ asarray = function(data){
 }
 
 
+
+# map numeric values to colors based on a color map
+map_values_to_colors = function(values, 				 # numeric vector of values to be mapped to colors. May contain NA & NaN, which will be mapped to na_color.
+								palette     = "viridis", # name of the color palette, must be compatible with grDevices::hcl.colors. May include the suffix ".rev" to indicate reverse direction.
+								Nlevels 	= 30, 		 # number of discrete color levels. If NULL or Inf, then the mapping is continuous.
+								min_value	= NULL,		 # optional minimum value corresponding to the lower end of the color map. If NULL or NaN or NA, this is set to the lowest non-NA input value.
+								max_value	= NULL,		 # optional maximum value corresponding to the upper end of the color map. If NULL or NaN or NA, this is set to the highest non-NA input value.
+								na_color    = "#707070", # color to use for NA/NaN values
+								scaling		= "linear"){ # either "linear" or "log"
+	if(!(scaling %in% c("linear","log"))) stop(sprintf("Invalid scaling '%s'",scaling))
+	# get the anchor colors
+	if(endsWith(palette,".rev")){
+		palette = substr(palette, 1, nchar(palette)-4)
+		reverse = TRUE
+	}else{
+		reverse = FALSE
+	}
+	continuous = (is.null(Nlevels) || is.infinite(Nlevels) || is.nan(Nlevels) || is.na(Nlevels))
+	anchor_colors = grDevices::hcl.colors((if(continuous) 100 else Nlevels), palette=palette, rev=reverse, fixup=TRUE)
+	# determine value range to map to the color palette
+	if(is.null(min_value) || is.nan(min_value) || is.na(min_value)){
+		if(scaling=="linear"){
+			min_value = min(values, na.rm=TRUE)
+		}else{
+			min_value = min(values[values>0], na.rm=TRUE)		
+		}
+	}else{
+		values = pmax(values, min_value)
+	}
+	if(is.null(max_value) || is.nan(max_value) || is.na(max_value)){
+		if(scaling=="linear"){
+			max_value = max(values, na.rm=TRUE)
+		}else{
+			max_value = max(values[values>0], na.rm=TRUE)
+		}
+	}else{
+		values = pmin(values, max_value)
+	}
+	# determine the value mapped to each anchor color
+	if(scaling=="linear"){
+		anchor_values = seq(min_value, max_value, length.out=length(anchor_colors))
+	}else if(scaling=="log"){
+		anchor_values = exp(seq(log(min_value), log(max_value), length.out=length(anchor_colors)))
+	}
+	if(continuous){
+		# interpolate colors linearly between anchors, in RGB space
+		anchor_rgb = grDevices::col2rgb(anchor_colors)			# 3 x Nanchors, in 0..255
+		#anchor_pos = seq(0, 1, length.out = ncol(anchor_rgb))	# anchor positions on [0,1]
+		red        = stats::approx(x=anchor_values, y=anchor_rgb[1,], xout=values, rule=2)$y
+		green      = stats::approx(x=anchor_values, y=anchor_rgb[2,], xout=values, rule=2)$y
+		blue       = stats::approx(x=anchor_values, y=anchor_rgb[3,], xout=values, rule=2)$y
+		colors     = character(length(values))
+		valid      = !is.na(values)
+		colors[valid] = grDevices::rgb(red[valid], green[valid], blue[valid], maxColorValue=255)
+	}else{
+		# bin values into discrete colors
+		colors = anchor_colors[round(stats::approx(x=anchor_values, y=seq_along(anchor_values), xout=values, rule=2)$y)]
+	}
+	colors[is.na(values)] = na_color
+	
+	# also construct a summary of the color map, e.g. for adding color gradient bars as plot legends
+	return(list(colors 			= colors, # character vector of the same length as values[], listing the corresponding colors
+				anchor_colors	= anchor_colors,	# character vector listing the discrete colors that define the used palette, in HEX format
+				anchor_values	= anchor_values,	# numeric vector synchronized with anchor_colors, listing the value mapped to each anchor color
+				min_value		= min_value,		# lower value cap, below which all values are mapped to the first anchor color
+				max_value		= max_value))		# upper value cap, above which all values are mapped to the last anchor color
+}
+
+
+
+
+
+# add a color bar to an existing plot. A plot must already be open.
+show_color_bar = function(	min_value,					# numeric. Value at the LOW end of the gradient (bottom of a vertical bar, left of a horizontal one).
+							max_value,					# numeric. Value at the HIGH end of the gradient. Should exceed min_value; if not, a single centered tick is drawn.
+							palette,					# character. Name of the color palette, compatible with map_values_to_colors / grDevices::hcl.colors. May include the ".rev" suffix to reverse direction.
+							x,							# numeric. X coordinate (in the current plot's user units) of the bar. The precise positioning of the bar relative to x depends on xjust.
+							y,							# numeric. Y coordinate (user units) of the bar. The precise positioning of the bar relative to y depends on yjust.
+							width,						# numeric. Width of the bar, in user x-units.
+							height,						# numeric. Height of the bar, in user y-units.
+							xjust		= 0,			# horizontal justification of (x,y) relative to the bar, as in graphics::legend: 0 = x is the bar's LEFT edge, 0.5 = x is its horizontal center, 1 = x is its RIGHT edge.
+							yjust		= 0,			# vertical justification of (x,y) relative to the bar, as in graphics::legend: 0 = y is the bar's BOTTOM edge, 0.5 = y is its vertical center, 1 = y is its TOP edge.
+							scaling		= "linear", 	# either "linear" or "log"
+							orientation = "vertical",	# character. Either "vertical" (low at bottom, ticks on the right) or "horizontal" (low at left, ticks below).
+							Nlevels 	= 30, 		 	# number of discrete color levels. If NULL or Inf, then the color gradient is continuous.
+							Nticks 		= 5,			# integer. Approximate number of axis tick marks; passed to pretty(), so the actual count may differ slightly.
+							label 		= NULL){		# optional character. Text drawn just above the bar (e.g. the variable name). NULL for no label.
+	# gradient colors from the palette name, via the same mapping as the data,
+	# so the bar matches the colored rings/points exactly.
+	continuous = (is.null(Nlevels) || is.infinite(Nlevels) || is.nan(Nlevels) || is.na(Nlevels))
+	bar_colors = map_values_to_colors(values	= min_value, # dummy
+									  palette   = palette,
+									  Nlevels   = (if(continuous) 200 else Nlevels),
+									  min_value = min_value,
+									  max_value = max_value,
+								 	  scaling	= scaling)$anchor_colors
+	# tick positions (guard a degenerate range)
+	span = max_value - min_value
+	if(is.finite(span) && (span > 0)){
+		if(scaling == "log"){
+			ticks     = grDevices::axisTicks(usr = log10(c(min_value, max_value)), log = TRUE, nint = Nticks)
+			ticks     = ticks[(ticks >= min_value) & (ticks <= max_value)]
+			tick_frac = (log(ticks) - log(min_value)) / (log(max_value) - log(min_value))
+		}else{
+			ticks     = pretty(c(min_value, max_value), n = Nticks)
+			ticks     = ticks[(ticks >= min_value) & (ticks <= max_value)]
+			tick_frac = (ticks - min_value) / span
+		}
+	}else{
+		ticks     = min_value
+		tick_frac = 0.5
+	}
+	# justify the (x,y) reference point to the bar's lower-left corner (as in graphics::legend)
+	x = x - xjust * width
+	y = y - yjust * height
+	# draw the bar: continuous -> smooth raster; discrete -> crisp vector rectangles
+	# (rectangles can't be re-interpolated by PDF/SVG viewers or the quartz device, unlike a raster)
+	Nb = length(bar_colors)
+	if(orientation == "vertical"){
+		if(continuous){
+			# raster row 1 is drawn at the TOP => reverse so the high value sits on top
+			graphics::rasterImage(grDevices::as.raster(matrix(rev(bar_colors), ncol = 1)),
+								x, y, x + width, y + height, interpolate = TRUE)
+		}else{
+			edges = y + (0:Nb)/Nb * height					# Nb+1 band boundaries, low at bottom
+			graphics::rect(x, edges[-(Nb + 1)], x + width, edges[-1], col = bar_colors, border = NA)
+		}
+		graphics::rect(x, y, x + width, y + height, border = "#00000060")
+		graphics::axis(4, at = y + height * tick_frac, labels = ticks,
+					pos = x + width, las = 1, cex.axis = 0.8)
+		if(!is.null(label)) graphics::text(x, y + height, labels = label, pos = 3, xpd = NA)
+	}else{
+		if(continuous){
+			graphics::rasterImage(grDevices::as.raster(matrix(bar_colors, nrow = 1)),
+								x, y, x + width, y + height, interpolate = TRUE)
+		}else{
+			edges = x + (0:Nb)/Nb * width					# Nb+1 band boundaries, low at left
+			graphics::rect(edges[-(Nb + 1)], y, edges[-1], y + height, col = bar_colors, border = NA)
+		}
+		graphics::rect(x, y, x + width, y + height, border = "#00000060")
+		graphics::axis(1, at = x + width * tick_frac, labels = ticks,
+					pos = y, cex.axis = 0.8)
+		if(!is.null(label)) graphics::text(x + width/2, y + height, labels = label, pos = 3, xpd = NA)
+	}
+}

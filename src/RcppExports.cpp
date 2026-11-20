@@ -1790,9 +1790,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// get_most_recent_common_ancestors_CPP
-IntegerVector get_most_recent_common_ancestors_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& cladesA, const std::vector<long>& cladesB, bool verbose, const std::string& verbose_prefix);
-RcppExport SEXP _castor_get_most_recent_common_ancestors_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP cladesASEXP, SEXP cladesBSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
+// get_pairwise_MRCAs_CPP
+IntegerVector get_pairwise_MRCAs_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& cladesA, const std::vector<long>& cladesB, bool verbose, const std::string& verbose_prefix);
+RcppExport SEXP _castor_get_pairwise_MRCAs_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP cladesASEXP, SEXP cladesBSEXP, SEXP verboseSEXP, SEXP verbose_prefixSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1804,13 +1804,13 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const std::vector<long>& >::type cladesB(cladesBSEXP);
     Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< const std::string& >::type verbose_prefix(verbose_prefixSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_most_recent_common_ancestors_CPP(Ntips, Nnodes, Nedges, tree_edge, cladesA, cladesB, verbose, verbose_prefix));
+    rcpp_result_gen = Rcpp::wrap(get_pairwise_MRCAs_CPP(Ntips, Nnodes, Nedges, tree_edge, cladesA, cladesB, verbose, verbose_prefix));
     return rcpp_result_gen;
 END_RCPP
 }
-// get_most_recent_common_ancestor_CPP
-long get_most_recent_common_ancestor_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& descendants);
-RcppExport SEXP _castor_get_most_recent_common_ancestor_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP descendantsSEXP) {
+// get_MRCA_CPP
+long get_MRCA_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& descendants);
+RcppExport SEXP _castor_get_MRCA_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP descendantsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -1819,7 +1819,23 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
     Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
     Rcpp::traits::input_parameter< const std::vector<long>& >::type descendants(descendantsSEXP);
-    rcpp_result_gen = Rcpp::wrap(get_most_recent_common_ancestor_CPP(Ntips, Nnodes, Nedges, tree_edge, descendants));
+    rcpp_result_gen = Rcpp::wrap(get_MRCA_CPP(Ntips, Nnodes, Nedges, tree_edge, descendants));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_multiple_MRCAs_CPP
+IntegerVector get_multiple_MRCAs_CPP(const long Ntips, const long Nnodes, const long Nedges, const std::vector<long>& tree_edge, const std::vector<long>& descendants, const std::vector<long>& set_starts);
+RcppExport SEXP _castor_get_multiple_MRCAs_CPP(SEXP NtipsSEXP, SEXP NnodesSEXP, SEXP NedgesSEXP, SEXP tree_edgeSEXP, SEXP descendantsSEXP, SEXP set_startsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const long >::type Ntips(NtipsSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nnodes(NnodesSEXP);
+    Rcpp::traits::input_parameter< const long >::type Nedges(NedgesSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type tree_edge(tree_edgeSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type descendants(descendantsSEXP);
+    Rcpp::traits::input_parameter< const std::vector<long>& >::type set_starts(set_startsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_multiple_MRCAs_CPP(Ntips, Nnodes, Nedges, tree_edge, descendants, set_starts));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -3233,8 +3249,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_castor_get_trait_stats_at_times_CPP", (DL_FUNC) &_castor_get_trait_stats_at_times_CPP, 8},
     {"_castor_get_mrca_defining_tips_CPP", (DL_FUNC) &_castor_get_mrca_defining_tips_CPP, 7},
     {"_castor_get_pairwise_ancestries_CPP", (DL_FUNC) &_castor_get_pairwise_ancestries_CPP, 6},
-    {"_castor_get_most_recent_common_ancestors_CPP", (DL_FUNC) &_castor_get_most_recent_common_ancestors_CPP, 8},
-    {"_castor_get_most_recent_common_ancestor_CPP", (DL_FUNC) &_castor_get_most_recent_common_ancestor_CPP, 5},
+    {"_castor_get_pairwise_MRCAs_CPP", (DL_FUNC) &_castor_get_pairwise_MRCAs_CPP, 8},
+    {"_castor_get_MRCA_CPP", (DL_FUNC) &_castor_get_MRCA_CPP, 5},
+    {"_castor_get_multiple_MRCAs_CPP", (DL_FUNC) &_castor_get_multiple_MRCAs_CPP, 6},
     {"_castor_is_monophyletic_tip_set_CPP", (DL_FUNC) &_castor_is_monophyletic_tip_set_CPP, 5},
     {"_castor_WMPR_ASR_CPP", (DL_FUNC) &_castor_WMPR_ASR_CPP, 12},
     {"_castor_ASR_with_fixed_rates_Markov_model_CPP", (DL_FUNC) &_castor_ASR_with_fixed_rates_Markov_model_CPP, 19},

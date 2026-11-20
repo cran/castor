@@ -20997,14 +20997,14 @@ IntegerVector get_pairwise_ancestries_CPP(	const long 				Ntips,
 //   The input tree can be multifurcating and/or monofurcating
 // Attention: 0-based indexing is used for input and output variables, so make sure to shift indices in R before and after calling this function
 // [[Rcpp::export]]
-IntegerVector get_most_recent_common_ancestors_CPP(	const long 			Ntips,
-													const long 			Nnodes,
-													const long 			Nedges,
-													const std::vector<long> &tree_edge,			// 2D array of size Nedges x 2 in row-major format
-													const std::vector<long> &cladesA,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
-													const std::vector<long>	&cladesB,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
-													bool 				verbose,
-													const std::string 	&verbose_prefix){
+IntegerVector get_pairwise_MRCAs_CPP(const long 		Ntips,
+									const long 			Nnodes,
+									const long 			Nedges,
+									const std::vector<long> &tree_edge,			// 2D array of size Nedges x 2 in row-major format
+									const std::vector<long> &cladesA,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
+									const std::vector<long>	&cladesB,			// 1D array of size Npairs, containing values in 0:(Nclades-1)
+									bool 				verbose,
+									const std::string 	&verbose_prefix){
 	const long Npairs = cladesA.size();
 	const long Nclades = Ntips + Nnodes;
 	long parent, clade;
@@ -21143,11 +21143,11 @@ long most_recent_common_ancestor(const long 			Ntips,
 
 // Given a set of clades (tips & nodes, "descendants"), find their most recent common ancestor
 // [[Rcpp::export]]
-long get_most_recent_common_ancestor_CPP(	const long 			Ntips,
-											const long 			Nnodes,
-											const long 			Nedges,
-											const std::vector<long> &tree_edge,			// 2D array of size Nedges x 2 in row-major format
-											const std::vector<long> &descendants){		// 1D array of size ND, containing values in 0:(Nclades-1)
+long get_MRCA_CPP(	const long 			Ntips,
+					const long 			Nnodes,
+					const long 			Nedges,
+					const std::vector<long> &tree_edge,			// 2D array of size Nedges x 2 in row-major format
+					const std::vector<long> &descendants){		// 1D array of size ND, containing values in 0:(Nclades-1)
 	const long ND = descendants.size();
 	if(ND==0) return 0;
 	if(ND==1) return descendants[0];
@@ -21164,6 +21164,70 @@ long get_most_recent_common_ancestor_CPP(	const long 			Ntips,
 }
 
 
+// Given multiple sets of clades (tips & nodes, "descendants"), find each set's most recent common ancestor
+// This is the multi-set version of get_MRCA_CPP(), and is more efficient than calling get_MRCA_CPP() many times on the same tree
+// The depth (number of edges from the root) of every clade is computed once, after which the MRCA of each set is found by successively merging its descendants, i.e. by walking upwards from each descendant until meeting the current MRCA.
+// Hence, the time complexity is O(Nclades + sum_s ND_s*D), where ND_s is the size of set s and D is the typical clade depth. In particular, no O(Nclades) work is needed per set.
+// Returns -1 for empty sets or sets containing invalid clade indices.
+// [[Rcpp::export]]
+IntegerVector get_multiple_MRCAs_CPP(const long 			Ntips,
+									const long 				Nnodes,
+									const long 				Nedges,
+									const std::vector<long> &tree_edge,		// 2D array of size Nedges x 2 in row-major format
+									const std::vector<long> &descendants,	// 1D array of size ND1+ND2+...+NDn, containing values in 0:(Nclades-1)
+									const std::vector<long> &set_starts){	// 1D array of size n, containing values in 0,..,descendants.size, specifying the index of each set's first descendant in descendants[]. In other words, descendants[] is a flattened list of lists, and set_starts[] specifies where the sublists got merged. Set s spans descendants[set_starts[s]],..,descendants[set_starts[s+1]-1], so empty sets are allowed.
+	const long NS 		= set_starts.size(); // number of sets, for each of which an MRCA is to be found
+	const long Nclades	= Ntips + Nnodes;
+	const long NDtotal	= descendants.size();
+
+	// determine parent clade for each clade (-1 for the root)
+	std::vector<long> clade2parent;
+	get_parent_per_clade(Ntips, Nnodes, Nedges, tree_edge, clade2parent);
+
+	// determine the depth (number of edges from the root) of each clade
+	// each clade's depth is computed by walking upwards until a clade with known depth (or the root) is reached, then filling in the depths along the traversed path. Each clade is thus visited only a constant number of times.
+	std::vector<long> clade2depth(Nclades,-1), path;
+	for(long focal=0, clade; focal<Nclades; ++focal){
+		if(clade2depth[focal]>=0) continue;
+		path.clear();
+		clade = focal;
+		while((clade2depth[clade]<0) && (clade2parent[clade]>=0)){
+			path.push_back(clade);
+			clade = clade2parent[clade];
+		}
+		if(clade2depth[clade]<0) clade2depth[clade] = 0; // reached the root
+		for(long p=long(path.size())-1; p>=0; --p){
+			clade2depth[path[p]] = clade2depth[clade2parent[path[p]]] + 1;
+		}
+	}
+
+	// determine MRCA of each set
+	IntegerVector MRCAs(NS,-1);
+	long first, end, mrca, other;
+	bool valid;
+	for(long s=0; s<NS; ++s){
+		first 	= set_starts[s];
+		end 	= (s==(NS-1) ? NDtotal : set_starts[s+1]); // one past the last descendant of this set
+		if((first<0) || (first>=end) || (end>NDtotal)) continue; // empty or invalid set
+		valid = true;
+		mrca  = descendants[first];
+		if((mrca<0) || (mrca>=Nclades)) continue;
+		for(long d=first+1; d<end; ++d){
+			other = descendants[d];
+			if((other<0) || (other>=Nclades)){ valid = false; break; }
+			// bring both clades to the same depth, then walk upwards in parallel until they meet
+			while(clade2depth[other]>clade2depth[mrca]) other = clade2parent[other];
+			while(clade2depth[mrca]>clade2depth[other]) mrca = clade2parent[mrca];
+			while(mrca!=other){
+				mrca  = clade2parent[mrca];
+				other = clade2parent[other];
+			}
+		}
+		if(valid) MRCAs[s] = mrca;
+	}
+	return MRCAs;
+}
+
 
 // Given a rooted tree, determine whether a set of tips is monophyletic
 // Requirements:
@@ -21177,11 +21241,11 @@ bool is_monophyletic_tip_set_CPP(	const long 			Ntips,
 									const std::vector<long> &focal_tips){		// (INPUT) 1D array of size Nfocals, listing focal tip indices to test for monophyly
 	if(focal_tips.size()<=1) return true;
 	// find MRCA of focal tips
-	const long mrca = get_most_recent_common_ancestor_CPP(	Ntips,
-															Nnodes,
-															Nedges,
-															tree_edge,
-															focal_tips);
+	const long mrca = get_MRCA_CPP(	Ntips,
+									Nnodes,
+									Nedges,
+									tree_edge,
+									focal_tips);
 	if(mrca<Ntips) return true; // MRCA is a tip, so must be monophyletic
 	
 	// get edge mappings for tree traversal

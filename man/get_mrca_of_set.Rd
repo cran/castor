@@ -31,7 +31,9 @@ An integer in 1,..,(Ntips+Nnodes), representing the MRCA using the same index as
 %}
 
 \seealso{
-\code{\link{get_pairwise_mrcas}}, \code{\link{get_tips_for_mrcas}}
+\code{\link{get_multiple_mrcas}}, 
+\code{\link{get_pairwise_mrcas}}, 
+\code{\link{get_tips_for_mrcas}}
 }
 
 \examples{

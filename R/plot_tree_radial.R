@@ -24,6 +24,12 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 							ring_width				= 5,		# numeric, line width to use for colored rings around the tree. Only relevant if ring_colors is provided.
 							ring_border_width		= 1,		# line thickness for the ring borders
 							ring_border_color		= "#FFFFFF",# color to use for the ring borders, i.e., separating the rings from each other and from the tree
+							ring_values				= NULL,		# optional numeric data.frame or matrix of size Ntips x NVrings, specifying one or more multi-colored rings to show around the tree, where colors are computed based on numeric values according to some color map. The entries of ring_values[] must be numbers or NA, so ring_values[t,r] is the value to be color-coded for tip t on ring r. A value of NA means will map to ring_value_na_color. If ring_values[] has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
+							ring_value_palettes		= "Inferno",# character vector listing color palettes to use for mapping ring_values to colors. Palettes must be recognized by grDevices::hcl.colors. Each palette include the ".rev" suffix to reverse its direction. Palettes are recycled as needed.
+							ring_value_na_color		= "#808080",# color to use for NA/NaN values in value rings
+							ring_value_scaling		= "linear",	# either "linear" or "log"
+							ring_min_value			= NULL,		# optional numeric, or numeric vector of length NVrings, specifying the lower value cap for value rings, i.e., mapped to the low color. May contain NA/NaN, in which case the corresponding min values are inferred from the data.
+							ring_max_value			= NULL,		# optional numeric, or numeric vector of length NVrings, specifying the upper value cap for value rings, i.e., mapped to the high color. May contain NA/NaN, in which case the corresponding max values are inferred from the data.
 							dotstack_heights		= NULL,		# optional data.frame or matrix of size Ntips x ND, specifying one or more dot-stacks to show around the tree, i.e. for visualizing discrete quantitative data. The entries of dotstack_heights[] must be non-negative integers, so dotstack_heights[t,d] is the number of dots to stack for tip t in the d'th dot-stack. If dotstack_heights[] has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
 							dotstack_color			= "black",	# either a single color or a vector colors, specifying the dot colors to use for the dot-stacks. Colors are recycled if needed.
 							dotstack_border_width	= 1,		# line thickness for the dotstack borders. If NULL, this is set equal to ring_border_width.
@@ -44,9 +50,18 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 	if(is.null(plot_title)) plot_title = ""
 	if(is.null(dotstack_border_width)) dotstack_border_width = ring_border_width
 	if(is.null(dotstack_border_color)) dotstack_border_color = dotstack_border_color
-	Nrings = (if(is.null(ring_colors)) 0 else ncol(ring_colors))
+	Nrings = (if(is.null(ring_colors)) 0 else ncol(ring_colors)) + (if(is.null(ring_values)) 0 else ncol(ring_values))
 	NDS	   = (if(is.null(dotstack_heights)) 0 else ncol(dotstack_heights))
-	
+	NVrings= (if(is.null(ring_values)) 0 else ncol(ring_values))
+	if(NVrings>0){
+		if(is.null(ring_min_value)) ring_min_value = rep(NA,NVrings)
+		else if(length(ring_min_value)==1) ring_min_value = rep(ring_min_value,NVrings)
+		else if(length(ring_min_value)!=NVrings) stop(sprintf("ring_min_value must contain 1 or %d elements, instead found %d",NVrings,length(ring_min_value)))
+		if(is.null(ring_max_value)) ring_max_value = rep(NA,NVrings)
+		else if(length(ring_max_value)==1) ring_max_value = rep(ring_max_value,NVrings)
+		else if(length(ring_max_value)!=NVrings) stop(sprintf("ring_max_value must contain 1 or %d elements, instead found %d",NVrings,length(ring_max_value)))
+	}
+		
 	# convert all user-supplied angles from degrees to radians
 	opening = opening * (pi/180)
 	rotate	= rotate * (pi/180)
@@ -141,6 +156,7 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 	# instantiate plot file with proper dimensions and margins
 	if(is.null(tip_label_cex)) tip_label_cex = min(1, 3*plot_width*max(0,2*pi-opening)*mean(geometry$clade_rho[1:Ntips])/(Ntips*geometry$max_rho))
 	legend_margin = (if(is.null(legend_labels) || (length(legend_labels)==0)) 0 else 4+0.4*max(sapply(legend_labels, FUN=nchar))) # margin that should be reserved around the figure to fit the tip labels
+	cbar_width_inches = plot_width*0.2
 	margins_chars = c(1+2*show_scale_bar, # bottom
 					1, # left
 					2+(1+length(strsplit(plot_title, "\n", fixed=TRUE)[[1]])), # top
@@ -153,6 +169,7 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 					   + NDS*dotstack_border_width/72
 					   + (if(NDS==0) 0 else sum(apply(dotstack_heights,2,max)+2)*(1.1*plot_width/2)*(2*pi-opening)/Ntips)
 					   + (if(Nsectors==0) 0 else (sector_gap+sector_width)/72))
+	if(NVrings>0) margins_inches[2] = margins_inches[4] + cbar_width_inches # make space on the right left for the color bar(s)
 	margins_chars	= margins_inches/graphics_params$csi # update margin sizes in char units
 	initiate_plot(file_path=file_path, width=plot_width+margins_inches[2]+margins_inches[4], height=plot_width+margins_inches[1]+margins_inches[3], dpi=200)
 	graphics::par(mar = margins_chars, xpd = NA)
@@ -168,7 +185,9 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 					axes	= FALSE,
 					xlim	= c(-1.1*geometry$max_rho, 1.1*geometry$max_rho),
 					ylim	= c(-1.1*geometry$max_rho, 1.1*geometry$max_rho))
-	lw2coordinates = (graphics::grconvertX(1, "inches", "user") - graphics::grconvertX(0, "inches", "user"))/96 # conversion factor between line widths (e.g., used for lwd) and user coordinates
+	inch2coordinates 	= graphics::grconvertX(1, "inches", "user") - graphics::grconvertX(0, "inches", "user") # conversion factor between inches and user coordinates
+	lw2coordinates 		= inch2coordinates/96 # conversion factor between line widths (e.g., used for lwd) and user coordinates
+	chars2coordinates 	= graphics_params$csi*inch2coordinates # conversion factor between char width and user coordinates
 
 	# show edges as lines
 	if(scale_edge_widths) mass2width = function(mass){ base_edge_width*(1+4*sqrt((mass-1)/(Ntips-1))); }
@@ -223,10 +242,31 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 
 	# show ring colors
 	if(Nrings>0){
-		if(!is.null(rownames(ring_colors))){
+		if((!is.null(ring_colors)) && (!is.null(rownames(ring_colors)))){
 			tip2row = match(tree$tip.label,rownames(ring_colors))
 			if(any(is.na(tip2row))) stop(sprintf("%d out of %d tree tips did not match any row names in ring_colors[], for example '%s'.",sum(is.na(tip2row)),Ntips,tree$tip.label[is.na(tip2row)][[1]]))
 			ring_colors = ring_colors[tip2row,,drop=FALSE]
+		}
+		if((!is.null(ring_values)) && (!is.null(rownames(ring_values)))){
+			tip2row = match(tree$tip.label,rownames(ring_values))
+			if(any(is.na(tip2row))) stop(sprintf("%d out of %d tree tips did not match any row names in ring_values[], for example '%s'.",sum(is.na(tip2row)),Ntips,tree$tip.label[is.na(tip2row)][[1]]))
+			ring_values = ring_values[tip2row,,drop=FALSE]
+		}
+		if(!is.null(ring_values)){
+			ring_value_palettes = rep(ring_value_palettes, length.out=ncol(ring_values))
+			ring_value_colormappings = lapply(seq_len(ncol(ring_values)), 
+												  FUN=function(k){ map_values_to_colors(ring_values[,k], 
+																						palette		= ring_value_palettes[k],
+																						min_value	= ring_min_value[k],
+																						max_value	= ring_max_value[k],
+																						Nlevels		= NULL,
+																						na_color	= ring_value_na_color,
+																						scaling		= ring_value_scaling) })
+			ring_value_colors = data.frame(lapply(ring_value_colormappings, FUN=function(CM){ CM$colors }))
+			colnames(ring_value_colors) = colnames(ring_values)
+			rownames(ring_value_colors) = tree$tip.label
+			# attach ring_value_colors to the ring_colors dataframe
+			ring_colors = (if(is.null(ring_colors)) ring_value_colors else cbind(ring_colors,ring_value_colors))
 		}
 		ring_border_rhos = c(geometry$max_rho+lw2coordinates*ring_border_width*2)
 		for(ring in seq_len(Nrings)){
@@ -373,6 +413,26 @@ plot_tree_radial = function(tree,								# rooted phylogenetic tree of class "ph
 						yjust	= 1,
 						lwd 	= 4,
 						xpd		= TRUE)
+	}
+	# show color bars
+	if((!is.null(ring_values)) && (ncol(ring_values)>0)){
+		cbar_height_inches = cbar_width_inches*0.2
+		for(k in seq_len(NVrings)){
+			show_color_bar(	min_value	= ring_value_colormappings[[k]]$min_value,
+							max_value	= ring_value_colormappings[[k]]$max_value,
+							palette		= ring_value_palettes[k],
+							x			= -1.05 * geometry$max_rho,
+							y			= -geometry$max_rho + (NVrings-k)*(cbar_height_inches*inch2coordinates+4*chars2coordinates),
+							width		= cbar_width_inches*inch2coordinates,
+							height		= cbar_height_inches*inch2coordinates,
+							xjust		= 1,
+							yjust		= 1,
+							scaling		= ring_value_scaling,
+							orientation = "horizontal",
+							Nlevels 	= 20,
+							Nticks 		= 5,
+							label 		= colnames(ring_values)[k])
+		}
 	}
 
 	if(!is.null(file_path)) invisible(grDevices::dev.off())

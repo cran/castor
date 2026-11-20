@@ -5,7 +5,7 @@ Plot a tree in radial layout.
 }
 \description{
 Given a rooted phylogenetic tree, visualize the tree in radial form, i.e., with the root placed in the center and descending clades radiating outwards.
-Optionally, categorial tip data may be displayed in the form of colored rings and discrete-quantitative tip data may be displayed in the form of dot-stacks around the tree.
+Optionally, categorical and numerical tip data may be displayed in the form of colored rings and discrete-quantitative tip data may be displayed in the form of dot-stacks around the tree.
 }
 \usage{
 plot_tree_radial(tree,
@@ -33,6 +33,12 @@ plot_tree_radial(tree,
                 ring_width            = 5,
                 ring_border_width     = 1,
                 ring_border_color     = "#FFFFFF",
+                ring_values           = NULL,
+                ring_value_palettes   = "Inferno",
+                ring_value_na_color   = "#808080",
+                ring_value_scaling    = "linear",
+                ring_min_value        = NULL,
+                ring_max_value        = NULL,
                 dotstack_heights      = NULL,
                 dotstack_color        = "black",
                 dotstack_border_width = 1,
@@ -117,7 +123,7 @@ Color of the root edge, if applicable.
 Either a single character or a character vector of length \code{Ntips} or an RGB tuple or an RGBA tuple, specifying tip label colors & alpha. This vector must be synchronized with the tree tips.
 }
 \item{ring_colors}{
-Optional specification of categorial data to be visualized as multi-colored rings around the tree. Must be either a data.frame or a matrix of size Ntips x NC, specifying one or more multi-colored rings to show around the tree.
+Optional specification of categorical data to be visualized as multi-colored rings around the tree. Must be either a data.frame or a matrix of size Ntips x NC, specifying one or more multi-colored rings to show around the tree.
 The entries of \code{ring_colors} must be valid HEX color characters, with \code{ring_colors[t,r]} being the color for tip t on ring r. An entry of \code{NULL} or \code{NA} means no color segment is drawn for a tip, effectively keeping the background color.
 If \code{ring_colors} has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
 }
@@ -129,6 +135,33 @@ Numeric, line width to use for the ring borders. A value of 0 means zero space b
 }
 \item{ring_border_color}{
 Color to use for the ring borders, i.e., separating the rings from each other and from the tree.
+}
+\item{ring_values}{
+Optional specification of numerical data to be visualized as colored rings around the tree. 
+Must be either a data.frame or a matrix of size Ntips x NV, specifying one or more rings to show around the tree, where colors are computed based on numeric values according to some color map (aka. palette). 
+The entries of \code{ring_values} must be numbers or NA, so ring_values[t,r] is the value to be color-coded for tip t on ring r. 
+A value of NA means will map to \code{ring_value_na_color}. If \code{ring_values} has row names, these will be matched to the tip labels, otherwise rows are assumed to already be synchronized with the tree's tips.
+}
+\item{ring_value_palettes}{
+Character vector listing the names of color palettes to use for mapping numerical ring values to colors.
+Palettes must be recognized by \code{grDevices::hcl.colors}.
+Each palette include the ``.rev'' suffix to reverse its direction, for example ``Inferno.rev''.
+Palettes are recycled as needed.
+}
+\item{ring_value_na_color}{
+Character, color to use for NA/NaN values in numerical value rings in HEX format.
+Only applicable to \code{ring_values}, not to \code{ring_colors}.
+}
+\item{ring_value_scaling}{
+Character, specifying how to scale numerical ring values prior to color mapping. Ether ``linear'' or ``log''.
+}
+\item{ring_min_value}{
+Optional numeric, or numeric vector of length NV, specifying the lower value cap for value rings, i.e., mapped to the low color.
+May contain NA/NaN, in which case the corresponding min values are inferred from the data.
+}
+\item{ring_max_value}{
+Optional numeric, or numeric vector of length NV, specifying the upper value cap for value rings, i.e., mapped to the high color.
+May contain NA/NaN, in which case the corresponding max values are inferred from the data.
 }
 \item{dotstack_heights}{
 Optional specification of discrete quantitative data to be visualized as stacked dots around the tree. Must be either a data.frame or a matrix of size Ntips x ND, specifying one or more dot stacks to show around the tree.

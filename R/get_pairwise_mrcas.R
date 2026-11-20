@@ -35,19 +35,13 @@ get_pairwise_mrcas = function(tree, A, B, check_input=TRUE){
 		if(minB<1 || maxB>(Ntips+Nnodes)) stop(sprintf("ERROR: List B must contain values between 1 and Ntips+Nnodes (%d); instead, found values from %d to %d",Ntips+Nnodes,minB,maxB))
 	}
 	
-	mrcas = get_most_recent_common_ancestors_CPP(Ntips			= Ntips,
-												Nnodes			= tree$Nnode,
-												Nedges			= nrow(tree$edge),
-												tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
-												cladesA			= A-1,
-												cladesB			= B-1,
-												verbose			= FALSE,
-												verbose_prefix	= "");
-# 	mrcas = get_MRCAs_CPP(	Ntips			= Ntips,
-# 							Nnodes			= tree$Nnode,
-# 							Nedges			= nrow(tree$edge),
-# 							tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
-# 							cladesA			= A-1,
-# 							cladesB			= B-1);
+	mrcas = get_pairwise_MRCAs_CPP(Ntips			= Ntips,
+									Nnodes			= tree$Nnode,
+									Nedges			= nrow(tree$edge),
+									tree_edge		= as.vector(t(tree$edge))-1,	# flatten in row-major format and make indices 0-based
+									cladesA			= A-1,
+									cladesB			= B-1,
+									verbose			= FALSE,
+									verbose_prefix	= "");
 	return(as.integer(mrcas+1));
 }
